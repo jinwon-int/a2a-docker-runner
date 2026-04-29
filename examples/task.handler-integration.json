@@ -1,0 +1,14 @@
+{
+  "id": "handler-integration-example",
+  "intent": "propose_patch",
+  "mode": "github-propose-patch",
+  "repo": "jinon86/a2a-docker-runner",
+  "baseBranch": "main",
+  "issueUrl": "https://github.com/jinon86/a2a-docker-runner/issues/2",
+  "reportLanguage": "ko",
+  "requestedBy": "seoseo",
+  "timeoutMs": 120000,
+  "commands": [
+    "cd /work/repo && echo 'Handler integration example test' | tee /work/artifacts/handler-integration.txt"
+  ]
+}
