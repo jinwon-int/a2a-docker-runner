@@ -1,0 +1,15 @@
+{
+  "id": "smoke-evidence-test",
+  "intent": "propose_patch",
+  "mode": "github-propose-patch",
+  "repo": "jinon86/a2a-docker-runner",
+  "baseBranch": "main",
+  "commands": [
+    "cd /work/repo && echo 'A2A runner evidence smoke test' > /work/artifacts/smoke-result.txt",
+    "cd /work/repo && printf 'PR created: https://github.com/jinon86/a2a-docker-runner/pull/99\\n' | tee /work/artifacts/pr-output.txt"
+  ],
+  "issueUrl": "https://github.com/jinon86/a2a-docker-runner/issues/5",
+  "reportLanguage": "ko",
+  "requestedBy": "seoseo",
+  "timeoutMs": 120000
+}
