@@ -25,9 +25,21 @@ export interface RunnerRepo {
   primary?: boolean;
 }
 
+/** GitHub-mode completion evidence produced by the executor contract. */
+export interface GitHubEvidence {
+  /** PR URL when a patch was successfully proposed (e.g. git push + gh pr create). */
+  prUrl?: string;
+  /** Block comment URL posted when the task is impossible or unsafe. */
+  blockCommentUrl?: string;
+  /** Done comment URL for tasks that complete without a PR. */
+  doneCommentUrl?: string;
+}
+
 export interface RunnerTask {
   id: string;
   intent: string;
+  /** Execution mode. "github-propose-patch" activates the GitHub evidence contract. */
+  mode?: string;
   /** Optional preset that expands into default repos/commands. */
   preset?: RunnerPreset;
   /** Backward-compatible single repo input. */
@@ -40,6 +52,12 @@ export interface RunnerTask {
   prompt?: string;
   env?: Record<string, string>;
   timeoutMs?: number;
+  /** GitHub issue URL for evidence-mode Block/Done comment posting. */
+  issueUrl?: string;
+  /** Language hint for comment formatting (e.g. "ko"). */
+  reportLanguage?: string;
+  /** A2A broker node that requested the task. */
+  requestedBy?: string;
 }
 
 export interface NormalizedRunnerTask extends RunnerTask {
@@ -57,6 +75,9 @@ export interface RunnerResult {
   stdout: string;
   stderr: string;
   artifacts: string[];
+  /** @deprecated Prefer github.prUrl for structured evidence. */
   prUrl?: string;
   error?: string;
+  /** Structured GitHub evidence for propose_patch / github-propose-patch mode. */
+  github?: GitHubEvidence;
 }

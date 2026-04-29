@@ -49,3 +49,23 @@ test("keeps explicit multi-repo and command configuration", () => {
   assert.equal(task.repos[1]?.branch, "develop");
   assert.deepEqual(task.commands, ["cd /work/plugin && npm ci", "cd /work/plugin && npm test"]);
 });
+
+test("passes through mode, issueUrl, reportLanguage, and requestedBy", () => {
+  const task = normalizeTask({
+    id: "github-evidence-task",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repo: "jinon86/test-repo",
+    issueUrl: "https://github.com/jinon86/test-repo/issues/5",
+    reportLanguage: "ko",
+    requestedBy: "seoseo",
+  });
+
+  assert.equal(task.mode, "github-propose-patch");
+  assert.equal(task.issueUrl, "https://github.com/jinon86/test-repo/issues/5");
+  assert.equal(task.reportLanguage, "ko");
+  assert.equal(task.requestedBy, "seoseo");
+  assert.equal(task.repos.length, 1);
+  assert.equal(task.repos[0]?.url, "https://github.com/jinon86/test-repo.git");
+  assert.ok(task.commands.length > 0);
+});

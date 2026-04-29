@@ -2,6 +2,7 @@ import { mkdir, writeFile, readdir, rm, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { normalizeTask } from "./task-normalizer.js";
+import { collectGitHubEvidence } from "./github-evidence.js";
 import type { NormalizedRunnerTask, RunnerConfig, RunnerResult, RunnerTask } from "./types.js";
 
 export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<RunnerResult> {
@@ -21,7 +22,7 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
   const completed = await spawnWithTimeout(config.engine ?? "docker", args, timeoutMs);
   const artifacts = await listArtifacts(workDir);
 
-  return {
+  const result: RunnerResult = {
     ok: completed.code === 0 && !completed.timedOut,
     taskId: task.id,
     status: completed.timedOut ? "timeout" : completed.code === 0 ? "completed" : "failed",
@@ -34,6 +35,16 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
     prUrl: extractPrUrl(completed.stdout),
     error: completed.code === 0 && !completed.timedOut ? undefined : completed.stderr || completed.stdout,
   };
+
+  // Collect structured GitHub evidence for propose_patch / github-propose-patch mode.
+  const github = await collectGitHubEvidence(config, normalizedTask, result);
+  if (github) {
+    result.github = github;
+    // Backward-compatible: promote to top-level prUrl if github.prUrl is set.
+    if (github.prUrl && !result.prUrl) result.prUrl = github.prUrl;
+  }
+
+  return result;
 }
 
 function validateTask(task: RunnerTask): void {
