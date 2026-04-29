@@ -1,27 +1,45 @@
-import { mkdir, writeFile, readdir, rm, stat } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { mkdir, writeFile, readdir, stat } from "node:fs/promises";
+import { basename, join, relative, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { normalizeTask } from "./task-normalizer.js";
 import { collectGitHubEvidence } from "./github-evidence.js";
-import type { NormalizedRunnerTask, RunnerConfig, RunnerResult, RunnerTask } from "./types.js";
+import type { ArtifactManifest, ArtifactManifestEntry, NormalizedRunnerTask, ResultSummary, RunnerConfig, RunnerResult, RunnerTask } from "./types.js";
 
 export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<RunnerResult> {
   validateTask(task);
   const normalizedTask = normalizeTask(task);
   const root = resolve(config.rootDir);
-  const workDir = join(root, safeId(task.id));
-  await rm(workDir, { recursive: true, force: true });
-  await mkdir(workDir, { recursive: true, mode: 0o700 });
+  const runToken = createRunToken();
+  const safeTaskId = safeId(task.id);
+  const taskRoot = join(root, safeTaskId);
+  const workDir = join(taskRoot, runToken);
+  await mkdir(taskRoot, { recursive: true, mode: 0o700 });
+  await mkdir(workDir, { recursive: false, mode: 0o700 });
   await writeFile(join(workDir, "task.json"), JSON.stringify(normalizedTask, null, 2));
+  await writeFile(join(workDir, "run.json"), JSON.stringify({ taskId: task.id, safeTaskId, runToken, createdAt: new Date().toISOString() }, null, 2));
+
+  // Write safe patch command script if configured.
+  // Priority: commandScript > commandJson > commandTemplate (legacy eval).
+  if (config.commandScript) {
+    await writeFile(join(workDir, "patch-command.sh"), config.commandScript, { mode: 0o700 });
+  } else if (config.commandJson) {
+    const jsonScript = jsonArgvToScript(config.commandJson);
+    await writeFile(join(workDir, "patch-command.sh"), jsonScript, { mode: 0o700 });
+  }
 
   const script = buildContainerScript(normalizedTask);
   await writeFile(join(workDir, "run.sh"), script, { mode: 0o700 });
 
-  const args = buildRunArgs(config, normalizedTask, workDir);
+  const args = buildRunArgs(config, normalizedTask, workDir, runToken);
   const timeoutMs = normalizedTask.timeoutMs ?? config.defaultTimeoutMs;
   const engine = config.engine ?? "docker";
   const completed = await spawnWithTimeout(engine, args, timeoutMs);
   const artifacts = await listArtifacts(workDir);
+  const manifest = await buildArtifactManifest(workDir, artifacts);
+  await writeArtifactManifest(workDir, manifest);
+  const stdout = redactAndBound(completed.stdout);
+  const stderr = redactAndBound(completed.stderr);
+  const resultSummary = buildResultSummary(completed, stdout, stderr, artifacts, manifest);
 
   const result: RunnerResult = {
     ok: completed.code === 0 && !completed.timedOut,
@@ -30,9 +48,11 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
     workDir,
     exitCode: completed.code,
     signal: completed.signal,
-    stdout: redactSecrets(completed.stdout),
-    stderr: redactSecrets(completed.stderr),
+    stdout,
+    stderr,
     artifacts,
+    artifactManifest: manifest,
+    resultSummary,
     prUrl: extractPrUrl(completed.stdout),
     error: completed.code === 0 && !completed.timedOut ? undefined : buildActionableError(engine, config.image, completed),
   };
@@ -54,17 +74,33 @@ function validateTask(task: RunnerTask): void {
 }
 
 function safeId(id: string): string {
-  return id.replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 120);
+  const safe = id.replace(/[^a-zA-Z0-9_.-]/g, "_").replace(/^[-.]+/, "_").slice(0, 80);
+  return safe || "task";
 }
 
-export function buildRunArgs(config: RunnerConfig, task: RunnerTask, workDir: string): string[] {
+function createRunToken(): string {
+  const stamp = new Date().toISOString().replace(/[^0-9A-Za-z]/g, "").slice(0, 15);
+  const random = Math.random().toString(36).slice(2, 10);
+  return `${stamp}-${process.pid.toString(36)}-${random}`;
+}
+
+function buildContainerName(taskId: string, runToken: string): string {
+  return `a2a-${safeId(taskId)}-${runToken}`.slice(0, 128);
+}
+
+export function buildRunArgs(config: RunnerConfig, task: RunnerTask, workDir: string, runToken = createRunToken()): string[] {
+  const containerName = buildContainerName(task.id, runToken);
   const args = [
     "run",
     "--rm",
     "--name",
-    `a2a-${safeId(task.id)}`,
+    containerName,
     "--network",
     "bridge",
+    "--label",
+    `a2a.task.id=${safeId(task.id)}`,
+    "--label",
+    `a2a.run.id=${runToken}`,
     "--memory",
     config.memory ?? "2g",
     "--cpus",
@@ -82,6 +118,16 @@ export function buildRunArgs(config: RunnerConfig, task: RunnerTask, workDir: st
 
   // Escape hatch: inject the patch command template as an env var so
   // default github-propose-patch commands can invoke a coding agent.
+  // Safe patch command paths (in priority order).
+  // commandScript (file) and commandJson (JSON argv/env) avoid eval.
+  // Legacy commandTemplate is injected for backward compatibility only.
+  if (config.commandScript || config.commandJson) {
+    // Only inject the legacy env var if explicitly requested via commandTemplate.
+    // Safer paths use script files or JSON argv.
+  }
+  if (config.commandJson) {
+    args.push("-e", `A2A_PATCH_COMMAND_JSON=${config.commandJson}`);
+  }
   if (config.commandTemplate) {
     args.push("-e", `A2A_PATCH_COMMAND=${config.commandTemplate}`);
   }
@@ -167,14 +213,130 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
+/**
+ * Convert a JSON argv/env config into a safe bash script.
+ *
+ * Input:  {"argv":["codex","exec","--full-auto","..."],"env":{"KEY":"val"}}
+ * Output: A self-contained bash script that executes argv safely,
+ *         with optional env vars set, and never calls eval.
+ */
+export function jsonArgvToScript(json: string): string {
+  let parsed: { argv?: unknown; env?: unknown };
+  try {
+    parsed = JSON.parse(json);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return `#!/usr/bin/env bash
+set -euo pipefail
+printf 'error=json_parse_failed: %s\\n' >&2 "${shellQuote(msg)}"
+exit 2
+`;
+  }
+
+  if (!Array.isArray(parsed.argv) || parsed.argv.length === 0 || !parsed.argv.every((a): a is string => typeof a === "string")) {
+    return `#!/usr/bin/env bash
+set -euo pipefail
+printf 'error=invalid_json_argv: argv must be a non-empty array of strings\\n' >&2
+exit 2
+`;
+  }
+
+  const envLines: string[] = [];
+  if (parsed.env && typeof parsed.env === "object" && !Array.isArray(parsed.env)) {
+    for (const [key, value] of Object.entries(parsed.env as Record<string, unknown>)) {
+      if (typeof value === "string" && /^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+        envLines.push(`export ${key}=${shellQuote(value)}`);
+      }
+    }
+  }
+
+  const argvQuoted = parsed.argv.map((a: string) => shellQuote(a)).join(" ");
+
+  return `#!/usr/bin/env bash
+set -euo pipefail
+${envLines.join("\n")}
+${envLines.length ? "\n" : ""}exec ${argvQuoted}
+`;
+}
+export const RESULT_STREAM_LIMIT = 8_000;
+
+
 export function redactSecrets(value: string): string {
   return value
+    // GitHub tokens (classic + fine-grained + PAT v2)
     .replace(/gh[pousr]_[A-Za-z0-9_]{20,}/g, "<redacted-github-token>")
     .replace(/github_pat_[A-Za-z0-9_]{20,}/g, "<redacted-github-token>")
+    // xai / supermemory / openai API key patterns (synthetic format)
+    // Must fire BEFORE generic key=value redaction to catch the full key.
+    .replace(/xai-[A-Za-z0-9_-]{40,}/g, "<redacted-api-key>")
+    .replace(/sm_[A-Za-z0-9_-]{40,}/g, "<redacted-api-key>")
+    .replace(/sk-[A-Za-z0-9_-]{32,}/g, "<redacted-api-key>")
+    // x-access-token in URLs
     .replace(/x-access-token:[^@\s]+@github\.com/g, "x-access-token:<redacted>@github.com")
+    // oauth_token in YAML/JSON
     .replace(/(oauth_token:\s*)\S+/gi, "$1<redacted>")
-    .replace(/((?:token|password|secret|api[_-]?key)=)[^\s]+/gi, "$1<redacted>");
+    // Authorization / Bearer headers
+    .replace(/(Authorization:\s*Bearer\s+)\S+/gi, "$1<redacted>")
+    .replace(/(gh auth login --with-token\s+)\S+/gi, "$1<redacted>")
+    // Generic key=value and JSON/YAML-style secrets (after API key patterns)
+    .replace(/((?:token|password|secret|api[_-]?key)=)(?!<redacted)[^\s]+/gi, "$1<redacted>")
+    .replace(/((?:token|password|secret|api[_-]?key)["']?\s*[:=]\s*["']?)(?!<redacted)[^"'\s,}]+/gi, "$1<redacted>")
+    // Shell variable assignments with secrets
+    .replace(/((?:GH_TOKEN|GITHUB_TOKEN|NPM_TOKEN|A2A_TOKEN)=)['"]?[^'"\s]+['"]?/gi, "$1<redacted>");
 }
+
+export function redactAndBound(value: string, limit = RESULT_STREAM_LIMIT): string {
+  const redacted = redactSecrets(value);
+  if (redacted.length <= limit) return redacted;
+  const omitted = redacted.length - limit;
+  return `${redacted.slice(0, limit)}\n<truncated ${omitted} chars>`;
+}
+
+export function buildResultSummary(
+  completed: SpawnResult,
+  stdout: string,
+  stderr: string,
+  artifacts: string[],
+  manifest: ArtifactManifest,
+): ResultSummary {
+  return {
+    exitCode: completed.code,
+    signal: completed.signal,
+    timedOut: completed.timedOut,
+    stdout,
+    stderr,
+    stdoutTruncated: stdout.includes("\n<truncated "),
+    stderrTruncated: stderr.includes("\n<truncated "),
+    artifactCount: artifacts.length,
+    manifestPath: manifest.manifestPath,
+  };
+}
+
+export async function buildArtifactManifest(workDir: string, artifacts: string[]): Promise<ArtifactManifest> {
+  const entries: ArtifactManifestEntry[] = [];
+  for (const artifact of artifacts) {
+    const info = await stat(artifact);
+    entries.push({
+      path: relative(workDir, artifact).split("/").join("/"),
+      name: basename(artifact),
+      sizeBytes: info.size,
+    });
+  }
+  entries.sort((a, b) => a.path.localeCompare(b.path));
+  return {
+    schemaVersion: 1,
+    manifestPath: "artifacts/manifest.json",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    artifacts: entries,
+  };
+}
+
+async function writeArtifactManifest(workDir: string, manifest: ArtifactManifest): Promise<void> {
+  const path = join(workDir, "artifacts", "manifest.json");
+  await mkdir(join(workDir, "artifacts"), { recursive: true, mode: 0o700 });
+  await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
 
 function buildActionableError(engine: string, image: string, completed: SpawnResult): string {
   const combined = redactSecrets([completed.stderr, completed.stdout].filter(Boolean).join("\n")).trim();
@@ -182,10 +344,16 @@ function buildActionableError(engine: string, image: string, completed: SpawnRes
     return `${engine} 실행 파일을 찾을 수 없습니다. Docker 또는 Podman을 설치하거나 A2A_DOCKER_RUNNER_ENGINE을 사용 가능한 엔진으로 설정하세요.`;
   }
   if (completed.timedOut) {
-    return `컨테이너 실행이 제한 시간 안에 끝나지 않았습니다. timeoutMs를 늘리거나 작업 명령을 줄이고, 남은 컨테이너가 있으면 '${engine} ps -a'와 '${engine} rm -f a2a-<taskId>'로 확인하세요.\n${combined}`.trim();
+    return `컨테이너 실행이 제한 시간 안에 끝나지 않았습니다. timeoutMs를 늘리거나 작업 명령을 줄이고, 남은 컨테이너가 있으면 '${engine} ps -a --filter label=a2a.task.id=<safeTaskId>'로 확인한 뒤 run별 container name을 지정해 정리하세요.\n${combined}`.trim();
+  }
+  if (/Conflict\.? The container name|container name .* is already in use|name is already in use|already exists/i.test(combined)) {
+    return `컨테이너 이름 충돌이 발생했습니다. runner는 task id와 run token을 포함한 고유 이름을 사용하므로, 같은 safeTaskId를 가진 오래된 컨테이너가 남았는지 '${engine} ps -a --filter label=a2a.task.id=<safeTaskId>'로 확인하고 해당 run만 정리하세요.\n${combined}`.trim();
   }
   if (/pull access denied|manifest unknown|not found|no such image|repository does not exist/i.test(combined)) {
     return `이미지 '${image}'를 가져오거나 찾을 수 없습니다. 이미지 이름/태그와 registry 인증을 확인하세요.\n${combined}`.trim();
+  }
+  if (/mkdir .*permission denied|EACCES|EROFS|read-only file system|permission denied.*work/i.test(combined)) {
+    return `작업 디렉터리 생성 또는 마운트 권한 문제가 감지되었습니다. rootDir 소유권/권한과 컨테이너 볼륨 마운트 정책을 확인하고, 같은 task id의 run 디렉터리가 동시에 사용 중인지 확인하세요.\n${combined}`.trim();
   }
   if (/permission denied|cannot connect to the docker daemon|got permission denied|operation not permitted|rootless/i.test(combined)) {
     return `${engine} 실행 권한 또는 daemon 연결 권한이 없습니다. runner 사용자 권한, socket 접근, rootless Podman 설정을 확인하세요.\n${combined}`.trim();

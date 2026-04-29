@@ -113,8 +113,11 @@ test("generates PR-producing default commands for github-propose-patch mode with
   assert.ok(pipeline.includes("git commit -m"), "Expected commit step");
   assert.ok(pipeline.includes("git push origin"), "Expected push step");
   assert.ok(pipeline.includes("gh pr create"), "Expected PR create step");
-  assert.ok(pipeline.includes("A2A_PATCH_COMMAND"), "Expected escape hatch reference");
+  assert.ok(pipeline.includes("patch-command.sh"), "Expected script file reference");
+  assert.ok(pipeline.includes("patch_mode=script"), "Expected script mode marker");
+  assert.ok(pipeline.includes("A2A_PATCH_COMMAND"), "Expected legacy escape hatch reference");
   assert.ok(pipeline.includes("no_patch_command_configured"), "Expected no-op fallback");
+  assert.ok(pipeline.includes("deprecated_eval_path"), "Expected deprecation warning");
   assert.ok(pipeline.includes("/work/artifacts/patch-command.log"), "Expected coding agent log artifact");
   assert.ok(pipeline.includes("/work/artifacts/pr-output.txt"), "Expected PR output artifact");
   assert.ok(pipeline.includes("status=no_changes"), "Expected no-changes fallback");

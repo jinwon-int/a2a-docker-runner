@@ -12,8 +12,25 @@ export interface RunnerConfig {
    * Escape hatch for github-propose-patch/propose_patch mode.
    * When set, injected as A2A_PATCH_COMMAND env var into containers.
    * Default commands for patch mode reference this to invoke a coding agent.
+   *
+   * @deprecated Prefer commandScript (safer, no eval) or commandArgv.
+   *             This path uses eval and will emit a deprecation notice.
    */
   commandTemplate?: string;
+
+  /**
+   * Safe script file content for patch command execution.
+   * Runner writes this to /work/patch-command.sh in the container.
+   * This is the recommended path — no eval, no shell injection risk.
+   */
+  commandScript?: string;
+
+  /**
+   * JSON-encoded argv/env for safe patch command execution.
+   * Format: { "argv": ["codex", "exec", "..."], "env": { "KEY": "val" } }
+   * Runner serialises this into a safe script, avoiding eval.
+   */
+  commandJson?: string;
 }
 
 export type RunnerPreset = "openclaw-plugin-a2a-dev";
@@ -71,6 +88,36 @@ export interface NormalizedRunnerTask extends RunnerTask {
   commands: string[];
 }
 
+export interface ArtifactManifestEntry {
+  /** Artifact path relative to the task workDir. */
+  path: string;
+  /** Basename for quick display. */
+  name: string;
+  /** File size in bytes. */
+  sizeBytes: number;
+}
+
+export interface ArtifactManifest {
+  schemaVersion: 1;
+  /** Path to the emitted manifest.json relative to the task workDir. */
+  manifestPath: string;
+  /** Fixed timestamp keeps manifest content deterministic for identical artifacts. */
+  generatedAt: string;
+  artifacts: ArtifactManifestEntry[];
+}
+
+export interface ResultSummary {
+  exitCode?: number | null;
+  signal?: NodeJS.Signals | null;
+  timedOut: boolean;
+  stdout: string;
+  stderr: string;
+  stdoutTruncated: boolean;
+  stderrTruncated: boolean;
+  artifactCount: number;
+  manifestPath: string;
+}
+
 export interface RunnerResult {
   ok: boolean;
   taskId: string;
@@ -81,6 +128,10 @@ export interface RunnerResult {
   stdout: string;
   stderr: string;
   artifacts: string[];
+  /** Structured manifest for artifacts emitted by this execution. */
+  artifactManifest?: ArtifactManifest;
+  /** Bounded/redacted payload-safe result summary. */
+  resultSummary?: ResultSummary;
   /** @deprecated Prefer github.prUrl for structured evidence. */
   prUrl?: string;
   error?: string;
