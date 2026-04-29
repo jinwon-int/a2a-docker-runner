@@ -36,6 +36,7 @@ node dist/cli.js cleanup --ttl 24h --dry-run
 node dist/cli.js run examples/task.canonical.json
 node dist/cli.js run examples/task.github.json
 node dist/cli.js run examples/task.github-evidence.json
+node dist/cli.js run examples/task.github-propose-patch.json
 node dist/cli.js run examples/task.openclaw-plugin-a2a.json
 ```
 
@@ -59,6 +60,35 @@ The full `github-propose-patch` mode task accepts:
 ```
 
 See `examples/task.canonical.json` for a complete example.
+
+## PR-producing executor path (github-propose-patch)
+
+When `mode` is `github-propose-patch` (or `propose_patch`) and no explicit
+`commands` are provided, the runner generates a default PR-producing pipeline
+that writes the `prompt` to `/work/artifacts/prompt.md` and executes a
+configurable coding agent via the `A2A_PATCH_COMMAND` escape hatch.
+
+Example task (see `examples/task.github-propose-patch.json`):
+
+```json
+{
+  "id": "patch-readme-example",
+  "intent": "propose_patch",
+  "mode": "github-propose-patch",
+  "repo": "jinon86/a2a-docker-runner",
+  "baseBranch": "main",
+  "prompt": "Add a section to README.md.",
+  "issueUrl": "https://github.com/jinon86/a2a-docker-runner/issues/10",
+  "reportLanguage": "ko",
+  "requestedBy": "dungae",
+  "timeoutMs": 600000
+}
+```
+
+The runner will clone the repo, create a branch, run the coding agent,
+commit changes, push, and open a PR. Result evidence includes
+`github.prUrl`, `github.blockCommentUrl`, or `github.doneCommentUrl`
+depending on the outcome.
 
 ## OpenClaw plugin A2A development preset
 
@@ -126,6 +156,39 @@ Important defaults:
 - task root: `/var/lib/openclaw-a2a/tasks`
 - image: `node:22-bookworm-slim`
 - engine: auto-detect `docker` then `podman`
+
+### Patch command template (`A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE`)
+
+For `github-propose-patch` / `propose_patch` mode tasks **without** explicit
+`commands`, the runner generates a default PR-producing pipeline. The pipeline:
+
+1. Writes `prompt` to `/work/artifacts/prompt.md`.
+2. Creates a branch, invokes the coding agent, commits changes, pushes, and
+   opens a PR via `gh pr create`.
+
+Step 2 uses the `A2A_PATCH_COMMAND` environment variable inside the container.
+Set `A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE` on the **host** to inject your
+coding agent command:
+
+```bash
+export A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE="claude --print --permission-mode bypassPermissions -p \"\$(cat /work/artifacts/prompt.md)\""
+```
+
+When the template is **not** set, the pipeline still runs but skips the coding
+agent step and emits a `no_patch_command_configured` notice. Git operations
+(commit, push, PR create) only fire when `git status --porcelain` detects
+changes.
+
+**Template variables available inside the container:**
+
+| Variable | Source |
+|---|---|
+| `A2A_PATCH_COMMAND` | `A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE` host env |
+| `/work/artifacts/prompt.md` | Task `prompt` field |
+| `/work/artifacts/task.json` | Full normalised task payload |
+
+**Explicit commands override**: when `commands` are provided in the task
+payload they are used as-is; the default pipeline is not injected.
 
 ## Security model
 

@@ -8,6 +8,12 @@ export interface RunnerConfig {
   defaultTimeoutMs: number;
   memory?: string;
   cpus?: string;
+  /**
+   * Escape hatch for github-propose-patch/propose_patch mode.
+   * When set, injected as A2A_PATCH_COMMAND env var into containers.
+   * Default commands for patch mode reference this to invoke a coding agent.
+   */
+  commandTemplate?: string;
 }
 
 export type RunnerPreset = "openclaw-plugin-a2a-dev";

@@ -79,6 +79,12 @@ function buildRunArgs(config: RunnerConfig, task: RunnerTask, workDir: string): 
     args.push("-e", "GH_CONFIG_HOSTS=/run/secrets/gh-hosts.yml");
   }
 
+  // Escape hatch: inject the patch command template as an env var so
+  // default github-propose-patch commands can invoke a coding agent.
+  if (config.commandTemplate) {
+    args.push("-e", `A2A_PATCH_COMMAND=${config.commandTemplate}`);
+  }
+
   for (const [key, value] of Object.entries(task.env ?? {})) {
     args.push("-e", `${key}=${value}`);
   }

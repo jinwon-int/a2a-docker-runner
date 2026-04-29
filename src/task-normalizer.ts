@@ -57,6 +57,10 @@ function normalizeRepos(task: RunnerTask): RunnerRepo[] {
   }));
 }
 
+export function isPatchMode(mode?: string): boolean {
+  return mode === "github-propose-patch" || mode === "propose_patch";
+}
+
 function defaultCommands(task: RunnerTask, primaryRepo?: RunnerRepo): string[] {
   if (task.preset === "openclaw-plugin-a2a-dev") {
     const dir = primaryRepo?.path ?? "openclaw-plugin-a2a";
@@ -66,11 +70,76 @@ function defaultCommands(task: RunnerTask, primaryRepo?: RunnerRepo): string[] {
     ];
   }
 
+  // github-propose-patch / propose_patch mode with no explicit commands.
+  // Generate a PR-producing pipeline that writes the prompt to artifacts,
+  // invokes a configurable coding agent via A2A_PATCH_COMMAND env, and
+  // commits/pushes/creates a PR when changes are detected.
+  if (isPatchMode(task.mode) && primaryRepo) {
+    return buildDefaultPatchCommands(task, primaryRepo);
+  }
+
   if (primaryRepo) {
     return [`cd /work/${primaryRepo.path} && npm ci`, `cd /work/${primaryRepo.path} && npm test`];
   }
 
   return [];
+}
+
+function buildDefaultPatchCommands(task: RunnerTask, primaryRepo: RunnerRepo): string[] {
+  const repoPath = primaryRepo.path ?? "repo";
+  const baseBranch = task.baseBranch ?? primaryRepo.branch ?? "main";
+  const safeTitle = (task.id || "a2a-patch").replace(/[^a-zA-Z0-9_.-]/g, "_");
+  const issueRef = task.issueUrl ? `\nIssue: ${task.issueUrl}` : "";
+  const requesterRef = task.requestedBy ? `\nRequested by: ${task.requestedBy}` : "";
+
+  // Step 1: materialise prompt + task metadata as artifacts.
+  const writePrompt = [
+    `cat > /work/artifacts/prompt.md << 'A2A_PROMPT_EOF'`,
+    task.prompt ?? `Auto-patch task ${task.id}`,
+    `A2A_PROMPT_EOF`,
+    `printf 'patch_mode=github-propose-patch\\n' | tee -a /work/artifacts/summary.txt`,
+    `printf 'prompt_bytes=%s\\n' "$(wc -c < /work/artifacts/prompt.md)" | tee -a /work/artifacts/summary.txt`,
+  ].join("\n");
+
+  // Step 2: git config + branch + coding agent + commit + push + PR create.
+  // Everything that shares shell variables lives in one command so BRANCH
+  // and change detection work across the pipeline.
+  const pipeline = [
+    `set -euo pipefail`,
+    `cd /work/${repoPath}`,
+    `git config user.email "a2a-runner@openclaw.ai"`,
+    `git config user.name "A2A Docker Runner"`,
+    `BRANCH="a2a-patch-$(date +%Y%m%d-%H%M%S)-${safeTitle}"`,
+    `git checkout -b "$BRANCH"`,
+    `printf 'branch=%s\\n' "$BRANCH" | tee -a /work/artifacts/summary.txt`,
+    ``,
+    `# Invoke coding agent via configurable escape hatch.`,
+    `if [ -n "\${A2A_PATCH_COMMAND:-}" ]; then`,
+    `  printf 'patch_command=%s\\n' "\${A2A_PATCH_COMMAND}" | tee -a /work/artifacts/summary.txt`,
+    `  eval "\${A2A_PATCH_COMMAND}" 2>&1 | tee /work/artifacts/patch-command.log`,
+    `else`,
+    `  printf 'notice=no_patch_command_configured\\n' | tee -a /work/artifacts/summary.txt`,
+    `  printf 'Set A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE to inject a coding agent.\\n' | tee /work/artifacts/patch-command.log`,
+    `fi`,
+    ``,
+    `# Commit and create PR if changes exist.`,
+    `if [ -n "$(git status --porcelain)" ]; then`,
+    `  git add -A`,
+    `  git commit -m "Auto-patch: ${safeTitle}"`,
+    `  git push origin "$BRANCH"`,
+    `  gh pr create --base "${baseBranch}" --head "$BRANCH" \\`,
+    `    --title "Patch: ${safeTitle}" \\`,
+    `    --body "$(printf 'Auto-generated patch for task \`%s\`.%s%s\\n\\n---\\nSee artifacts/prompt.md for full prompt.' "${safeTitle}" "${issueRef}" "${requesterRef}")" \\`,
+    `    2>&1 | tee /work/artifacts/pr-output.txt || true`,
+    `  if grep -q 'https://github.com/' /work/artifacts/pr-output.txt 2>/dev/null; then`,
+    `    printf 'pr_created=1\\n' | tee -a /work/artifacts/summary.txt`,
+    `  fi`,
+    `else`,
+    `  printf 'status=no_changes\\n' | tee -a /work/artifacts/summary.txt`,
+    `fi`,
+  ].join("\n");
+
+  return [writePrompt, pipeline];
 }
 
 function sanitizeRelativePath(path: string): string {
