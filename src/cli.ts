@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
 import { loadConfig } from "./config.js";
+import { runEngineSmokeFixture } from "./engine-smoke.js";
 import { cleanup, doctor, install } from "./ops.js";
 import { runTask } from "./runner.js";
 import type { RunnerTask } from "./types.js";
@@ -18,6 +19,12 @@ async function main(): Promise<void> {
     const result = await runTask(config, task);
     console.log(JSON.stringify(result, null, 2));
     process.exit(result.ok ? 0 : 1);
+  }
+
+  if (command === "smoke") {
+    const config = await loadConfig();
+    console.log(JSON.stringify(await runEngineSmokeFixture(config), null, 2));
+    return;
   }
 
   if (command === "doctor") {
@@ -77,6 +84,7 @@ function printHelp(): void {
 
 Usage:
   a2a-docker-runner doctor
+  a2a-docker-runner smoke
   a2a-docker-runner install
   a2a-docker-runner cleanup [--ttl 24h] [--dry-run]
   a2a-docker-runner run <task.json>

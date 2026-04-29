@@ -110,6 +110,15 @@ This keeps `a2a-docker-runner` as the disposable execution sandbox while `opencl
 
 `install` (alias: `setup`) is safe to rerun. It creates the task root with private permissions when missing and validates the optional secret file without touching live services.
 
+`smoke` runs a tiny operator-facing container fixture through the configured Docker/Podman boundary. It exercises stdout, stderr, artifact capture, timeout wiring, and engine-side cleanup (`--rm`) without touching live worker services:
+
+```bash
+A2A_DOCKER_RUNNER_ENGINE=docker A2A_DOCKER_RUNNER_IMAGE=node:22-bookworm-slim node dist/cli.js smoke
+A2A_DOCKER_RUNNER_ENGINE=podman A2A_DOCKER_RUNNER_IMAGE=node:22-bookworm-slim node dist/cli.js smoke
+```
+
+The command returns JSON. Missing engine, missing image, and permission/daemon failures are reported in `result.error` with actionable remediation text. Secret-like values in stdout/stderr diagnostics are redacted before they are returned.
+
 `cleanup` removes task working directories older than a TTL. Always use `--dry-run` first on real workers:
 
 ```bash
