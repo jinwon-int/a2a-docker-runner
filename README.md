@@ -199,6 +199,18 @@ changes.
 **Explicit commands override**: when `commands` are provided in the task
 payload they are used as-is; the default pipeline is not injected.
 
+## Release checklist
+
+Operator release and worker rollout notes live in [`docs/release-rollout-checklist.md`](docs/release-rollout-checklist.md). Keep feature tasks PR-only: do not tag, publish, restart services, or deploy workers from issue branches.
+
+The checklist covers:
+
+- GitHub Actions Node runtime deprecation guardrails
+- package `bin` verification for `a2a-docker-runner`
+- active rollout targets: `bangtong`, `dungae`, `sogyo`, `nosuk`
+- explicit exclusion of legacy `yukson` / VPS2 workers
+- one-target-at-a-time rollout and rollback steps
+
 ## Security model
 
 Do not mount the full host `/root/.openclaw` into task containers. Mount only the minimum required secrets, preferably read-only, and prefer per-task or least-privilege GitHub credentials.
