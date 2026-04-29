@@ -49,3 +49,84 @@ Excluded legacy target:
 - Re-run `a2a-docker-runner doctor` and one smoke task on the reverted target.
 - Record the failed target, commit, command, and sanitized logs in the follow-up issue/PR. Do not include tokens, private key material, raw session dumps, or secret file contents.
 - Keep `yukson` excluded during rollback unless a separate operator-approved legacy task explicitly covers it.
+
+## CI-safe broker canary payload (Round 4+)
+
+The repo ships a synthetic broker canary payload at `examples/broker-canary-round4.json`.
+Operators use it to validate the handler-to-runner conversion and evidence contract
+without touching a live broker, Docker, or GitHub.
+
+### Payload validation
+
+```bash
+# Validate conversion of the broker canary payload through buildRunnerTaskFromHandlerPayload:
+node --test dist/canary-payload.test.js
+
+# Full end-to-end canary (includes fake runner spawn):
+node --test dist/canary.test.js
+```
+
+Both tests run in CI (no Docker required).
+
+### Active targets in the canary payload
+
+The fixture includes explicit active target and exclusion lists:
+
+- **Active**: `bangtong`, `dungae`, `sogyo`, `nosuk`
+- **Excluded**: `yukson` (legacy VPS2 — do not touch)
+
+The `operatorChecklist` inside the payload describes the per-node rollout sequence.
+
+## Evidence interpretation guide (PR / Done / Block)
+
+After a worker executes a `github-propose-patch` task, the handler inspects the runner
+output for structured `GitHubEvidence`. Operators should understand each evidence type.
+
+### Evidence contract (from types.ts)
+
+```typescript
+interface GitHubEvidence {
+  prUrl?: string;           // PR was created → status = pr_opened
+  blockCommentUrl?: string;  // Task is blocked → status = blocked
+  doneCommentUrl?: string;   // Task is done (no PR needed) → status = done
+}
+```
+
+### Evidence resolution (from integration.ts)
+
+In `buildHandlerResult`, evidence is resolved with this logic:
+
+| Runner output | Handler status | Meaning |
+|---|---|---|
+| `github.prUrl` is set | `pr_opened` | Coding agent created a branch, committed changes, pushed, and opened a PR |
+| `github.blockCommentUrl` is set (no PR) | `blocked` | Task is impossible or unsafe; operator should read the block comment |
+| `github.doneCommentUrl` is set (no PR, no block) | `done` | Task completed without needing a PR (e.g., verification-only or no-change tasks) |
+| No structured evidence at all | `blocked` | Degraded state — runner finished but coding agent produced no GitHub evidence. Risks array contains explanation. |
+
+### How the broker canary payload maps to evidence
+
+The fixture's `evidenceGuide` section documents each evidence path:
+
+- **prUrl**: Runner emitted a PR URL → worker can create/push branches and open PRs through the coding-agent contract.
+- **doneCommentUrl**: Runner posted a Done comment on the issue → used for tasks that complete without a PR.
+- **blockCommentUrl**: Runner posted a Block comment → task is impossible or unsafe; inspect the block reason before proceeding.
+- **noEvidence**: Runner completed without structured evidence → degraded state; investigate coding-agent output.
+
+### Per-target evidence verification
+
+After deploying to each active target, run a smoke task and check the handler result:
+
+1. The handler result must carry `status: "pr_opened"`, `"done"`, or `"blocked"`.
+2. The corresponding URL field (`prUrl`, `doneCommentUrl`, `blockCommentUrl`) must be present and point to a valid GitHub URL.
+3. The `runnerRaw` field is preserved for debugging — do not strip it in production handlers.
+4. If `status: "blocked"` and no evidence URL is present, check the `risks` array and the coding-agent log artifacts (`patch-command.log`, `pr-output.txt`).
+
+### No evidence scenario (degraded)
+
+When the runner completes but produces no evidence:
+
+- Handler returns `status: "blocked"`.
+- `summary` says "Docker runner completed without PR/Done/Block evidence".
+- `risks` includes "runner completed without structured GitHub evidence".
+- Operator should inspect: container logs, artifact files (especially `patch-command.log`),
+  and the coding-agent contract (`commandScript` / `commandJson` / `commandTemplate`).

@@ -1,0 +1,46 @@
+{
+  "$schema": "broker-canary-payload-v1",
+  "description": "CI-safe broker canary payload for Round 4 rollout preparation — does not touch live broker or services. Operator can validate handler-to-runner conversion and evidence contract without Docker or GitHub mutations.",
+  "canary": {
+    "mode": "github-propose-patch",
+    "requestedBy": "seoseo",
+    "repo": "jinon86/a2a-docker-runner",
+    "baseBranch": "main",
+    "issue": "#30",
+    "issueNumber": "30",
+    "issueUrl": "https://github.com/jinon86/a2a-docker-runner/issues/30",
+    "title": "CI-safe broker canary payload for Round 4 rollout",
+    "focus": "Validate handler-to-runner conversion and evidence contract with a synthetic payload that does not touch live broker, Docker, or GitHub.",
+    "acceptance": "buildRunnerTaskFromHandlerPayload conversion test; rollout docs evidence(PR/Done/Block) guide; npm check/build/lint/test pass",
+    "activeTargets": [
+      "bangtong",
+      "dungae",
+      "sogyo",
+      "nosuk"
+    ],
+    "excludeNodes": [
+      "yukson"
+    ],
+    "reportLanguage": "ko",
+    "timeoutMs": 300000,
+    "runnerPreset": null,
+    "prompt": "This is a CI-safe canary payload. Do not execute real work — validate conversion only."
+  },
+  "evidenceGuide": {
+    "prUrl": "Runner emitted a PR URL. Operator confirms the worker can create and push branches, commit changes, and open pull requests through the coding-agent contract.",
+    "doneCommentUrl": "Runner posted a Done comment on the issue. Used for tasks that complete without creating a PR (e.g., verification-only tasks).",
+    "blockCommentUrl": "Runner posted a Block comment. Indicates the task is impossible or unsafe to complete in its current form; operator should inspect the block reason before proceeding.",
+    "noEvidence": "Runner completed without any structured evidence. This is a degraded state — the handler returns status=blocked with a risks entry. Operator should investigate the coding-agent output."
+  },
+  "operatorChecklist": [
+    "1. Validate conversion: node --test dist/canary-payload.test.js",
+    "2. Run full canary: node --test dist/canary.test.js",
+    "3. Verify npm check/build/lint/test all pass on the deployed commit",
+    "4. For each active target (bangtong, dungae, sogyo, nosuk): run doctor, one smoke task, and verify evidence fields",
+    "5. yukson is explicitly excluded — do not validate, restart, or deploy to legacy yukson/VPS2"
+  ],
+  "excludedLegacy": {
+    "reason": "yukson / VPS2 legacy worker is explicitly out of scope for Round 4 rollout",
+    "action": "Do not change, restart, or validate legacy Yukson/VPS2 worker services"
+  }
+}
