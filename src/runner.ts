@@ -19,7 +19,8 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
 
   const args = buildRunArgs(config, normalizedTask, workDir);
   const timeoutMs = normalizedTask.timeoutMs ?? config.defaultTimeoutMs;
-  const completed = await spawnWithTimeout(config.engine ?? "docker", args, timeoutMs);
+  const engine = config.engine ?? "docker";
+  const completed = await spawnWithTimeout(engine, args, timeoutMs);
   const artifacts = await listArtifacts(workDir);
 
   const result: RunnerResult = {
@@ -29,11 +30,11 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
     workDir,
     exitCode: completed.code,
     signal: completed.signal,
-    stdout: completed.stdout,
-    stderr: completed.stderr,
+    stdout: redactSecrets(completed.stdout),
+    stderr: redactSecrets(completed.stderr),
     artifacts,
     prUrl: extractPrUrl(completed.stdout),
-    error: completed.code === 0 && !completed.timedOut ? undefined : completed.stderr || completed.stdout,
+    error: completed.code === 0 && !completed.timedOut ? undefined : buildActionableError(engine, config.image, completed),
   };
 
   // Collect structured GitHub evidence for propose_patch / github-propose-patch mode.
@@ -56,7 +57,7 @@ function safeId(id: string): string {
   return id.replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 120);
 }
 
-function buildRunArgs(config: RunnerConfig, task: RunnerTask, workDir: string): string[] {
+export function buildRunArgs(config: RunnerConfig, task: RunnerTask, workDir: string): string[] {
   const args = [
     "run",
     "--rm",
@@ -93,7 +94,7 @@ function buildRunArgs(config: RunnerConfig, task: RunnerTask, workDir: string): 
   return args;
 }
 
-function buildContainerScript(task: NormalizedRunnerTask): string {
+export function buildContainerScript(task: NormalizedRunnerTask): string {
   return `#!/usr/bin/env bash
 set -euo pipefail
 mkdir -p /work/artifacts
@@ -166,13 +167,42 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
-function spawnWithTimeout(command: string, args: string[], timeoutMs: number): Promise<{
+export function redactSecrets(value: string): string {
+  return value
+    .replace(/gh[pousr]_[A-Za-z0-9_]{20,}/g, "<redacted-github-token>")
+    .replace(/github_pat_[A-Za-z0-9_]{20,}/g, "<redacted-github-token>")
+    .replace(/x-access-token:[^@\s]+@github\.com/g, "x-access-token:<redacted>@github.com")
+    .replace(/(oauth_token:\s*)\S+/gi, "$1<redacted>")
+    .replace(/((?:token|password|secret|api[_-]?key)=)[^\s]+/gi, "$1<redacted>");
+}
+
+function buildActionableError(engine: string, image: string, completed: SpawnResult): string {
+  const combined = redactSecrets([completed.stderr, completed.stdout].filter(Boolean).join("\n")).trim();
+  if (completed.errorCode === "ENOENT") {
+    return `${engine} 실행 파일을 찾을 수 없습니다. Docker 또는 Podman을 설치하거나 A2A_DOCKER_RUNNER_ENGINE을 사용 가능한 엔진으로 설정하세요.`;
+  }
+  if (completed.timedOut) {
+    return `컨테이너 실행이 제한 시간 안에 끝나지 않았습니다. timeoutMs를 늘리거나 작업 명령을 줄이고, 남은 컨테이너가 있으면 '${engine} ps -a'와 '${engine} rm -f a2a-<taskId>'로 확인하세요.\n${combined}`.trim();
+  }
+  if (/pull access denied|manifest unknown|not found|no such image|repository does not exist/i.test(combined)) {
+    return `이미지 '${image}'를 가져오거나 찾을 수 없습니다. 이미지 이름/태그와 registry 인증을 확인하세요.\n${combined}`.trim();
+  }
+  if (/permission denied|cannot connect to the docker daemon|got permission denied|operation not permitted|rootless/i.test(combined)) {
+    return `${engine} 실행 권한 또는 daemon 연결 권한이 없습니다. runner 사용자 권한, socket 접근, rootless Podman 설정을 확인하세요.\n${combined}`.trim();
+  }
+  return combined || `${engine} 실행이 실패했습니다(exit=${completed.code ?? "null"}, signal=${completed.signal ?? "none"}).`;
+}
+
+interface SpawnResult {
   code: number | null;
   signal: NodeJS.Signals | null;
   stdout: string;
   stderr: string;
   timedOut: boolean;
-}> {
+  errorCode?: string;
+}
+
+function spawnWithTimeout(command: string, args: string[], timeoutMs: number): Promise<SpawnResult> {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
@@ -188,10 +218,20 @@ function spawnWithTimeout(command: string, args: string[], timeoutMs: number): P
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => { stdout += chunk; });
     child.stderr.on("data", (chunk) => { stderr += chunk; });
-    child.on("error", reject);
+    child.on("error", (error: NodeJS.ErrnoException) => {
+      clearTimeout(timer);
+      resolvePromise({
+        code: null,
+        signal: null,
+        stdout: "",
+        stderr: redactSecrets(error.message),
+        timedOut,
+        errorCode: error.code,
+      });
+    });
     child.on("close", (code, signal) => {
       clearTimeout(timer);
-      resolvePromise({ code, signal, stdout, stderr, timedOut });
+      resolvePromise({ code, signal, stdout: redactSecrets(stdout), stderr: redactSecrets(stderr), timedOut });
     });
   });
 }
