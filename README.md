@@ -31,6 +31,8 @@ Phase 2 can add generic analyze/backfill task support.
 npm install
 npm run build
 node dist/cli.js doctor
+node dist/cli.js install
+node dist/cli.js cleanup --ttl 24h --dry-run
 node dist/cli.js run examples/task.github.json
 node dist/cli.js run examples/task.openclaw-plugin-a2a.json
 ```
@@ -73,6 +75,24 @@ For integration jobs, pass explicit repos and commands instead:
 ```
 
 This keeps `a2a-docker-runner` as the disposable execution sandbox while `openclaw-plugin-a2a` remains the main development repo.
+
+## Worker operations
+
+`doctor` prints JSON status for worker readiness checks:
+
+- `docker` and `podman` availability
+- configured task-root access and permissions
+- optional GitHub hosts secret readability and intended `:ro` container mount
+- configured base-image presence or pull readiness
+
+`install` (alias: `setup`) is safe to rerun. It creates the task root with private permissions when missing and validates the optional secret file without touching live services.
+
+`cleanup` removes task working directories older than a TTL. Always use `--dry-run` first on real workers:
+
+```bash
+A2A_DOCKER_RUNNER_ROOT=/var/lib/openclaw-a2a/tasks node dist/cli.js cleanup --ttl 2d --dry-run
+A2A_DOCKER_RUNNER_ROOT=/var/lib/openclaw-a2a/tasks node dist/cli.js cleanup --ttl 2d
+```
 
 ## Environment
 
