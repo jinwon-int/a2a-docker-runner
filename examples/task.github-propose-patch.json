@@ -1,0 +1,15 @@
+{
+  "id": "patch-readme-example",
+  "intent": "propose_patch",
+  "mode": "github-propose-patch",
+  "repo": "jinon86/a2a-docker-runner",
+  "baseBranch": "main",
+  "prompt": "Add a section to README.md explaining the github-propose-patch execution mode and the A2A_PATCH_COMMAND escape hatch.",
+  "issueUrl": "https://github.com/jinon86/a2a-docker-runner/issues/10",
+  "reportLanguage": "ko",
+  "requestedBy": "dungae",
+  "timeoutMs": 600000,
+  "env": {
+    "A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE": "echo 'Coding agent invoked with template.' | tee /work/artifacts/agent-output.txt"
+  }
+}
