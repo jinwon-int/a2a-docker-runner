@@ -709,6 +709,49 @@ test("buildHandlerResult: includes filesChanged from artifacts", () => {
   assert.deepEqual(handlerResult.filesChanged, ["/tmp/a/task.json", "/tmp/a/summary.txt"]);
 });
 
+test("buildHandlerResult: prefers artifactManifest paths for modern runner results", () => {
+  const result: RawRunnerOutput = {
+    ok: true, taskId: "t-modern", status: "completed", workDir: "/tmp/work",
+    stdout: "", stderr: "", artifacts: ["/tmp/work/artifacts/summary.txt"],
+    artifactManifest: {
+      schemaVersion: 1,
+      manifestPath: "artifacts/manifest.json",
+      generatedAt: "1970-01-01T00:00:00.000Z",
+      artifacts: [{ path: "artifacts/summary.txt", name: "summary.txt", sizeBytes: 10 }],
+    },
+    resultSummary: {
+      exitCode: 0, signal: null, timedOut: false, stdout: "ok", stderr: "",
+      stdoutTruncated: false, stderrTruncated: false, artifactCount: 1, manifestPath: "artifacts/manifest.json",
+    },
+    github: { prUrl: "https://github.com/jinon86/repo/pull/1" },
+  };
+  const handlerResult = buildHandlerResult(result, { id: "t-modern" }, "sogyo");
+  assert.deepEqual(handlerResult.filesChanged, ["artifacts/summary.txt"]);
+  assert.deepEqual((handlerResult.runnerRaw as unknown as RawRunnerOutput).artifacts, ["artifacts/summary.txt"]);
+});
+
+test("buildHandlerResult: exposes bounded resultSummary stdout/stderr instead of raw large streams", () => {
+  const rawStdout = "raw-stdout-".repeat(5000);
+  const rawStderr = "raw-stderr-".repeat(5000);
+  const result: RawRunnerOutput = {
+    ok: true, taskId: "t-large", status: "completed", workDir: "/tmp",
+    stdout: rawStdout, stderr: rawStderr, artifacts: [],
+    resultSummary: {
+      exitCode: 0, signal: null, timedOut: false,
+      stdout: "bounded stdout\n<truncated 49900 chars>",
+      stderr: "bounded stderr\n<truncated 49900 chars>",
+      stdoutTruncated: true, stderrTruncated: true, artifactCount: 0, manifestPath: "artifacts/manifest.json",
+    },
+    github: { doneCommentUrl: "https://github.com/jinon86/repo/issues/5#issuecomment-456" },
+  };
+  const handlerResult = buildHandlerResult(result, { id: "t-large" }, "sogyo");
+  const runnerRaw = handlerResult.runnerRaw as unknown as RawRunnerOutput;
+  assert.equal(runnerRaw.stdout, "bounded stdout\n<truncated 49900 chars>");
+  assert.equal(runnerRaw.stderr, "bounded stderr\n<truncated 49900 chars>");
+  assert.ok(!runnerRaw.stdout.includes("raw-stdout-raw-stdout-"));
+  assert.ok(!runnerRaw.stderr.includes("raw-stderr-raw-stderr-"));
+});
+
 test("buildHandlerResult: PR takes precedence over block in evidence (deterministic ordering)", () => {
   const result: RawRunnerOutput = {
     ok: false, taskId: "mixed", status: "failed", workDir: "/tmp",
