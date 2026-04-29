@@ -12,8 +12,25 @@ export interface RunnerConfig {
    * Escape hatch for github-propose-patch/propose_patch mode.
    * When set, injected as A2A_PATCH_COMMAND env var into containers.
    * Default commands for patch mode reference this to invoke a coding agent.
+   *
+   * @deprecated Prefer commandScript (safer, no eval) or commandArgv.
+   *             This path uses eval and will emit a deprecation notice.
    */
   commandTemplate?: string;
+
+  /**
+   * Safe script file content for patch command execution.
+   * Runner writes this to /work/patch-command.sh in the container.
+   * This is the recommended path — no eval, no shell injection risk.
+   */
+  commandScript?: string;
+
+  /**
+   * JSON-encoded argv/env for safe patch command execution.
+   * Format: { "argv": ["codex", "exec", "..."], "env": { "KEY": "val" } }
+   * Runner serialises this into a safe script, avoiding eval.
+   */
+  commandJson?: string;
 }
 
 export type RunnerPreset = "openclaw-plugin-a2a-dev";

@@ -14,6 +14,15 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
   await mkdir(workDir, { recursive: true, mode: 0o700 });
   await writeFile(join(workDir, "task.json"), JSON.stringify(normalizedTask, null, 2));
 
+  // Write safe patch command script if configured.
+  // Priority: commandScript > commandJson > commandTemplate (legacy eval).
+  if (config.commandScript) {
+    await writeFile(join(workDir, "patch-command.sh"), config.commandScript, { mode: 0o700 });
+  } else if (config.commandJson) {
+    const jsonScript = jsonArgvToScript(config.commandJson);
+    await writeFile(join(workDir, "patch-command.sh"), jsonScript, { mode: 0o700 });
+  }
+
   const script = buildContainerScript(normalizedTask);
   await writeFile(join(workDir, "run.sh"), script, { mode: 0o700 });
 
@@ -82,6 +91,16 @@ export function buildRunArgs(config: RunnerConfig, task: RunnerTask, workDir: st
 
   // Escape hatch: inject the patch command template as an env var so
   // default github-propose-patch commands can invoke a coding agent.
+  // Safe patch command paths (in priority order).
+  // commandScript (file) and commandJson (JSON argv/env) avoid eval.
+  // Legacy commandTemplate is injected for backward compatibility only.
+  if (config.commandScript || config.commandJson) {
+    // Only inject the legacy env var if explicitly requested via commandTemplate.
+    // Safer paths use script files or JSON argv.
+  }
+  if (config.commandJson) {
+    args.push("-e", `A2A_PATCH_COMMAND_JSON=${config.commandJson}`);
+  }
   if (config.commandTemplate) {
     args.push("-e", `A2A_PATCH_COMMAND=${config.commandTemplate}`);
   }
@@ -167,13 +186,73 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
+/**
+ * Convert a JSON argv/env config into a safe bash script.
+ *
+ * Input:  {"argv":["codex","exec","--full-auto","..."],"env":{"KEY":"val"}}
+ * Output: A self-contained bash script that executes argv safely,
+ *         with optional env vars set, and never calls eval.
+ */
+export function jsonArgvToScript(json: string): string {
+  let parsed: { argv?: unknown; env?: unknown };
+  try {
+    parsed = JSON.parse(json);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return `#!/usr/bin/env bash
+set -euo pipefail
+printf 'error=json_parse_failed: %s\\n' >&2 "${shellQuote(msg)}"
+exit 2
+`;
+  }
+
+  if (!Array.isArray(parsed.argv) || parsed.argv.length === 0 || !parsed.argv.every((a): a is string => typeof a === "string")) {
+    return `#!/usr/bin/env bash
+set -euo pipefail
+printf 'error=invalid_json_argv: argv must be a non-empty array of strings\\n' >&2
+exit 2
+`;
+  }
+
+  const envLines: string[] = [];
+  if (parsed.env && typeof parsed.env === "object" && !Array.isArray(parsed.env)) {
+    for (const [key, value] of Object.entries(parsed.env as Record<string, unknown>)) {
+      if (typeof value === "string" && /^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+        envLines.push(`export ${key}=${shellQuote(value)}`);
+      }
+    }
+  }
+
+  const argvQuoted = parsed.argv.map((a: string) => shellQuote(a)).join(" ");
+
+  return `#!/usr/bin/env bash
+set -euo pipefail
+${envLines.join("\n")}
+${envLines.length ? "\n" : ""}exec ${argvQuoted}
+`;
+}
+
 export function redactSecrets(value: string): string {
   return value
+    // GitHub tokens (classic + fine-grained + PAT v2)
     .replace(/gh[pousr]_[A-Za-z0-9_]{20,}/g, "<redacted-github-token>")
     .replace(/github_pat_[A-Za-z0-9_]{20,}/g, "<redacted-github-token>")
+    // xai / supermemory / openai API key patterns (synthetic format)
+    // Must fire BEFORE generic key=value redaction to catch the full key.
+    .replace(/xai-[A-Za-z0-9_-]{40,}/g, "<redacted-api-key>")
+    .replace(/sm_[A-Za-z0-9_-]{40,}/g, "<redacted-api-key>")
+    .replace(/sk-[A-Za-z0-9_-]{32,}/g, "<redacted-api-key>")
+    // x-access-token in URLs
     .replace(/x-access-token:[^@\s]+@github\.com/g, "x-access-token:<redacted>@github.com")
+    // oauth_token in YAML/JSON
     .replace(/(oauth_token:\s*)\S+/gi, "$1<redacted>")
-    .replace(/((?:token|password|secret|api[_-]?key)=)[^\s]+/gi, "$1<redacted>");
+    // Authorization / Bearer headers
+    .replace(/(Authorization:\s*Bearer\s+)\S+/gi, "$1<redacted>")
+    .replace(/(gh auth login --with-token\s+)\S+/gi, "$1<redacted>")
+    // Generic key=value secrets (after API key patterns)
+    .replace(/((?:token|password|secret|api[_-]?key)=)(?!<redacted)[^\s]+/gi, "$1<redacted>")
+    // Shell variable assignments with secrets
+    .replace(/((?:GH_TOKEN|GITHUB_TOKEN|NPM_TOKEN|A2A_TOKEN)=)['"]?[^'"\s]+['"]?/gi, "$1<redacted>");
 }
 
 function buildActionableError(engine: string, image: string, completed: SpawnResult): string {
