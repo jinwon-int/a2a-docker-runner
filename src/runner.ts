@@ -1,9 +1,9 @@
 import { mkdir, writeFile, readdir, rm, stat } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { basename, join, relative, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { normalizeTask } from "./task-normalizer.js";
 import { collectGitHubEvidence } from "./github-evidence.js";
-import type { NormalizedRunnerTask, RunnerConfig, RunnerResult, RunnerTask } from "./types.js";
+import type { ArtifactManifest, ArtifactManifestEntry, NormalizedRunnerTask, ResultSummary, RunnerConfig, RunnerResult, RunnerTask } from "./types.js";
 
 export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<RunnerResult> {
   validateTask(task);
@@ -31,6 +31,11 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
   const engine = config.engine ?? "docker";
   const completed = await spawnWithTimeout(engine, args, timeoutMs);
   const artifacts = await listArtifacts(workDir);
+  const manifest = await buildArtifactManifest(workDir, artifacts);
+  await writeArtifactManifest(workDir, manifest);
+  const stdout = redactAndBound(completed.stdout);
+  const stderr = redactAndBound(completed.stderr);
+  const resultSummary = buildResultSummary(completed, stdout, stderr, artifacts, manifest);
 
   const result: RunnerResult = {
     ok: completed.code === 0 && !completed.timedOut,
@@ -39,9 +44,11 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
     workDir,
     exitCode: completed.code,
     signal: completed.signal,
-    stdout: redactSecrets(completed.stdout),
-    stderr: redactSecrets(completed.stderr),
+    stdout,
+    stderr,
     artifacts,
+    artifactManifest: manifest,
+    resultSummary,
     prUrl: extractPrUrl(completed.stdout),
     error: completed.code === 0 && !completed.timedOut ? undefined : buildActionableError(engine, config.image, completed),
   };
@@ -231,6 +238,8 @@ ${envLines.join("\n")}
 ${envLines.length ? "\n" : ""}exec ${argvQuoted}
 `;
 }
+export const RESULT_STREAM_LIMIT = 8_000;
+
 
 export function redactSecrets(value: string): string {
   return value
@@ -249,11 +258,65 @@ export function redactSecrets(value: string): string {
     // Authorization / Bearer headers
     .replace(/(Authorization:\s*Bearer\s+)\S+/gi, "$1<redacted>")
     .replace(/(gh auth login --with-token\s+)\S+/gi, "$1<redacted>")
-    // Generic key=value secrets (after API key patterns)
-    .replace(/((?:token|password|secret|api[_-]?key)=)(?!<redacted)[^\s]+/gi, "$1<redacted>")
+    // Generic key=value and JSON/YAML-style secrets (after API key patterns)
+    .replace(/((?:token|password|secret|api[_-]?key)=)(?!<redacted>)[^\s]+/gi, "$1<redacted>")
+    .replace(/((?:token|password|secret|api[_-]?key)["']?\s*[:=]\s*["']?)(?!<redacted>)[^"'\s,}]+/gi, "$1<redacted>")
     // Shell variable assignments with secrets
     .replace(/((?:GH_TOKEN|GITHUB_TOKEN|NPM_TOKEN|A2A_TOKEN)=)['"]?[^'"\s]+['"]?/gi, "$1<redacted>");
 }
+
+export function redactAndBound(value: string, limit = RESULT_STREAM_LIMIT): string {
+  const redacted = redactSecrets(value);
+  if (redacted.length <= limit) return redacted;
+  const omitted = redacted.length - limit;
+  return `${redacted.slice(0, limit)}\n<truncated ${omitted} chars>`;
+}
+
+export function buildResultSummary(
+  completed: SpawnResult,
+  stdout: string,
+  stderr: string,
+  artifacts: string[],
+  manifest: ArtifactManifest,
+): ResultSummary {
+  return {
+    exitCode: completed.code,
+    signal: completed.signal,
+    timedOut: completed.timedOut,
+    stdout,
+    stderr,
+    stdoutTruncated: stdout.includes("\n<truncated "),
+    stderrTruncated: stderr.includes("\n<truncated "),
+    artifactCount: artifacts.length,
+    manifestPath: manifest.manifestPath,
+  };
+}
+
+export async function buildArtifactManifest(workDir: string, artifacts: string[]): Promise<ArtifactManifest> {
+  const entries: ArtifactManifestEntry[] = [];
+  for (const artifact of artifacts) {
+    const info = await stat(artifact);
+    entries.push({
+      path: relative(workDir, artifact).split("/").join("/"),
+      name: basename(artifact),
+      sizeBytes: info.size,
+    });
+  }
+  entries.sort((a, b) => a.path.localeCompare(b.path));
+  return {
+    schemaVersion: 1,
+    manifestPath: "artifacts/manifest.json",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    artifacts: entries,
+  };
+}
+
+async function writeArtifactManifest(workDir: string, manifest: ArtifactManifest): Promise<void> {
+  const path = join(workDir, "artifacts", "manifest.json");
+  await mkdir(join(workDir, "artifacts"), { recursive: true, mode: 0o700 });
+  await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
 
 function buildActionableError(engine: string, image: string, completed: SpawnResult): string {
   const combined = redactSecrets([completed.stderr, completed.stdout].filter(Boolean).join("\n")).trim();

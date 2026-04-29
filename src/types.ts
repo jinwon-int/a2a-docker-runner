@@ -88,6 +88,36 @@ export interface NormalizedRunnerTask extends RunnerTask {
   commands: string[];
 }
 
+export interface ArtifactManifestEntry {
+  /** Artifact path relative to the task workDir. */
+  path: string;
+  /** Basename for quick display. */
+  name: string;
+  /** File size in bytes. */
+  sizeBytes: number;
+}
+
+export interface ArtifactManifest {
+  schemaVersion: 1;
+  /** Path to the emitted manifest.json relative to the task workDir. */
+  manifestPath: string;
+  /** Fixed timestamp keeps manifest content deterministic for identical artifacts. */
+  generatedAt: string;
+  artifacts: ArtifactManifestEntry[];
+}
+
+export interface ResultSummary {
+  exitCode?: number | null;
+  signal?: NodeJS.Signals | null;
+  timedOut: boolean;
+  stdout: string;
+  stderr: string;
+  stdoutTruncated: boolean;
+  stderrTruncated: boolean;
+  artifactCount: number;
+  manifestPath: string;
+}
+
 export interface RunnerResult {
   ok: boolean;
   taskId: string;
@@ -98,6 +128,10 @@ export interface RunnerResult {
   stdout: string;
   stderr: string;
   artifacts: string[];
+  /** Structured manifest for artifacts emitted by this execution. */
+  artifactManifest?: ArtifactManifest;
+  /** Bounded/redacted payload-safe result summary. */
+  resultSummary?: ResultSummary;
   /** @deprecated Prefer github.prUrl for structured evidence. */
   prUrl?: string;
   error?: string;
