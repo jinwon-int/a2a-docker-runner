@@ -232,6 +232,50 @@ a2a-docker-runner run examples/task.canary.json
    - GitHub 토큰 파일 누락 또는 권한 문제
    - 디스크 공간 부족
 
+## CI-Safe Canary Fixture (사전 검증)
+
+실제 Docker 컨테이너 없이 handler → runner CLI → parsing → HandlerResult mapping 전체 파이프라인을 검증하는 CI-safe 테스트다. 라이브 배포 전 `npm test`로 실행되며, Docker나 broker, GitHub API 호출이 전혀 필요하지 않다.
+
+### Fake Runner Binary
+
+`scripts/fake-runner.sh`가 실제 `a2a-docker-runner run <task.json>` 동작을 모사한다. `FAKE_RUNNER_MODE` 환경변수로 출력을 제어한다:
+
+| Mode | 출력 | Exit Code | 검증 경로 |
+|---|---|---|---|
+| `pr` | 성공 JSON + `github.prUrl` | 0 | `HandlerResult.status === "pr_opened"` |
+| `done` | 성공 JSON + `github.doneCommentUrl` | 0 | `HandlerResult.status === "done"` |
+| `block` | 실패 JSON + `github.blockCommentUrl` | 1 | `HandlerResult.status === "blocked"` |
+| `failure` | 타임아웃 JSON (evidence 없음) | 1 | `HandlerResult.status === "blocked"` (no evidence) |
+| `malformed` | 파싱 불가능한 문자열 | 0 | `parseRunnerOutput` throws |
+| `crash` | 절단된 JSON + SIGKILL | 137 | `parseRunnerOutput` throws |
+
+### Canary 실행 (CI / 로컬)
+
+```bash
+# 전체 canary fixture 실행 (Docker 불필요)
+npm run build && node --test dist/canary.test.js
+
+# 특정 canary 모드만 수동 확인
+FAKE_RUNNER_MODE=pr bash scripts/fake-runner.sh run examples/task.canary.json
+```
+
+### Canary 검증 항목
+
+| 단계 | 검증 내용 |
+|---|---|
+| Phase 1 | handler payload → RunnerTask 빌드 (repo, issueUrl, timeoutMs 정확) |
+| Phase 2 | fake runner spawn → stdout 파싱 → GitHubEvidence 추출 → HandlerResult 매핑 |
+| Phase 3 | ALL_GITHUB=1 canary 배포 시뮬레이션 + timeout env passthrough |
+| Phase 4 | Evidence precedence, artifacts 전파, runnerRaw 디버깅 필드 |
+| Phase 5 | Rollback 시뮬레이션 (ENABLED=0, ALL_GITHUB unset) |
+
+### 배포 전 검증 (Pre-Deploy Canary Recipe)
+
+1. `npm run build` — TypeScript 컴파일 성공
+2. `node --test dist/canary.test.js` — 6개 경로 전체 통과
+3. `bash scripts/fake-runner.sh pr` — fake runner 단독 실행 확인
+4. 위 3단계가 모두 통과해야 라이브 롤아웃 진행
+
 ## Rollback
 
 handler integration 문제가 발생하거나 host-workspace direct execution으로 복귀해야 할 때 아래 절차를 따른다.
