@@ -279,8 +279,8 @@ export function redactSecrets(value: string): string {
     .replace(/(Authorization:\s*Bearer\s+)\S+/gi, "$1<redacted>")
     .replace(/(gh auth login --with-token\s+)\S+/gi, "$1<redacted>")
     // Generic key=value and JSON/YAML-style secrets (after API key patterns)
-    .replace(/((?:token|password|secret|api[_-]?key)=)(?!<redacted>)[^\s]+/gi, "$1<redacted>")
-    .replace(/((?:token|password|secret|api[_-]?key)["']?\s*[:=]\s*["']?)(?!<redacted>)[^"'\s,}]+/gi, "$1<redacted>")
+    .replace(/((?:token|password|secret|api[_-]?key)=)(?!<redacted)[^\s]+/gi, "$1<redacted>")
+    .replace(/((?:token|password|secret|api[_-]?key)["']?\s*[:=]\s*["']?)(?!<redacted)[^"'\s,}]+/gi, "$1<redacted>")
     // Shell variable assignments with secrets
     .replace(/((?:GH_TOKEN|GITHUB_TOKEN|NPM_TOKEN|A2A_TOKEN)=)['"]?[^'"\s]+['"]?/gi, "$1<redacted>");
 }
