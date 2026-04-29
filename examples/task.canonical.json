@@ -1,0 +1,19 @@
+{
+  "id": "canonical-github-propose-patch",
+  "intent": "propose_patch",
+  "mode": "github-propose-patch",
+  "repo": "jinon86/a2a-docker-runner",
+  "baseBranch": "main",
+  "commands": [
+    "cd /work/repo && printf '## Canonical A2A Task Smoke\\n\\nRunner version: %s\\nNode: %s\\n' \"$(node --version)\" \"$(uname -n)\" > /work/artifacts/canonical-smoke.md",
+    "cd /work/repo && cat /work/artifacts/canonical-smoke.md",
+    "cd /work/repo && printf 'PR created: https://github.com/jinon86/a2a-docker-runner/pull/42\\n'"
+  ],
+  "issueUrl": "https://github.com/jinon86/a2a-docker-runner/issues/1",
+  "reportLanguage": "ko",
+  "requestedBy": "dungae",
+  "timeoutMs": 300000,
+  "env": {
+    "NODE_ENV": "production"
+  }
+}
