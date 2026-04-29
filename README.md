@@ -33,9 +33,32 @@ npm run build
 node dist/cli.js doctor
 node dist/cli.js install
 node dist/cli.js cleanup --ttl 24h --dry-run
+node dist/cli.js run examples/task.canonical.json
 node dist/cli.js run examples/task.github.json
+node dist/cli.js run examples/task.github-evidence.json
 node dist/cli.js run examples/task.openclaw-plugin-a2a.json
 ```
+
+## Canonical A2A Task Format
+
+The full `github-propose-patch` mode task accepts:
+
+```json
+{
+  "id": "canonical-github-propose-patch",
+  "intent": "propose_patch",
+  "mode": "github-propose-patch",
+  "repo": "jinon86/a2a-docker-runner",
+  "baseBranch": "main",
+  "commands": ["..."],
+  "issueUrl": "https://github.com/jinon86/a2a-docker-runner/issues/1",
+  "reportLanguage": "ko",
+  "requestedBy": "dungae",
+  "timeoutMs": 300000
+}
+```
+
+See `examples/task.canonical.json` for a complete example.
 
 ## OpenClaw plugin A2A development preset
 
