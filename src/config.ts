@@ -14,6 +14,8 @@ export async function loadConfig(env = process.env): Promise<RunnerConfig> {
     await access(githubTokenFile, constants.R_OK);
   }
 
+  const patchCommand = loadPatchCommandConfig(env);
+
   return {
     rootDir: env.A2A_DOCKER_RUNNER_ROOT || DEFAULT_ROOT,
     engine,
@@ -22,8 +24,18 @@ export async function loadConfig(env = process.env): Promise<RunnerConfig> {
     defaultTimeoutMs: Number(env.A2A_DOCKER_RUNNER_TIMEOUT_MS || 15 * 60 * 1000),
     memory: env.A2A_DOCKER_RUNNER_MEMORY || "2g",
     cpus: env.A2A_DOCKER_RUNNER_CPUS || "2",
-    commandTemplate: env.A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE || undefined,
+    ...patchCommand,
   };
+}
+
+function loadPatchCommandConfig(env: NodeJS.ProcessEnv): Pick<RunnerConfig, "commandScript" | "commandJson" | "commandTemplate"> {
+  const commandScript = env.A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT || undefined;
+  if (commandScript) return { commandScript };
+
+  const commandJson = env.A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON || undefined;
+  if (commandJson) return { commandJson };
+
+  return { commandTemplate: env.A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE || undefined };
 }
 
 function normalizeEngine(value?: string): RunnerEngine | undefined {
