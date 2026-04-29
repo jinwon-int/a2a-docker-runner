@@ -8,7 +8,7 @@
  * Broker claim/heartbeat logic is NOT touched by this module.
  */
 
-import type { RunnerTask, GitHubEvidence } from "./types.js";
+import type { ArtifactManifest, GitHubEvidence, ResultSummary, RunnerTask } from "./types.js";
 
 // ── Handler payload shape (what the broker sends to the worker) ────────────
 
@@ -181,6 +181,10 @@ export interface RawRunnerOutput {
   stdout: string;
   stderr: string;
   artifacts: string[];
+  /** Structured manifest for artifacts emitted by modern runner versions. */
+  artifactManifest?: ArtifactManifest;
+  /** Bounded/redacted payload-safe summary emitted by modern runner versions. */
+  resultSummary?: ResultSummary;
   prUrl?: string;
   error?: string;
   github?: GitHubEvidence;
@@ -243,9 +247,9 @@ export function buildHandlerResult(
       status: "blocked",
       summary: `Docker runner completed without PR/Done/Block evidence — task ${task?.id ?? "unknown"}`,
       tests: [],
-      filesChanged: result.artifacts ?? [],
+      filesChanged: resultFilesChanged(result),
       risks: ["runner completed without structured GitHub evidence"],
-      runnerRaw: result as unknown as Record<string, unknown>,
+      runnerRaw: brokerFacingRunnerRaw(result),
     };
   }
 
@@ -262,13 +266,34 @@ export function buildHandlerResult(
     blockCommentUrl: evidence.blockCommentUrl,
     doneCommentUrl: evidence.doneCommentUrl,
     tests: ["a2a-docker-runner run -> completed"],
-    filesChanged: result.artifacts ?? [],
+    filesChanged: resultFilesChanged(result),
     risks: evidence.prUrl ? [] : ["runner completed without PR evidence"],
-    runnerRaw: result as unknown as Record<string, unknown>,
+    runnerRaw: brokerFacingRunnerRaw(result),
   };
 }
 
 // ── Internal helpers ───────────────────────────────────────────────────────
+
+function resultFilesChanged(result: RawRunnerOutput): string[] {
+  const manifestArtifacts = result.artifactManifest?.artifacts;
+  if (manifestArtifacts && manifestArtifacts.length > 0) {
+    return manifestArtifacts.map((artifact) => artifact.path);
+  }
+  return result.artifacts ?? [];
+}
+
+function brokerFacingRunnerRaw(result: RawRunnerOutput): Record<string, unknown> {
+  if (!result.resultSummary) {
+    return result as unknown as Record<string, unknown>;
+  }
+
+  return {
+    ...result,
+    stdout: result.resultSummary.stdout,
+    stderr: result.resultSummary.stderr,
+    artifacts: resultFilesChanged(result),
+  } as unknown as Record<string, unknown>;
+}
 
 function normalizeString(value?: string): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
