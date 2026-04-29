@@ -1,4 +1,4 @@
-import { mkdir, writeFile, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, writeFile, readdir, stat } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { normalizeTask } from "./task-normalizer.js";
@@ -9,10 +9,14 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
   validateTask(task);
   const normalizedTask = normalizeTask(task);
   const root = resolve(config.rootDir);
-  const workDir = join(root, safeId(task.id));
-  await rm(workDir, { recursive: true, force: true });
-  await mkdir(workDir, { recursive: true, mode: 0o700 });
+  const runToken = createRunToken();
+  const safeTaskId = safeId(task.id);
+  const taskRoot = join(root, safeTaskId);
+  const workDir = join(taskRoot, runToken);
+  await mkdir(taskRoot, { recursive: true, mode: 0o700 });
+  await mkdir(workDir, { recursive: false, mode: 0o700 });
   await writeFile(join(workDir, "task.json"), JSON.stringify(normalizedTask, null, 2));
+  await writeFile(join(workDir, "run.json"), JSON.stringify({ taskId: task.id, safeTaskId, runToken, createdAt: new Date().toISOString() }, null, 2));
 
   // Write safe patch command script if configured.
   // Priority: commandScript > commandJson > commandTemplate (legacy eval).
@@ -26,7 +30,7 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
   const script = buildContainerScript(normalizedTask);
   await writeFile(join(workDir, "run.sh"), script, { mode: 0o700 });
 
-  const args = buildRunArgs(config, normalizedTask, workDir);
+  const args = buildRunArgs(config, normalizedTask, workDir, runToken);
   const timeoutMs = normalizedTask.timeoutMs ?? config.defaultTimeoutMs;
   const engine = config.engine ?? "docker";
   const completed = await spawnWithTimeout(engine, args, timeoutMs);
@@ -70,17 +74,33 @@ function validateTask(task: RunnerTask): void {
 }
 
 function safeId(id: string): string {
-  return id.replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 120);
+  const safe = id.replace(/[^a-zA-Z0-9_.-]/g, "_").replace(/^[-.]+/, "_").slice(0, 80);
+  return safe || "task";
 }
 
-export function buildRunArgs(config: RunnerConfig, task: RunnerTask, workDir: string): string[] {
+function createRunToken(): string {
+  const stamp = new Date().toISOString().replace(/[^0-9A-Za-z]/g, "").slice(0, 15);
+  const random = Math.random().toString(36).slice(2, 10);
+  return `${stamp}-${process.pid.toString(36)}-${random}`;
+}
+
+function buildContainerName(taskId: string, runToken: string): string {
+  return `a2a-${safeId(taskId)}-${runToken}`.slice(0, 128);
+}
+
+export function buildRunArgs(config: RunnerConfig, task: RunnerTask, workDir: string, runToken = createRunToken()): string[] {
+  const containerName = buildContainerName(task.id, runToken);
   const args = [
     "run",
     "--rm",
     "--name",
-    `a2a-${safeId(task.id)}`,
+    containerName,
     "--network",
     "bridge",
+    "--label",
+    `a2a.task.id=${safeId(task.id)}`,
+    "--label",
+    `a2a.run.id=${runToken}`,
     "--memory",
     config.memory ?? "2g",
     "--cpus",
@@ -324,10 +344,16 @@ function buildActionableError(engine: string, image: string, completed: SpawnRes
     return `${engine} 실행 파일을 찾을 수 없습니다. Docker 또는 Podman을 설치하거나 A2A_DOCKER_RUNNER_ENGINE을 사용 가능한 엔진으로 설정하세요.`;
   }
   if (completed.timedOut) {
-    return `컨테이너 실행이 제한 시간 안에 끝나지 않았습니다. timeoutMs를 늘리거나 작업 명령을 줄이고, 남은 컨테이너가 있으면 '${engine} ps -a'와 '${engine} rm -f a2a-<taskId>'로 확인하세요.\n${combined}`.trim();
+    return `컨테이너 실행이 제한 시간 안에 끝나지 않았습니다. timeoutMs를 늘리거나 작업 명령을 줄이고, 남은 컨테이너가 있으면 '${engine} ps -a --filter label=a2a.task.id=<safeTaskId>'로 확인한 뒤 run별 container name을 지정해 정리하세요.\n${combined}`.trim();
+  }
+  if (/Conflict\.? The container name|container name .* is already in use|name is already in use|already exists/i.test(combined)) {
+    return `컨테이너 이름 충돌이 발생했습니다. runner는 task id와 run token을 포함한 고유 이름을 사용하므로, 같은 safeTaskId를 가진 오래된 컨테이너가 남았는지 '${engine} ps -a --filter label=a2a.task.id=<safeTaskId>'로 확인하고 해당 run만 정리하세요.\n${combined}`.trim();
   }
   if (/pull access denied|manifest unknown|not found|no such image|repository does not exist/i.test(combined)) {
     return `이미지 '${image}'를 가져오거나 찾을 수 없습니다. 이미지 이름/태그와 registry 인증을 확인하세요.\n${combined}`.trim();
+  }
+  if (/mkdir .*permission denied|EACCES|EROFS|read-only file system|permission denied.*work/i.test(combined)) {
+    return `작업 디렉터리 생성 또는 마운트 권한 문제가 감지되었습니다. rootDir 소유권/권한과 컨테이너 볼륨 마운트 정책을 확인하고, 같은 task id의 run 디렉터리가 동시에 사용 중인지 확인하세요.\n${combined}`.trim();
   }
   if (/permission denied|cannot connect to the docker daemon|got permission denied|operation not permitted|rootless/i.test(combined)) {
     return `${engine} 실행 권한 또는 daemon 연결 권한이 없습니다. runner 사용자 권한, socket 접근, rootless Podman 설정을 확인하세요.\n${combined}`.trim();

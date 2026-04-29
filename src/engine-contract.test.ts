@@ -31,13 +31,16 @@ const task: RunnerTask = {
 // ---------------------------------------------------------------------------
 
 test("builds a Docker/Podman-compatible invocation contract without requiring an engine", () => {
-  const args = buildRunArgs(config, task, "/tmp/a2a-work");
+  const args = buildRunArgs(config, task, "/tmp/a2a-work", "ci-run-1");
 
   assert.deepEqual(args.slice(0, 2), ["run", "--rm"]);
   assert.ok(args.includes("--name"));
-  assert.ok(args.includes("a2a-contract_test_1"));
+  const nameIndex = args.indexOf("--name") + 1;
+  assert.match(args[nameIndex], /^a2a-contract_test_1-ci-run-1$/);
   assert.ok(args.includes("--network"));
   assert.ok(args.includes("bridge"));
+  assert.ok(args.includes("a2a.task.id=contract_test_1"));
+  assert.ok(args.includes("a2a.run.id=ci-run-1"));
   assert.ok(args.includes("--memory"));
   assert.ok(args.includes("256m"));
   assert.ok(args.includes("--cpus"));
@@ -294,4 +297,18 @@ test("missing engine failure is actionable and CI-safe", async () => {
   assert.equal(result.ok, false);
   assert.equal(result.status, "failed");
   assert.match(result.error ?? "", /실행 파일을 찾을 수 없습니다|Docker 또는 Podman/);
+});
+
+
+test("same task id gets unique traceable container names for retries", () => {
+  const first = buildRunArgs(config, task, "/tmp/a2a-work/first", "run-a");
+  const second = buildRunArgs(config, task, "/tmp/a2a-work/second", "run-b");
+  const firstName = first[first.indexOf("--name") + 1];
+  const secondName = second[second.indexOf("--name") + 1];
+
+  assert.notEqual(firstName, secondName);
+  assert.match(firstName, /^a2a-contract_test_1-run-a$/);
+  assert.match(secondName, /^a2a-contract_test_1-run-b$/);
+  assert.ok(first.includes("a2a.task.id=contract_test_1"));
+  assert.ok(second.includes("a2a.task.id=contract_test_1"));
 });
