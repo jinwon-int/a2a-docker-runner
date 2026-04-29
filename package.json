@@ -1,0 +1,25 @@
+{
+  "name": "@openclaw/a2a-docker-runner",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "description": "Docker/Podman task runner for OpenClaw A2A workers",
+  "bin": {
+    "a2a-docker-runner": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test dist/**/*.test.js",
+    "lint": "node --check dist/cli.js",
+    "pretest": "npm run build"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "typescript": "^5.8.3"
+  }
+}

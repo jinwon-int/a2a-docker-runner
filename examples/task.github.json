@@ -1,0 +1,7 @@
+{
+  "id": "example-github-task",
+  "intent": "propose_patch",
+  "repo": "https://github.com/jinon86/seoyoon-family-wiki.git",
+  "baseBranch": "master",
+  "prompt": "Make a small documentation change and open a PR."
+}
