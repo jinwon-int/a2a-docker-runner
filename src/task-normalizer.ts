@@ -72,7 +72,7 @@ function defaultCommands(task: RunnerTask, primaryRepo?: RunnerRepo): string[] {
 
   // github-propose-patch / propose_patch mode with no explicit commands.
   // Generate a PR-producing pipeline that writes the prompt to artifacts,
-  // invokes a configurable coding agent via A2A_PATCH_COMMAND env, and
+  // invokes a coding agent via a safe script file, and
   // commits/pushes/creates a PR when changes are detected.
   if (isPatchMode(task.mode) && primaryRepo) {
     return buildDefaultPatchCommands(task, primaryRepo);
@@ -104,6 +104,30 @@ function buildDefaultPatchCommands(task: RunnerTask, primaryRepo: RunnerRepo): s
   // Step 2: git config + branch + coding agent + commit + push + PR create.
   // Everything that shares shell variables lives in one command so BRANCH
   // and change detection work across the pipeline.
+  //
+  // Patch command execution contract (priority order):
+  //   1. /work/patch-command.sh  →  safe script file (commandScript / commandJson)
+  //   2. $A2A_PATCH_COMMAND_JSON  →  JSON argv/env (should be pre-converted; safety net)
+  //   3. $A2A_PATCH_COMMAND       →  LEGACY eval (deprecated, kept for compatibility)
+  const patchCommandBlock = [
+    `# Patch command execution: safe script file (recommended).`,
+    `if [ -x /work/patch-command.sh ]; then`,
+    `  printf 'patch_mode=script\\n' | tee -a /work/artifacts/summary.txt`,
+    `  /work/patch-command.sh 2>&1 | tee /work/artifacts/patch-command.log`,
+    `elif [ -n "\${A2A_PATCH_COMMAND_JSON:-}" ]; then`,
+    `  printf 'patch_mode=json_argv_unconverted\\n' | tee -a /work/artifacts/summary.txt`,
+    `  printf 'error=json_argv_received_without_host_side_script_conversion\\n' >&2`,
+    `  exit 2`,
+    `elif [ -n "\${A2A_PATCH_COMMAND:-}" ]; then`,
+    `  printf 'patch_mode=legacy_eval\\n' | tee -a /work/artifacts/summary.txt`,
+    `  printf 'warning=deprecated_eval_path_prefer_commandScript_or_commandJson\\n' | tee -a /work/artifacts/summary.txt`,
+    `  eval "\${A2A_PATCH_COMMAND}" 2>&1 | tee /work/artifacts/patch-command.log`,
+    `else`,
+    `  printf 'notice=no_patch_command_configured\\n' | tee -a /work/artifacts/summary.txt`,
+    `  printf 'Set commandScript or commandJson in RunnerConfig to inject a coding agent.\\n' | tee /work/artifacts/patch-command.log`,
+    `fi`,
+  ].join("\n");
+
   const pipeline = [
     `set -euo pipefail`,
     `cd /work/${repoPath}`,
@@ -113,14 +137,7 @@ function buildDefaultPatchCommands(task: RunnerTask, primaryRepo: RunnerRepo): s
     `git checkout -b "$BRANCH"`,
     `printf 'branch=%s\\n' "$BRANCH" | tee -a /work/artifacts/summary.txt`,
     ``,
-    `# Invoke coding agent via configurable escape hatch.`,
-    `if [ -n "\${A2A_PATCH_COMMAND:-}" ]; then`,
-    `  printf 'patch_command=%s\\n' "\${A2A_PATCH_COMMAND}" | tee -a /work/artifacts/summary.txt`,
-    `  eval "\${A2A_PATCH_COMMAND}" 2>&1 | tee /work/artifacts/patch-command.log`,
-    `else`,
-    `  printf 'notice=no_patch_command_configured\\n' | tee -a /work/artifacts/summary.txt`,
-    `  printf 'Set A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE to inject a coding agent.\\n' | tee /work/artifacts/patch-command.log`,
-    `fi`,
+    patchCommandBlock,
     ``,
     `# Commit and create PR if changes exist.`,
     `if [ -n "$(git status --porcelain)" ]; then`,
