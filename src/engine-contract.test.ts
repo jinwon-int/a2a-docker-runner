@@ -84,17 +84,27 @@ test("commandTemplate (legacy) injects A2A_PATCH_COMMAND env var", () => {
   assert.ok(legacyVar, "Expected legacy A2A_PATCH_COMMAND env var for backward compatibility");
 });
 
-test("commandScript + commandTemplate together: only JSON injected, legacy template NOT injected", () => {
+test("commandScript has precedence over commandJson and commandTemplate", () => {
   const cfg: RunnerConfig = {
     ...config,
     commandScript: "#!/usr/bin/env bash\necho safe",
+    commandJson: '{"argv":["echo","json"]}',
     commandTemplate: "echo unsafe eval",
   };
   const args = buildRunArgs(cfg, task, "/tmp/a2a-work");
-  const legacyVar = args.find((a) => a.startsWith("A2A_PATCH_COMMAND="));
-  // commandTemplate should still be injected for backward compat.
-  // The container script gives priority to the script file.
-  assert.ok(legacyVar, "Legacy var still injected for backward compat when both are set");
+  assert.ok(!args.some((a) => a.startsWith("A2A_PATCH_COMMAND_JSON=")), "commandJson must not be injected when commandScript is set");
+  assert.ok(!args.some((a) => a.startsWith("A2A_PATCH_COMMAND=")), "legacy template must not be injected when commandScript is set");
+});
+
+test("commandJson has precedence over commandTemplate", () => {
+  const cfg: RunnerConfig = {
+    ...config,
+    commandJson: '{"argv":["echo","json"]}',
+    commandTemplate: "echo unsafe eval",
+  };
+  const args = buildRunArgs(cfg, task, "/tmp/a2a-work");
+  assert.ok(args.some((a) => a.startsWith("A2A_PATCH_COMMAND_JSON=")), "commandJson should be injected when commandScript is unset");
+  assert.ok(!args.some((a) => a.startsWith("A2A_PATCH_COMMAND=")), "legacy template must not be injected when commandJson is set");
 });
 
 // ---------------------------------------------------------------------------

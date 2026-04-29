@@ -116,19 +116,14 @@ export function buildRunArgs(config: RunnerConfig, task: RunnerTask, workDir: st
     args.push("-e", "GH_CONFIG_HOSTS=/run/secrets/gh-hosts.yml");
   }
 
-  // Escape hatch: inject the patch command template as an env var so
-  // default github-propose-patch commands can invoke a coding agent.
-  // Safe patch command paths (in priority order).
-  // commandScript (file) and commandJson (JSON argv/env) avoid eval.
-  // Legacy commandTemplate is injected for backward compatibility only.
-  if (config.commandScript || config.commandJson) {
-    // Only inject the legacy env var if explicitly requested via commandTemplate.
-    // Safer paths use script files or JSON argv.
-  }
-  if (config.commandJson) {
+  // Safe patch command paths are mutually exclusive by priority:
+  // commandScript > commandJson > commandTemplate (legacy eval).
+  // commandScript is mounted as /work/patch-command.sh, so it needs no env var.
+  if (config.commandScript) {
+    // no-op: runTask writes /work/patch-command.sh
+  } else if (config.commandJson) {
     args.push("-e", `A2A_PATCH_COMMAND_JSON=${config.commandJson}`);
-  }
-  if (config.commandTemplate) {
+  } else if (config.commandTemplate) {
     args.push("-e", `A2A_PATCH_COMMAND=${config.commandTemplate}`);
   }
 
