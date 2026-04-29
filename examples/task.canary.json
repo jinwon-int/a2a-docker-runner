@@ -1,0 +1,16 @@
+{
+  "id": "canary-smoke-001",
+  "intent": "propose_patch",
+  "mode": "github-propose-patch",
+  "repo": "jinon86/a2a-docker-runner",
+  "baseBranch": "main",
+  "commands": [
+    "cd /work/repo && echo 'canary smoke test passed' | tee /work/artifacts/canary-result.txt",
+    "cd /work/repo && node --version | tee /work/artifacts/node-version.txt",
+    "cd /work/repo && npm run check 2>&1 | tee /work/artifacts/check.log || true"
+  ],
+  "issueUrl": "https://github.com/jinon86/a2a-docker-runner/issues/11",
+  "reportLanguage": "ko",
+  "requestedBy": "seoseo",
+  "timeoutMs": 120000
+}

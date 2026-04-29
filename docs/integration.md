@@ -161,3 +161,156 @@ The handler continues to claim → execute → report using the same broker prot
 | sogyo | Handler imports integration; `A2A_DOCKER_RUNNER_ENABLED=1` |
 | nosuk | Handler imports integration; `A2A_DOCKER_RUNNER_ENABLED=1` |
 | yukson | **Excluded** (legacy, no integration) |
+
+## Canary Deployment
+
+새로운 노드에 handler integration을 배포하거나 설정을 변경할 때는 **canary 태스크**로 검증한 후 전체 노드로 확장한다.
+
+### Canary Task 실행 절차
+
+1. **타겟 노드에 환경변수 설정**
+
+```bash
+# worker systemd drop-in 또는 handler 환경
+export A2A_DOCKER_RUNNER_ENABLED=1
+export A2A_DOCKER_RUNNER_ALL_GITHUB=1
+export A2A_DOCKER_RUNNER_TASK_TIMEOUT_MS=120000  # canary는 2분 타임아웃
+export A2A_DOCKER_RUNNER_BIN=a2a-docker-runner
+```
+
+2. **canary task.json 생성** (`examples/task.canary.json`)
+
+```json
+{
+  "id": "canary-smoke-001",
+  "intent": "propose_patch",
+  "mode": "github-propose-patch",
+  "repo": "jinon86/a2a-docker-runner",
+  "baseBranch": "main",
+  "commands": [
+    "cd /work/repo && echo 'canary smoke test passed' | tee /work/artifacts/canary-result.txt",
+    "cd /work/repo && npm run check 2>&1 | tee /work/artifacts/check.log"
+  ],
+  "issueUrl": "https://github.com/jinon86/a2a-docker-runner/issues/11",
+  "reportLanguage": "ko",
+  "requestedBy": "seoseo",
+  "timeoutMs": 120000
+}
+```
+
+3. **canary 실행**
+
+```bash
+a2a-docker-runner run examples/task.canary.json
+```
+
+4. **canary 성공 기준**
+- Runner JSON output: `ok: true`, `status: "completed"`
+- Artifacts 존재 (`canary-result.txt`, `check.log`)
+- Container가 정상적으로 생성/삭제되었는지 확인
+
+### Canary 검증 체크리스트
+
+| 항목 | 확인 방법 | 예상 결과 |
+|---|---|---|
+| feature flag 감지 | `shouldUseDockerRunnerForGithub(task, env) === true` | true |
+| Runner task 빌드 | 환경변수 passthrough 확인 | repo, timeoutMs, preset 정확 |
+| Container 생성 | `docker ps -a` | `a2a-canary-smoke-001` 컨테이너 확인 |
+| 명령 실행 | artifacts 확인 | 지정한 commands 로그 파일 생성 |
+| Runner 결과 JSON | stdout JSON 파싱 | `ok: true, status: "completed"` |
+| Evidence mapping | `buildHandlerResult()` 결과 | 올바른 status, summary |
+| Container cleanup | `docker ps -a` | canary 컨테이너 삭제됨 |
+
+### Canary 실패 시 대응
+
+1. Runner 로그 확인: `cat /var/lib/openclaw-a2a/tasks/canary-smoke-001/artifacts/summary.txt`
+2. Container 로그: `docker logs a2a-canary-smoke-001`
+3. Artifacts 디렉토리 상태 확인
+4. 공통 원인:
+   - Docker/Podman 미설치 또는 데몬 미실행
+   - 이미지 pull 실패 (네트워크 이슈)
+   - GitHub 토큰 파일 누락 또는 권한 문제
+   - 디스크 공간 부족
+
+## Rollback
+
+handler integration 문제가 발생하거나 host-workspace direct execution으로 복귀해야 할 때 아래 절차를 따른다.
+
+### 즉시 Rollback (전체 비활성화)
+
+```bash
+# worker 환경변수에서 Runner 비활성화
+export A2A_DOCKER_RUNNER_ENABLED=0
+# 또는
+export A2A_DOCKER_RUNNER_ENABLED=false
+
+# worker 재시작 (서서가 결정)
+# systemctl --user restart openclaw-a2a-worker
+```
+
+**영향**: 모든 `github-propose-patch` 태스크가 기존 host-workspace direct execution 경로로 복귀한다.
+
+### 부분 Rollback (ALL_GITHUB만 해제)
+
+```bash
+# Runner는 유지하되, preset/repo 매칭 태스크만 Runner로 라우팅
+export A2A_DOCKER_RUNNER_ENABLED=1
+unset A2A_DOCKER_RUNNER_ALL_GITHUB
+# 또는
+export A2A_DOCKER_RUNNER_ALL_GITHUB=0
+```
+
+**영향**:
+- `openclaw-plugin-a2a` repo/preset 태스크 → 계속 Runner 사용
+- 그 외 모든 repo (`jinon86/a2a-docker-runner`, `jinon86/seoyoon-family-wiki` 등) → host-workspace direct execution
+
+### Rollback 검증
+
+```js
+// 검증: 비활성화된 환경에서 shouldUseDockerRunnerForGithub(false)
+const rollbackEnv = { A2A_DOCKER_RUNNER_ENABLED: "0" };
+assert.equal(shouldUseDockerRunnerForGithub(task, rollbackEnv), false);
+```
+
+### Rollback 안전성
+
+- 환경변수만 변경하면 되며, handler 코드 수정은 필요하지 않다.
+- `shouldUseDockerRunnerForGithub` 함수가 `A2A_DOCKER_RUNNER_ENABLED`가 falsy이면 false를 반환하므로, 기존 task claim/heartbeat/report 플로우에 영향을 주지 않는다.
+- Rollback 중에도 handler는 broker claim → execute → report 사이클을 정상적으로 유지한다.
+
+## Feature Flag Routing Matrix
+
+| `A2A_DOCKER_RUNNER_ENABLED` | `A2A_DOCKER_RUNNER_ALL_GITHUB` | Task Type | Route |
+|---|---|---|---|
+| `0` / 미설정 | any | github-propose-patch | ❌ host-workspace direct |
+| `1` | `0` / 미설정 | openclaw-plugin-a2a repo/preset | ✅ Docker runner |
+| `1` | `0` / 미설정 | other repo | ❌ host-workspace direct |
+| `1` | `1` | any github-propose-patch | ✅ Docker runner |
+| `1` | `1` | non github task (chat, propose_patch) | ❌ host-workspace direct |
+
+## Recommended Rollout Flags
+
+### Phase 1: Initial Canary (단일 노드)
+
+```bash
+export A2A_DOCKER_RUNNER_ENABLED=1
+export A2A_DOCKER_RUNNER_ALL_GITHUB=0  # preset 매칭만
+# openclaw-plugin-a2a 태스크만 Runner로 라우팅
+```
+
+### Phase 2: 확장 (활성 노드)
+
+```bash
+export A2A_DOCKER_RUNNER_ENABLED=1
+export A2A_DOCKER_RUNNER_ALL_GITHUB=1  # 모든 github 태스크
+# 모든 github-propose-patch 태스크를 Runner로 라우팅
+```
+
+### Phase 3: 안정화 (프로덕션)
+
+```bash
+export A2A_DOCKER_RUNNER_ENABLED=1
+export A2A_DOCKER_RUNNER_ALL_GITHUB=1
+export A2A_DOCKER_RUNNER_TASK_TIMEOUT_MS=2700000  # 45분
+# 전체 활성화 + 표준 타임아웃
+```
