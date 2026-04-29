@@ -1,7 +1,12 @@
 {
   "id": "example-github-task",
   "intent": "propose_patch",
-  "repo": "https://github.com/jinon86/seoyoon-family-wiki.git",
+  "repo": "jinon86/seoyoon-family-wiki",
   "baseBranch": "master",
+  "commands": [
+    "cd /work/repo",
+    "git status --short",
+    "printf 'custom patch command goes here\\n' | tee /work/artifacts/patch-plan.txt"
+  ],
   "prompt": "Make a small documentation change and open a PR."
 }

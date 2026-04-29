@@ -1,20 +1,23 @@
-import { mkdir, writeFile, readdir, stat } from "node:fs/promises";
+import { mkdir, writeFile, readdir, rm, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
-import type { RunnerConfig, RunnerResult, RunnerTask } from "./types.js";
+import { normalizeTask } from "./task-normalizer.js";
+import type { NormalizedRunnerTask, RunnerConfig, RunnerResult, RunnerTask } from "./types.js";
 
 export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<RunnerResult> {
   validateTask(task);
+  const normalizedTask = normalizeTask(task);
   const root = resolve(config.rootDir);
   const workDir = join(root, safeId(task.id));
+  await rm(workDir, { recursive: true, force: true });
   await mkdir(workDir, { recursive: true, mode: 0o700 });
-  await writeFile(join(workDir, "task.json"), JSON.stringify(task, null, 2));
+  await writeFile(join(workDir, "task.json"), JSON.stringify(normalizedTask, null, 2));
 
-  const script = buildContainerScript(task);
+  const script = buildContainerScript(normalizedTask);
   await writeFile(join(workDir, "run.sh"), script, { mode: 0o700 });
 
-  const args = buildRunArgs(config, task, workDir);
-  const timeoutMs = task.timeoutMs ?? config.defaultTimeoutMs;
+  const args = buildRunArgs(config, normalizedTask, workDir);
+  const timeoutMs = normalizedTask.timeoutMs ?? config.defaultTimeoutMs;
   const completed = await spawnWithTimeout(config.engine ?? "docker", args, timeoutMs);
   const artifacts = await listArtifacts(workDir);
 
@@ -73,24 +76,73 @@ function buildRunArgs(config: RunnerConfig, task: RunnerTask, workDir: string): 
   return args;
 }
 
-function buildContainerScript(task: RunnerTask): string {
-  const repo = task.repo ? shellQuote(task.repo) : "";
-  const base = shellQuote(task.baseBranch ?? "main");
+function buildContainerScript(task: NormalizedRunnerTask): string {
   return `#!/usr/bin/env bash
 set -euo pipefail
 mkdir -p /work/artifacts
-printf 'A2A Docker Runner task %s\\n' ${shellQuote(task.id)} | tee /work/artifacts/summary.txt
-printf 'intent=%s\\n' ${shellQuote(task.intent)} | tee -a /work/artifacts/summary.txt
-if [ -n "${repo}" ]; then
-  if ! command -v git >/dev/null 2>&1; then
-    apt-get update >/dev/null
-    apt-get install -y git ca-certificates >/dev/null
-  fi
-  git clone --depth=1 --branch ${base} ${repo} /work/repo
-fi
+printf 'A2A Docker Runner task %s\n' ${shellQuote(task.id)} | tee /work/artifacts/summary.txt
+printf 'intent=%s\n' ${shellQuote(task.intent)} | tee -a /work/artifacts/summary.txt
+printf 'preset=%s\n' ${shellQuote(task.preset ?? "")} | tee -a /work/artifacts/summary.txt
+${installBaseToolsScript()}
+${githubAuthScript()}
+${checkoutReposScript(task)}
 cat /work/task.json > /work/artifacts/task.json
-# MVP placeholder: actual OpenClaw/GitHub patch execution is wired in the next iteration.
+${runCommandsScript(task)}
+printf 'status=completed\n' | tee -a /work/artifacts/summary.txt
 `;
+}
+
+function installBaseToolsScript(): string {
+  return `if ! command -v git >/dev/null 2>&1; then
+  apt-get update >/dev/null
+  apt-get install -y git ca-certificates >/dev/null
+fi
+`;
+}
+
+function githubAuthScript(): string {
+  return `if [ -r /run/secrets/gh-hosts.yml ]; then
+  token=$(sed -n 's/^[[:space:]]*oauth_token:[[:space:]]*//p' /run/secrets/gh-hosts.yml | head -n 1)
+  if [ -n "$token" ]; then
+    cat > /tmp/git-askpass <<'ASKPASS'
+#!/usr/bin/env bash
+case "$1" in
+  *Username*) printf '%s\\n' "x-access-token" ;;
+  *Password*) sed -n 's/^[[:space:]]*oauth_token:[[:space:]]*//p' /run/secrets/gh-hosts.yml | head -n 1 ;;
+  *) printf '\\n' ;;
+esac
+ASKPASS
+    chmod 700 /tmp/git-askpass
+    export GIT_ASKPASS=/tmp/git-askpass
+    export GIT_TERMINAL_PROMPT=0
+    printf 'github_auth=hosts.yml\\n' | tee -a /work/artifacts/summary.txt
+  fi
+fi
+`;
+}
+
+function checkoutReposScript(task: NormalizedRunnerTask): string {
+  if (!task.repos.length) return "";
+  return task.repos.map((repo) => {
+    return `printf 'checkout %s %s -> %s\n' ${shellQuote(repo.name ?? repo.url)} ${shellQuote(repo.branch ?? "main")} ${shellQuote(repo.path ?? "repo")} | tee -a /work/artifacts/summary.txt
+git clone --depth=1 --branch ${shellQuote(repo.branch ?? "main")} ${shellQuote(repo.url)} ${shellQuote(`/work/${repo.path ?? "repo"}`)}
+`;
+  }).join("\n");
+}
+
+function runCommandsScript(task: NormalizedRunnerTask): string {
+  if (!task.commands.length) {
+    return "printf 'commands=none\\n' | tee -a /work/artifacts/summary.txt\n";
+  }
+
+  const commands = task.commands.map((command, index) => {
+    return `printf 'command[%s]=%s\n' ${shellQuote(String(index))} ${shellQuote(command)} | tee -a /work/artifacts/summary.txt
+(${command}) 2>&1 | tee /work/artifacts/command-${index}.log
+`;
+  }).join("\n");
+
+  return `printf 'commands=%s\n' ${shellQuote(String(task.commands.length))} | tee -a /work/artifacts/summary.txt
+${commands}`;
 }
 
 function shellQuote(value: string): string {

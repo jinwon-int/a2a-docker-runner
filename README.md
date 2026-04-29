@@ -18,7 +18,7 @@ Phase 1 focuses on GitHub/PR-producing tasks:
 
 - create one clean work directory per task
 - start one container per task
-- clone target repo inside the container
+- clone one or more target repos inside the container
 - run bounded commands with CPU/RAM/timeout limits
 - return structured stdout/stderr/artifacts/PR URL
 - clean containers automatically; keep task artifacts for audit/TTL cleanup
@@ -32,7 +32,47 @@ npm install
 npm run build
 node dist/cli.js doctor
 node dist/cli.js run examples/task.github.json
+node dist/cli.js run examples/task.openclaw-plugin-a2a.json
 ```
+
+## OpenClaw plugin A2A development preset
+
+The first-class A2A development path is to keep the runner stateless and clone `openclaw-plugin-a2a` for each job:
+
+```json
+{
+  "id": "issue-76-plugin-run",
+  "intent": "propose_patch",
+  "preset": "openclaw-plugin-a2a-dev",
+  "timeoutMs": 2700000
+}
+```
+
+The preset expands to:
+
+- checkout `https://github.com/jinon86/openclaw-plugin-a2a.git` into `/work/openclaw-plugin-a2a`
+- run `cd /work/openclaw-plugin-a2a && npm ci`
+- run `cd /work/openclaw-plugin-a2a && npm test`
+- write command logs and task metadata under `/work/artifacts`
+
+For integration jobs, pass explicit repos and commands instead:
+
+```json
+{
+  "id": "plugin-core-integration",
+  "intent": "propose_patch",
+  "repos": [
+    { "name": "plugin", "url": "jinon86/openclaw-plugin-a2a", "path": "plugin", "primary": true },
+    { "name": "openclaw", "url": "jinon86/openclaw", "path": "openclaw" }
+  ],
+  "commands": [
+    "cd /work/plugin && npm ci",
+    "cd /work/plugin && npm test"
+  ]
+}
+```
+
+This keeps `a2a-docker-runner` as the disposable execution sandbox while `openclaw-plugin-a2a` remains the main development repo.
 
 ## Environment
 
