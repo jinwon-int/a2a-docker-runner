@@ -113,6 +113,10 @@ test("generates PR-producing default commands for github-propose-patch mode with
   assert.ok(pipeline.includes("git commit -m"), "Expected commit step");
   assert.ok(pipeline.includes("git push origin"), "Expected push step");
   assert.ok(pipeline.includes("gh pr create"), "Expected PR create step");
+  assert.ok(pipeline.includes("--body-file /work/artifacts/pr-body.md"), "Expected PR body file use");
+  assert.ok(pipeline.includes("Closes #5"), "Expected same-repo closing keyword in PR body");
+  assert.ok(pipeline.includes("gh issue comment 'https://github.com/jinon86/test-repo/issues/5'"), "Expected issue PR comment");
+  assert.ok(pipeline.includes("/work/artifacts/issue-comment-output.txt"), "Expected issue comment output artifact");
   assert.ok(pipeline.includes("patch-command.sh"), "Expected script file reference");
   assert.ok(pipeline.includes("patch_mode=script"), "Expected script mode marker");
   assert.ok(pipeline.includes("A2A_PATCH_COMMAND"), "Expected legacy escape hatch reference");
