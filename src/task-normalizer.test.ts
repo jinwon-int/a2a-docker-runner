@@ -173,6 +173,65 @@ test("handles patch mode with no prompt gracefully", () => {
   assert.ok(writeCmd.includes("/work/artifacts/prompt.md"), "Expected prompt artifact even without prompt");
 });
 
+// Regression: openclaw-plugin-a2a issue #119 — preset was checked before
+// isPatchMode, so preset+patch-mode tasks ran test-only commands instead of
+// the PR-producing pipeline.
+test("uses patch pipeline when openclaw-plugin-a2a-dev preset is combined with github-propose-patch mode", () => {
+  const task = normalizeTask({
+    id: "plugin-patch",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    preset: "openclaw-plugin-a2a-dev",
+    baseBranch: "main",
+    prompt: "Fix the plugin bug.",
+    issueUrl: "https://github.com/jinwon-int/openclaw-plugin-a2a/issues/119",
+    requestedBy: "jinwon",
+  });
+
+  // Repo should still be expanded from the preset.
+  assert.equal(task.repos.length, 1);
+  assert.equal(task.repos[0]?.name, "openclaw-plugin-a2a");
+
+  // Commands must be the PR-producing pipeline, NOT npm test.
+  assert.ok(task.commands.length > 0, "Expected commands");
+  const writeCmd = task.commands[0] ?? "";
+  assert.ok(writeCmd.includes("/work/artifacts/prompt.md"), "Expected prompt artifact write");
+  assert.ok(writeCmd.includes("patch_mode=github-propose-patch"), "Expected patch mode marker");
+
+  const pipeline = task.commands[1] ?? "";
+  assert.ok(pipeline.includes("git checkout -b"), "Expected branch creation");
+  assert.ok(pipeline.includes("gh pr create"), "Expected PR create step");
+  assert.ok(!pipeline.includes("npm test"), "Must NOT contain bare npm test — should be patch pipeline, not test preset");
+});
+
+test("uses patch pipeline when openclaw-plugin-a2a-dev preset is combined with propose_patch mode", () => {
+  const task = normalizeTask({
+    id: "plugin-patch-legacy",
+    intent: "propose_patch",
+    mode: "propose_patch",
+    preset: "openclaw-plugin-a2a-dev",
+    baseBranch: "main",
+    prompt: "Update plugin.",
+  });
+
+  const pipeline = task.commands[1] ?? "";
+  assert.ok(pipeline.includes("git checkout -b"), "Expected branch creation in patch pipeline");
+  assert.ok(pipeline.includes("gh pr create"), "Expected PR create in patch pipeline");
+});
+
+test("openclaw-plugin-a2a-dev preset without patch mode still runs test commands", () => {
+  const task = normalizeTask({
+    id: "plugin-dev-test",
+    intent: "smoke",
+    preset: "openclaw-plugin-a2a-dev",
+  });
+
+  assert.deepEqual(task.commands, [
+    "cd /work/openclaw-plugin-a2a && npm ci",
+    "cd /work/openclaw-plugin-a2a && npm test",
+  ]);
+});
+
 test("sanitises task id in branch name", () => {
   const task = normalizeTask({
     id: "spaces and/slashes:unsafe",
