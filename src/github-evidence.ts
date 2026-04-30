@@ -54,7 +54,7 @@ function isGitHubEvidenceMode(mode?: string): boolean {
 
 /**
  * Extract an oauth token from a gh hosts.yml file.
- * Supports the standard `github.com: oauth_token: ghp_xxx` format.
+ * Supports the standard `github.com: oauth_token: <github-token>` format.
  */
 async function readGitHubToken(config: RunnerConfig): Promise<string | undefined> {
   const file = config.githubTokenFile;

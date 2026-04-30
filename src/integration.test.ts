@@ -111,7 +111,7 @@ test("shouldUseDockerRunnerForGithub: false when task is chat", () => {
 
 test("shouldUseDockerRunnerForGithub: true when A2A_DOCKER_RUNNER_ALL_GITHUB=1 routes ANY repo", () => {
   const env: HandlerEnv = { A2A_DOCKER_RUNNER_ENABLED: "1", A2A_DOCKER_RUNNER_ALL_GITHUB: "1" };
-  const task: HandlerTask = { payload: { mode: "github-propose-patch", repo: "jinon86/random-repo" } };
+  const task: HandlerTask = { payload: { mode: "github-propose-patch", repo: "jinwon-int/random-repo" } };
   assert.equal(shouldUseDockerRunnerForGithub(task, env), true);
 });
 
@@ -198,7 +198,7 @@ test("buildRunnerTaskFromHandlerPayload: env A2A_DOCKER_RUNNER_TASK_TIMEOUT_MS p
   const task: HandlerTask = {
     id: "task-timeout",
     intent: "propose_patch",
-    payload: { mode: "github-propose-patch", repo: "jinon86/test-repo" },
+    payload: { mode: "github-propose-patch", repo: "jinwon-int/test-repo" },
   };
   const result = buildRunnerTaskFromHandlerPayload(task, env);
 
@@ -210,7 +210,7 @@ test("buildRunnerTaskFromHandlerPayload: env timeout override takes precedence o
   const task: HandlerTask = {
     id: "task-override",
     intent: "propose_patch",
-    payload: { mode: "github-propose-patch", repo: "jinon86/test-repo", timeoutMs: 900000 },
+    payload: { mode: "github-propose-patch", repo: "jinwon-int/test-repo", timeoutMs: 900000 },
   };
   const result = buildRunnerTaskFromHandlerPayload(task, env);
 
@@ -221,7 +221,7 @@ test("buildRunnerTaskFromHandlerPayload: payload timeout used when env timeout i
   const task: HandlerTask = {
     id: "task-payload-timeout",
     intent: "propose_patch",
-    payload: { mode: "github-propose-patch", repo: "jinon86/test-repo", timeoutMs: 900000 },
+    payload: { mode: "github-propose-patch", repo: "jinwon-int/test-repo", timeoutMs: 900000 },
   };
   const result = buildRunnerTaskFromHandlerPayload(task, baseEnv);
 
@@ -236,13 +236,13 @@ test("buildRunnerTaskFromHandlerPayload: env extra args JSON passthrough (A2A_DO
   const task: HandlerTask = {
     id: "task-args",
     intent: "propose_patch",
-    payload: { mode: "github-propose-patch", repo: "jinon86/test-repo" },
+    payload: { mode: "github-propose-patch", repo: "jinwon-int/test-repo" },
   };
   const result = buildRunnerTaskFromHandlerPayload(task, env);
 
   // A2A_DOCKER_RUNNER_ARGS_JSON is stored for handler-side CLI construction,
   // not injected into RunnerTask directly. The handler reads this from env.
-  assert.equal(result.repo, "jinon86/test-repo");
+  assert.equal(result.repo, "jinwon-int/test-repo");
   assert.equal(result.mode, "github-propose-patch");
 });
 
@@ -262,31 +262,31 @@ test("buildRunnerTaskFromHandlerPayload: explicit repo path with all fields", ()
 test("buildRunnerTaskFromHandlerPayload: constructs issueUrl from repo + issue number", () => {
   const task: HandlerTask = {
     id: "task-ghi",
-    payload: { mode: "github-propose-patch", repo: "jinon86/test-repo", issue: "#5" },
+    payload: { mode: "github-propose-patch", repo: "jinwon-int/test-repo", issue: "#5" },
   };
   const result = buildRunnerTaskFromHandlerPayload(task, baseEnv);
 
-  assert.equal(result.issueUrl, "https://github.com/jinon86/test-repo/issues/5");
+  assert.equal(result.issueUrl, "https://github.com/jinwon-int/test-repo/issues/5");
 });
 
 test("buildRunnerTaskFromHandlerPayload: constructs issueUrl from issueNumber field", () => {
   const task: HandlerTask = {
     id: "task-jkl",
-    payload: { mode: "github-propose-patch", repo: "jinon86/test-repo", issueNumber: "7" },
+    payload: { mode: "github-propose-patch", repo: "jinwon-int/test-repo", issueNumber: "7" },
   };
   const result = buildRunnerTaskFromHandlerPayload(task, baseEnv);
 
-  assert.equal(result.issueUrl, "https://github.com/jinon86/test-repo/issues/7");
+  assert.equal(result.issueUrl, "https://github.com/jinwon-int/test-repo/issues/7");
 });
 
 test("buildRunnerTaskFromHandlerPayload: issueUrl from issueNumber without # prefix", () => {
   const task: HandlerTask = {
     id: "task-mno",
-    payload: { mode: "github-propose-patch", repo: "jinon86/test-repo", issueNumber: "11" },
+    payload: { mode: "github-propose-patch", repo: "jinwon-int/test-repo", issueNumber: "11" },
   };
   const result = buildRunnerTaskFromHandlerPayload(task, baseEnv);
 
-  assert.equal(result.issueUrl, "https://github.com/jinon86/test-repo/issues/11");
+  assert.equal(result.issueUrl, "https://github.com/jinwon-int/test-repo/issues/11");
 });
 
 test("buildRunnerTaskFromHandlerPayload: no issueUrl when repo absent", () => {
@@ -302,7 +302,7 @@ test("buildRunnerTaskFromHandlerPayload: no issueUrl when repo absent", () => {
 test("buildRunnerTaskFromHandlerPayload: no issueUrl when issue/issueNumber absent", () => {
   const task: HandlerTask = {
     id: "task-no-issue",
-    payload: { mode: "github-propose-patch", repo: "jinon86/test-repo" },
+    payload: { mode: "github-propose-patch", repo: "jinwon-int/test-repo" },
   };
   const result = buildRunnerTaskFromHandlerPayload(task, baseEnv);
 
@@ -311,7 +311,7 @@ test("buildRunnerTaskFromHandlerPayload: no issueUrl when issue/issueNumber abse
 
 test("buildRunnerTaskFromHandlerPayload: generates fallback id when task.id is missing", () => {
   const task: HandlerTask = {
-    payload: { mode: "github-propose-patch", repo: "jinon86/test-repo" },
+    payload: { mode: "github-propose-patch", repo: "jinwon-int/test-repo" },
   };
   const result = buildRunnerTaskFromHandlerPayload(task, baseEnv);
 
@@ -323,7 +323,7 @@ test("buildRunnerTaskFromHandlerPayload: message from task.message when payload.
   const task: HandlerTask = {
     id: "task-msg",
     message: "Fix the bug in authentication",
-    payload: { mode: "github-propose-patch", repo: "jinon86/test-repo" },
+    payload: { mode: "github-propose-patch", repo: "jinwon-int/test-repo" },
   };
   const result = buildRunnerTaskFromHandlerPayload(task, baseEnv);
 
@@ -334,7 +334,7 @@ test("buildRunnerTaskFromHandlerPayload: task.message takes precedence over payl
   const task: HandlerTask = {
     id: "task-prompt-prio",
     message: "Generic message",
-    payload: { mode: "github-propose-patch", repo: "jinon86/test-repo", prompt: "Specific prompt" },
+    payload: { mode: "github-propose-patch", repo: "jinwon-int/test-repo", prompt: "Specific prompt" },
   };
   const result = buildRunnerTaskFromHandlerPayload(task, baseEnv);
 
@@ -345,7 +345,7 @@ test("buildRunnerTaskFromHandlerPayload: task.message takes precedence over payl
 test("buildRunnerTaskFromHandlerPayload: empty prompt when both message and payload.prompt absent", () => {
   const task: HandlerTask = {
     id: "task-no-msg",
-    payload: { mode: "github-propose-patch", repo: "jinon86/test-repo" },
+    payload: { mode: "github-propose-patch", repo: "jinwon-int/test-repo" },
   };
   const result = buildRunnerTaskFromHandlerPayload(task, baseEnv);
 
@@ -355,7 +355,7 @@ test("buildRunnerTaskFromHandlerPayload: empty prompt when both message and payl
 test("buildRunnerTaskFromHandlerPayload: reportLanguage defaults to ko", () => {
   const task: HandlerTask = {
     id: "task-lang",
-    payload: { mode: "github-propose-patch", repo: "jinon86/test-repo" },
+    payload: { mode: "github-propose-patch", repo: "jinwon-int/test-repo" },
   };
   const result = buildRunnerTaskFromHandlerPayload(task, baseEnv);
 
@@ -365,7 +365,7 @@ test("buildRunnerTaskFromHandlerPayload: reportLanguage defaults to ko", () => {
 test("buildRunnerTaskFromHandlerPayload: default timeout is 45 minutes", () => {
   const task: HandlerTask = {
     id: "task-default-timeout",
-    payload: { mode: "github-propose-patch", repo: "jinon86/test-repo" },
+    payload: { mode: "github-propose-patch", repo: "jinwon-int/test-repo" },
   };
   const result = buildRunnerTaskFromHandlerPayload(task, baseEnv);
 
@@ -384,15 +384,15 @@ test("parseRunnerOutput: parses valid completed runner JSON", () => {
     workDir: "/tmp/a2a/t1",
     exitCode: 0,
     signal: null,
-    stdout: "PR created: https://github.com/jinon86/repo/pull/1",
+    stdout: "PR created: https://github.com/jinwon-int/repo/pull/1",
     stderr: "",
     artifacts: ["/tmp/a2a/t1/artifacts/summary.txt"],
-    prUrl: "https://github.com/jinon86/repo/pull/1",
+    prUrl: "https://github.com/jinwon-int/repo/pull/1",
   });
   const result = parseRunnerOutput(raw);
   assert.equal(result.ok, true);
   assert.equal(result.status, "completed");
-  assert.equal(result.prUrl, "https://github.com/jinon86/repo/pull/1");
+  assert.equal(result.prUrl, "https://github.com/jinwon-int/repo/pull/1");
   assert.equal(result.exitCode, 0);
 });
 
@@ -495,33 +495,33 @@ test("extractGitHubEvidence: extracts prUrl from github evidence block", () => {
   const result: RawRunnerOutput = {
     ok: true, taskId: "t1", status: "completed", workDir: "/tmp",
     stdout: "", stderr: "", artifacts: [],
-    github: { prUrl: "https://github.com/jinon86/repo/pull/42" },
+    github: { prUrl: "https://github.com/jinwon-int/repo/pull/42" },
   };
   const evidence = extractGitHubEvidence(result);
   assert.ok(evidence);
-  assert.equal(evidence?.prUrl, "https://github.com/jinon86/repo/pull/42");
+  assert.equal(evidence?.prUrl, "https://github.com/jinwon-int/repo/pull/42");
 });
 
 test("extractGitHubEvidence: extracts blockCommentUrl from github evidence block", () => {
   const result: RawRunnerOutput = {
     ok: false, taskId: "t1", status: "failed", workDir: "/tmp",
     stdout: "", stderr: "error", artifacts: [],
-    github: { blockCommentUrl: "https://github.com/jinon86/repo/issues/5#issuecomment-123" },
+    github: { blockCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-123" },
   };
   const evidence = extractGitHubEvidence(result);
   assert.ok(evidence);
-  assert.equal(evidence?.blockCommentUrl, "https://github.com/jinon86/repo/issues/5#issuecomment-123");
+  assert.equal(evidence?.blockCommentUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-123");
 });
 
 test("extractGitHubEvidence: extracts doneCommentUrl from github evidence block", () => {
   const result: RawRunnerOutput = {
     ok: true, taskId: "t1", status: "completed", workDir: "/tmp",
     stdout: "", stderr: "", artifacts: [],
-    github: { doneCommentUrl: "https://github.com/jinon86/repo/issues/5#issuecomment-456" },
+    github: { doneCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-456" },
   };
   const evidence = extractGitHubEvidence(result);
   assert.ok(evidence);
-  assert.equal(evidence?.doneCommentUrl, "https://github.com/jinon86/repo/issues/5#issuecomment-456");
+  assert.equal(evidence?.doneCommentUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-456");
 });
 
 test("extractGitHubEvidence: PR evidence takes precedence over block+done (multiple URLs in github block)", () => {
@@ -529,14 +529,14 @@ test("extractGitHubEvidence: PR evidence takes precedence over block+done (multi
     ok: true, taskId: "t1", status: "completed", workDir: "/tmp",
     stdout: "", stderr: "", artifacts: [],
     github: {
-      prUrl: "https://github.com/jinon86/repo/pull/42",
-      blockCommentUrl: "https://github.com/jinon86/repo/issues/5#issuecomment-123",
-      doneCommentUrl: "https://github.com/jinon86/repo/issues/5#issuecomment-456",
+      prUrl: "https://github.com/jinwon-int/repo/pull/42",
+      blockCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-123",
+      doneCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-456",
     },
   };
   const evidence = extractGitHubEvidence(result);
   assert.ok(evidence);
-  assert.equal(evidence?.prUrl, "https://github.com/jinon86/repo/pull/42");
+  assert.equal(evidence?.prUrl, "https://github.com/jinwon-int/repo/pull/42");
   assert.equal(evidence?.blockCommentUrl, undefined);
 });
 
@@ -545,24 +545,24 @@ test("extractGitHubEvidence: block takes precedence over done (no PR url)", () =
     ok: false, taskId: "t2", status: "failed", workDir: "/tmp",
     stdout: "", stderr: "", artifacts: [],
     github: {
-      blockCommentUrl: "https://github.com/jinon86/repo/issues/5#issuecomment-123",
-      doneCommentUrl: "https://github.com/jinon86/repo/issues/5#issuecomment-456",
+      blockCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-123",
+      doneCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-456",
     },
   };
   const evidence = extractGitHubEvidence(result);
   assert.ok(evidence);
-  assert.equal(evidence?.blockCommentUrl, "https://github.com/jinon86/repo/issues/5#issuecomment-123");
+  assert.equal(evidence?.blockCommentUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-123");
 });
 
 test("extractGitHubEvidence: falls back to legacy prUrl when github block absent", () => {
   const result: RawRunnerOutput = {
     ok: true, taskId: "t1", status: "completed", workDir: "/tmp",
     stdout: "", stderr: "", artifacts: [],
-    prUrl: "https://github.com/jinon86/repo/pull/99",
+    prUrl: "https://github.com/jinwon-int/repo/pull/99",
   };
   const evidence = extractGitHubEvidence(result);
   assert.ok(evidence);
-  assert.equal(evidence?.prUrl, "https://github.com/jinon86/repo/pull/99");
+  assert.equal(evidence?.prUrl, "https://github.com/jinwon-int/repo/pull/99");
 });
 
 test("extractGitHubEvidence: returns null when no evidence at all", () => {
@@ -588,11 +588,11 @@ test("extractGitHubEvidence: legacy prUrl ignored when github evidence has conte
   const result: RawRunnerOutput = {
     ok: true, taskId: "t1", status: "completed", workDir: "/tmp",
     stdout: "", stderr: "", artifacts: [],
-    prUrl: "https://github.com/jinon86/repo/pull/old",
-    github: { prUrl: "https://github.com/jinon86/repo/pull/new" },
+    prUrl: "https://github.com/jinwon-int/repo/pull/old",
+    github: { prUrl: "https://github.com/jinwon-int/repo/pull/new" },
   };
   const evidence = extractGitHubEvidence(result);
-  assert.equal(evidence?.prUrl, "https://github.com/jinon86/repo/pull/new");
+  assert.equal(evidence?.prUrl, "https://github.com/jinwon-int/repo/pull/new");
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -603,11 +603,11 @@ test("buildHandlerResult: status pr_opened when prUrl present", () => {
   const result: RawRunnerOutput = {
     ok: true, taskId: "t1", status: "completed", workDir: "/tmp",
     stdout: "", stderr: "", artifacts: [],
-    github: { prUrl: "https://github.com/jinon86/repo/pull/99" },
+    github: { prUrl: "https://github.com/jinwon-int/repo/pull/99" },
   };
   const handlerResult = buildHandlerResult(result, { id: "t1" }, "sogyo");
   assert.equal(handlerResult.status, "pr_opened");
-  assert.equal(handlerResult.prUrl, "https://github.com/jinon86/repo/pull/99");
+  assert.equal(handlerResult.prUrl, "https://github.com/jinwon-int/repo/pull/99");
   assert.equal(handlerResult.risks.length, 0);
 });
 
@@ -615,11 +615,11 @@ test("buildHandlerResult: status blocked when blockCommentUrl present and no prU
   const result: RawRunnerOutput = {
     ok: false, taskId: "t1", status: "failed", workDir: "/tmp",
     stdout: "", stderr: "error", artifacts: [],
-    github: { blockCommentUrl: "https://github.com/jinon86/repo/issues/5#issuecomment-123" },
+    github: { blockCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-123" },
   };
   const handlerResult = buildHandlerResult(result, { id: "t1" }, "sogyo");
   assert.equal(handlerResult.status, "blocked");
-  assert.equal(handlerResult.blockCommentUrl, "https://github.com/jinon86/repo/issues/5#issuecomment-123");
+  assert.equal(handlerResult.blockCommentUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-123");
   assert.equal(handlerResult.prUrl, undefined);
 });
 
@@ -627,11 +627,11 @@ test("buildHandlerResult: status done when doneCommentUrl present and no prUrl/b
   const result: RawRunnerOutput = {
     ok: true, taskId: "t1", status: "completed", workDir: "/tmp",
     stdout: "", stderr: "", artifacts: [],
-    github: { doneCommentUrl: "https://github.com/jinon86/repo/issues/5#issuecomment-456" },
+    github: { doneCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-456" },
   };
   const handlerResult = buildHandlerResult(result, { id: "t1" }, "sogyo");
   assert.equal(handlerResult.status, "done");
-  assert.equal(handlerResult.doneCommentUrl, "https://github.com/jinon86/repo/issues/5#issuecomment-456");
+  assert.equal(handlerResult.doneCommentUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-456");
 });
 
 test("buildHandlerResult: blocked when no evidence at all (completed but no PR)", () => {
@@ -668,13 +668,13 @@ test("buildHandlerResult: blocked for failed status with no evidence", () => {
 test("buildHandlerResult: pr_opened even when ok=false but prUrl exists (CR edge case)", () => {
   const result: RawRunnerOutput = {
     ok: false, taskId: "cr-t1", status: "failed", workDir: "/tmp",
-    stdout: "CR URL: https://github.com/jinon86/repo/pull/99", stderr: "minor lint warning", artifacts: [],
-    github: { prUrl: "https://github.com/jinon86/repo/pull/99" },
+    stdout: "CR URL: https://github.com/jinwon-int/repo/pull/99", stderr: "minor lint warning", artifacts: [],
+    github: { prUrl: "https://github.com/jinwon-int/repo/pull/99" },
   };
   const handlerResult = buildHandlerResult(result, { id: "cr-t1" }, "sogyo");
   // PR evidence exists → status should still be pr_opened regardless of ok field
   assert.equal(handlerResult.status, "pr_opened");
-  assert.equal(handlerResult.prUrl, "https://github.com/jinon86/repo/pull/99");
+  assert.equal(handlerResult.prUrl, "https://github.com/jinwon-int/repo/pull/99");
   assert.equal(handlerResult.risks.length, 0);
 });
 
@@ -682,7 +682,7 @@ test("buildHandlerResult: includes runnerRaw for debugging", () => {
   const result: RawRunnerOutput = {
     ok: true, taskId: "t1", status: "completed", workDir: "/tmp",
     stdout: "hello", stderr: "", artifacts: [],
-    github: { prUrl: "https://github.com/jinon86/repo/pull/1" },
+    github: { prUrl: "https://github.com/jinwon-int/repo/pull/1" },
   };
   const handlerResult = buildHandlerResult(result, { id: "t1" }, "sogyo");
   assert.ok(handlerResult.runnerRaw);
@@ -693,7 +693,7 @@ test("buildHandlerResult: includes tests array", () => {
   const result: RawRunnerOutput = {
     ok: true, taskId: "t1", status: "completed", workDir: "/tmp",
     stdout: "", stderr: "", artifacts: [],
-    github: { prUrl: "https://github.com/jinon86/repo/pull/1" },
+    github: { prUrl: "https://github.com/jinwon-int/repo/pull/1" },
   };
   const handlerResult = buildHandlerResult(result, { id: "t1" }, "sogyo");
   assert.equal(handlerResult.tests[0], "a2a-docker-runner run -> completed");
@@ -703,7 +703,7 @@ test("buildHandlerResult: includes filesChanged from artifacts", () => {
   const result: RawRunnerOutput = {
     ok: true, taskId: "t1", status: "completed", workDir: "/tmp",
     stdout: "", stderr: "", artifacts: ["/tmp/a/task.json", "/tmp/a/summary.txt"],
-    github: { prUrl: "https://github.com/jinon86/repo/pull/1" },
+    github: { prUrl: "https://github.com/jinwon-int/repo/pull/1" },
   };
   const handlerResult = buildHandlerResult(result, { id: "t1" }, "sogyo");
   assert.deepEqual(handlerResult.filesChanged, ["/tmp/a/task.json", "/tmp/a/summary.txt"]);
@@ -723,7 +723,7 @@ test("buildHandlerResult: prefers artifactManifest paths for modern runner resul
       exitCode: 0, signal: null, timedOut: false, stdout: "ok", stderr: "",
       stdoutTruncated: false, stderrTruncated: false, artifactCount: 1, manifestPath: "artifacts/manifest.json",
     },
-    github: { prUrl: "https://github.com/jinon86/repo/pull/1" },
+    github: { prUrl: "https://github.com/jinwon-int/repo/pull/1" },
   };
   const handlerResult = buildHandlerResult(result, { id: "t-modern" }, "sogyo");
   assert.deepEqual(handlerResult.filesChanged, ["artifacts/summary.txt"]);
@@ -742,7 +742,7 @@ test("buildHandlerResult: exposes bounded resultSummary stdout/stderr instead of
       stderr: "bounded stderr\n<truncated 49900 chars>",
       stdoutTruncated: true, stderrTruncated: true, artifactCount: 0, manifestPath: "artifacts/manifest.json",
     },
-    github: { doneCommentUrl: "https://github.com/jinon86/repo/issues/5#issuecomment-456" },
+    github: { doneCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-456" },
   };
   const handlerResult = buildHandlerResult(result, { id: "t-large" }, "sogyo");
   const runnerRaw = handlerResult.runnerRaw as unknown as RawRunnerOutput;
@@ -757,21 +757,21 @@ test("buildHandlerResult: PR takes precedence over block in evidence (determinis
     ok: false, taskId: "mixed", status: "failed", workDir: "/tmp",
     stdout: "", stderr: "warning", artifacts: [],
     github: {
-      prUrl: "https://github.com/jinon86/repo/pull/99",
-      blockCommentUrl: "https://github.com/jinon86/repo/issues/5#issuecomment-123",
+      prUrl: "https://github.com/jinwon-int/repo/pull/99",
+      blockCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-123",
     },
   };
   const handlerResult = buildHandlerResult(result, { id: "mixed" }, "sogyo");
   // PR > Block > Done
   assert.equal(handlerResult.status, "pr_opened");
-  assert.equal(handlerResult.prUrl, "https://github.com/jinon86/repo/pull/99");
+  assert.equal(handlerResult.prUrl, "https://github.com/jinwon-int/repo/pull/99");
 });
 
 test("buildHandlerResult: nodeId does not affect status computation", () => {
   const result: RawRunnerOutput = {
     ok: true, taskId: "t1", status: "completed", workDir: "/tmp",
     stdout: "", stderr: "", artifacts: [],
-    github: { prUrl: "https://github.com/jinon86/repo/pull/1" },
+    github: { prUrl: "https://github.com/jinwon-int/repo/pull/1" },
   };
   // Different node IDs should produce identical status
   const sogyoResult = buildHandlerResult(result, { id: "t1" }, "sogyo");
@@ -932,7 +932,7 @@ test("integration flow: blocked task round-trip (no token, no PR, failure)", () 
     intent: "propose_patch",
     payload: {
       mode: "github-propose-patch",
-      repo: "jinon86/test-repo",
+      repo: "jinwon-int/test-repo",
       issue: "1",
     },
   };
@@ -952,12 +952,12 @@ test("integration flow: blocked task round-trip (no token, no PR, failure)", () 
     stderr: "npm ERR! build failed",
     artifacts: [],
     error: "npm ERR! build failed",
-    github: { blockCommentUrl: "https://github.com/jinon86/test-repo/issues/1#issuecomment-999" },
+    github: { blockCommentUrl: "https://github.com/jinwon-int/test-repo/issues/1#issuecomment-999" },
   });
 
   const parsed = parseRunnerOutput(raw);
   const evidence = extractGitHubEvidence(parsed);
-  assert.equal(evidence?.blockCommentUrl, "https://github.com/jinon86/test-repo/issues/1#issuecomment-999");
+  assert.equal(evidence?.blockCommentUrl, "https://github.com/jinwon-int/test-repo/issues/1#issuecomment-999");
 
   const handlerResult = buildHandlerResult(parsed, task, "sogyo");
   assert.equal(handlerResult.status, "blocked");
@@ -969,7 +969,7 @@ test("integration flow: timeout round-trip", () => {
     intent: "propose_patch",
     payload: {
       mode: "github-propose-patch",
-      repo: "jinon86/heavy-repo",
+      repo: "jinwon-int/heavy-repo",
     },
   };
 
@@ -1049,7 +1049,7 @@ test("contract: HandlerResult summary is Korean when task has Korean context", (
   const result: RawRunnerOutput = {
     ok: true, taskId: "한글-태스크", status: "completed", workDir: "/tmp",
     stdout: "", stderr: "", artifacts: [],
-    github: { prUrl: "https://github.com/jinon86/repo/pull/1" },
+    github: { prUrl: "https://github.com/jinwon-int/repo/pull/1" },
   };
   const handlerResult = buildHandlerResult(result, { id: "한글-태스크" }, "sogyo");
   assert.equal(handlerResult.status, "pr_opened");

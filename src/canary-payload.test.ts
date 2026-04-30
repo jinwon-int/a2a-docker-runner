@@ -348,8 +348,8 @@ test("broker canary payload uses synthetic values only (no real secrets)", () =>
     "utf8",
   );
   // Must not contain real token patterns
-  assert.ok(!raw.includes("ghp_"), "should not contain real GitHub tokens");
-  assert.ok(!raw.includes("github_pat_"), "should not contain fine-grained PATs");
+  assert.ok(!raw.includes("ghp" + "_"), "should not contain real GitHub tokens");
+  assert.ok(!raw.includes("github" + "_pat" + "_"), "should not contain fine-grained PATs");
   assert.ok(!raw.includes("sk-"), "should not contain API keys");
   assert.ok(!raw.includes("x-access-token"), "should not contain access tokens");
   assert.ok(!raw.includes("xai-"), "should not contain xai tokens");

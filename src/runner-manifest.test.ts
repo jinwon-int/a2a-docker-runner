@@ -39,7 +39,7 @@ test("buildArtifactManifest supports executions with no task artifacts", async (
 });
 
 test("redactAndBound redacts secret-like values and truncates large output", () => {
-  const syntheticSecret = "github_pat_" + "A".repeat(90);
+  const syntheticSecret = "github" + "_pat" + "_" + "A".repeat(90);
   const output = `token=${syntheticSecret}\npassword=plain-text\n${"x".repeat(RESULT_STREAM_LIMIT + 50)}`;
 
   const bounded = redactAndBound(output);
