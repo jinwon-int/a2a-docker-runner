@@ -96,6 +96,19 @@ test("commandScript has precedence over commandJson and commandTemplate", () => 
   assert.ok(!args.some((a) => a.startsWith("A2A_PATCH_COMMAND=")), "legacy template must not be injected when commandScript is set");
 });
 
+test("extraMounts are mounted read-only by default and can opt into rw", () => {
+  const cfg: RunnerConfig = {
+    ...config,
+    extraMounts: [
+      { source: "/root/.claude", target: "/run/secrets/claude-dir" },
+      { source: "/var/lib/a2a-cache", target: "/cache", readOnly: false },
+    ],
+  };
+  const args = buildRunArgs(cfg, task, "/tmp/a2a-work");
+  assert.ok(args.includes("/root/.claude:/run/secrets/claude-dir:ro"));
+  assert.ok(args.includes("/var/lib/a2a-cache:/cache:rw"));
+});
+
 test("commandJson has precedence over commandTemplate", () => {
   const cfg: RunnerConfig = {
     ...config,

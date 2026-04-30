@@ -129,6 +129,11 @@ export function buildRunArgs(config: RunnerConfig, task: RunnerTask, workDir: st
     args.push("-e", "GH_CONFIG_HOSTS=/run/secrets/gh-hosts.yml");
   }
 
+  for (const mount of config.extraMounts ?? []) {
+    const mode = mount.readOnly === false ? "rw" : "ro";
+    args.push("-v", `${mount.source}:${mount.target}:${mode}`);
+  }
+
   // Safe patch command paths are mutually exclusive by priority:
   // commandScript > commandJson > commandTemplate (legacy eval).
   // commandScript is mounted as /work/patch-command.sh, so it needs no env var.

@@ -19,6 +19,7 @@ export interface DoctorReport {
   podman: OpsCheck;
   taskRoot: OpsCheck;
   secretMount: OpsCheck;
+  extraMounts: OpsCheck;
   baseImage: OpsCheck;
   githubPatch: OpsCheck;
 }
@@ -217,18 +218,20 @@ export async function doctor(config: RunnerConfig): Promise<DoctorReport> {
       : "podman";
   const taskRoot = await checkTaskRoot(config.rootDir);
   const secretMount = await checkSecretMount(config.githubTokenFile);
+  const extraMounts = await checkExtraMounts(config);
   const baseImage = (engine === "docker" ? docker : podman).status === "ok"
     ? checkBaseImage(engine, config.image)
     : { status: "fail" as const, message: "no container engine available for base image check", detail: { image: config.image } };
   const githubPatch = checkGitHubPatchReadiness(config);
   const engineReady = docker.status === "ok" || podman.status === "ok";
   return {
-    ok: engineReady && [taskRoot, secretMount, baseImage, githubPatch].every((check) => check.status !== "fail"),
+    ok: engineReady && [taskRoot, secretMount, extraMounts, baseImage, githubPatch].every((check) => check.status !== "fail"),
     engine,
     docker,
     podman,
     taskRoot,
     secretMount,
+    extraMounts,
     baseImage,
     githubPatch,
   };
@@ -276,6 +279,35 @@ async function checkSecretMount(githubTokenFile?: string): Promise<OpsCheck> {
   } catch (error) {
     return { status: "fail", message: "configured secret file is not readable", detail: { path, error: errorMessage(error) } };
   }
+}
+
+async function checkExtraMounts(config: RunnerConfig): Promise<OpsCheck> {
+  const mounts = config.extraMounts ?? [];
+  if (!mounts.length) return { status: "skip", message: "no extra mounts configured" };
+
+  const checked: Array<Record<string, unknown>> = [];
+  for (const mount of mounts) {
+    const source = resolve(mount.source);
+    try {
+      await access(source, constants.R_OK);
+      const info = await stat(source);
+      checked.push({
+        source,
+        target: mount.target,
+        readOnly: mount.readOnly !== false,
+        mode: `0${(info.mode & 0o777).toString(8)}`,
+        type: info.isDirectory() ? "directory" : "file",
+      });
+    } catch (error) {
+      return {
+        status: "fail",
+        message: "configured extra mount is not readable",
+        detail: { source, target: mount.target, error: errorMessage(error) },
+      };
+    }
+  }
+
+  return { status: "ok", message: "extra mounts are readable", detail: { mounts: checked } };
 }
 
 export function checkGitHubPatchReadiness(config: RunnerConfig): OpsCheck {

@@ -61,3 +61,30 @@ test("loadConfig patch command precedence is script > json > template", async ()
   assert.equal(legacyConfig.commandJson, undefined);
   assert.equal(legacyConfig.commandTemplate, "echo legacy");
 });
+
+test("loadConfig reads extra runner mounts", async () => {
+  const config = await loadConfig({
+    ...baseEnv,
+    A2A_DOCKER_RUNNER_EXTRA_MOUNTS_JSON: JSON.stringify([
+      { source: "/root/.claude", target: "/run/secrets/claude-dir" },
+      { source: "/root/.claude.json", target: "/run/secrets/claude.json", readOnly: true },
+      { source: "/var/tmp/a2a", target: "/scratch", readOnly: false },
+    ]),
+  });
+
+  assert.deepEqual(config.extraMounts, [
+    { source: "/root/.claude", target: "/run/secrets/claude-dir", readOnly: undefined },
+    { source: "/root/.claude.json", target: "/run/secrets/claude.json", readOnly: true },
+    { source: "/var/tmp/a2a", target: "/scratch", readOnly: false },
+  ]);
+});
+
+test("loadConfig rejects malformed extra runner mounts", async () => {
+  await assert.rejects(
+    () => loadConfig({
+      ...baseEnv,
+      A2A_DOCKER_RUNNER_EXTRA_MOUNTS_JSON: JSON.stringify([{ source: "relative", target: "/x" }]),
+    }),
+    /source must be an absolute path/,
+  );
+});
