@@ -131,6 +131,13 @@ const handlerResult = buildHandlerResult(parsed, task, nodeId);
 | `A2A_DOCKER_RUNNER_ROOT` | `/var/lib/openclaw-a2a/tasks` | Runtime root dir |
 | `A2A_DOCKER_RUNNER_IMAGE` | `node:22-bookworm-slim` | Container image |
 | `A2A_DOCKER_RUNNER_GITHUB_TOKEN_FILE` | — | gh hosts.yml for container auth |
+| `A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT` | — | Safe patch command script content; highest precedence, written to `/work/patch-command.sh` |
+| `A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON` | — | Safe patch command JSON `{ "argv": [...], "env": {...} }`; used when script is unset |
+| `A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE` | — | Legacy eval template; used only when script/json are unset |
+
+Patch command precedence is `SCRIPT > JSON > TEMPLATE`. Prefer `SCRIPT` or
+`JSON` for active targets (`bangtong`, `dungae`, `sogyo`, `nosuk`) and keep the
+legacy template only for compatibility during rollout.
 
 ## Broker Claim/Heartbeat (untouched)
 

@@ -166,7 +166,7 @@ Important defaults:
 - image: `node:22-bookworm-slim`
 - engine: auto-detect `docker` then `podman`
 
-### Patch command template (`A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE`)
+### Patch command config
 
 For `github-propose-patch` / `propose_patch` mode tasks **without** explicit
 `commands`, the runner generates a default PR-producing pipeline. The pipeline:
@@ -175,23 +175,38 @@ For `github-propose-patch` / `propose_patch` mode tasks **without** explicit
 2. Creates a branch, invokes the coding agent, commits changes, pushes, and
    opens a PR via `gh pr create`.
 
-Step 2 uses the `A2A_PATCH_COMMAND` environment variable inside the container.
-Set `A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE` on the **host** to inject your
-coding agent command:
+Step 2 can be configured from host environment. Prefer the safe paths for new
+rollouts; the legacy template remains available for backwards compatibility.
+Precedence is `commandScript > commandJson > commandTemplate`:
+
+| Host env | Runner config | Container path/variable | Notes |
+|---|---|---|---|
+| `A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT` | `commandScript` | `/work/patch-command.sh` | Recommended. Script content is written to a file and executed without `eval`. |
+| `A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON` | `commandJson` | `/work/patch-command.sh` and `A2A_PATCH_COMMAND_JSON` | JSON `{ "argv": [...], "env": {...} }` is converted into a quoted argv script. |
+| `A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE` | `commandTemplate` | `A2A_PATCH_COMMAND` | Legacy eval path; keep only for existing workers that still need it. |
+
+Examples:
 
 ```bash
+export A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT='#!/usr/bin/env bash
+codex exec --full-auto "$(cat /work/artifacts/prompt.md)"'
+
+export A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON='{"argv":["codex","exec","--full-auto","example prompt"],"env":{"SAFE":"value"}}'
+
 export A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE="claude --print --permission-mode bypassPermissions -p \"\$(cat /work/artifacts/prompt.md)\""
 ```
 
-When the template is **not** set, the pipeline still runs but skips the coding
-agent step and emits a `no_patch_command_configured` notice. Git operations
-(commit, push, PR create) only fire when `git status --porcelain` detects
-changes.
+When no patch command config is set, the pipeline still runs but skips the
+coding agent step and emits a `no_patch_command_configured` notice. Git
+operations (commit, push, PR create) only fire when `git status --porcelain`
+detects changes.
 
-**Template variables available inside the container:**
+**Variables/files available inside the container:**
 
-| Variable | Source |
+| Variable/File | Source |
 |---|---|
+| `/work/patch-command.sh` | `A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT` or generated from `A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON` |
+| `A2A_PATCH_COMMAND_JSON` | `A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON` host env |
 | `A2A_PATCH_COMMAND` | `A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE` host env |
 | `/work/artifacts/prompt.md` | Task `prompt` field |
 | `/work/artifacts/task.json` | Full normalised task payload |
