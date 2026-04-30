@@ -159,8 +159,8 @@ async function postDoneComment(
 /**
  * Parse a GitHub issue URL into the API endpoint for issue comments.
  *
- * Input:  https://github.com/jinon86/a2a-docker-runner/issues/5
- * Output: https://api.github.com/repos/jinon86/a2a-docker-runner/issues/5/comments
+ * Input:  https://github.com/jinwon-int/a2a-docker-runner/issues/5
+ * Output: https://api.github.com/repos/jinwon-int/a2a-docker-runner/issues/5/comments
  */
 function parseIssueCommentApiUrl(issueUrl: string | undefined): string | undefined {
   if (!issueUrl) return undefined;

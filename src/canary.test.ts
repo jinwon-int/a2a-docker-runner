@@ -86,9 +86,9 @@ function makeCanaryHandlerTask(overrides?: Partial<HandlerTask>): HandlerTask {
     intent: "propose_patch",
     payload: {
       mode: "github-propose-patch",
-      repo: "jinon86/a2a-docker-runner",
+      repo: "jinwon-int/a2a-docker-runner",
       issue: "#11",
-      issueUrl: "https://github.com/jinon86/a2a-docker-runner/issues/11",
+      issueUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/11",
       baseBranch: "main",
       ...overrides?.payload,
     },
@@ -105,8 +105,8 @@ test("canary phase1: handler builds valid runner task from payload", () => {
   const runnerTask = buildRunnerTaskFromHandlerPayload(task, baseEnv);
 
   assert.equal(runnerTask.mode, "github-propose-patch");
-  assert.equal(runnerTask.repo, "jinon86/a2a-docker-runner");
-  assert.equal(runnerTask.issueUrl, "https://github.com/jinon86/a2a-docker-runner/issues/11");
+  assert.equal(runnerTask.repo, "jinwon-int/a2a-docker-runner");
+  assert.equal(runnerTask.issueUrl, "https://github.com/jinwon-int/a2a-docker-runner/issues/11");
   assert.ok(typeof runnerTask.id === "string" && runnerTask.id.length > 0);
   assert.equal(runnerTask.reportLanguage, "ko");
 });
@@ -139,7 +139,7 @@ test("canary e2e: PR path — fake runner emits success JSON with prUrl", async 
 
   const evidence = extractGitHubEvidence(parsed);
   assert.ok(evidence, "expected GitHub evidence");
-  assert.equal(evidence?.prUrl, "https://github.com/jinon86/a2a-docker-runner/pull/99");
+  assert.equal(evidence?.prUrl, "https://github.com/jinwon-int/a2a-docker-runner/pull/99");
 
   const handlerResult = buildHandlerResult(parsed, handlerTask, "sogyo");
   assert.equal(handlerResult.status, "pr_opened");
@@ -162,7 +162,7 @@ test("canary e2e: Done path — fake runner emits success JSON with doneCommentU
 
   const evidence = extractGitHubEvidence(parsed);
   assert.ok(evidence);
-  assert.equal(evidence?.doneCommentUrl, "https://github.com/jinon86/a2a-docker-runner/issues/11#issuecomment-canary-done");
+  assert.equal(evidence?.doneCommentUrl, "https://github.com/jinwon-int/a2a-docker-runner/issues/11#issuecomment-canary-done");
   assert.equal(evidence?.prUrl, undefined);
   assert.equal(evidence?.blockCommentUrl, undefined);
 
@@ -187,7 +187,7 @@ test("canary e2e: Block path — fake runner emits failure JSON with blockCommen
 
   const evidence = extractGitHubEvidence(parsed);
   assert.ok(evidence);
-  assert.equal(evidence?.blockCommentUrl, "https://github.com/jinon86/a2a-docker-runner/issues/11#issuecomment-canary-block");
+  assert.equal(evidence?.blockCommentUrl, "https://github.com/jinwon-int/a2a-docker-runner/issues/11#issuecomment-canary-block");
 
   const handlerResult = buildHandlerResult(parsed, handlerTask, "sogyo");
   assert.equal(handlerResult.status, "blocked");
@@ -287,7 +287,7 @@ test("canary e2e: rollback simulation — ENABLED=0 bypasses runner entirely", a
 
   // Should still build a valid runner task (handler may still call this)
   const runnerTask = buildRunnerTaskFromHandlerPayload(handlerTask, rollbackEnv);
-  assert.equal(runnerTask.repo, "jinon86/a2a-docker-runner");
+  assert.equal(runnerTask.repo, "jinwon-int/a2a-docker-runner");
 });
 
 test("canary e2e: partial rollback — ALL_GITHUB unset, preset routing only", async () => {
@@ -303,7 +303,7 @@ test("canary e2e: partial rollback — ALL_GITHUB unset, preset routing only", a
   // openclaw-plugin-a2a should still route
   const a2aTask: HandlerTask = {
     id: "canary-preset",
-    payload: { mode: "github-propose-patch", repo: "jinon86/openclaw-plugin-a2a" },
+    payload: { mode: "github-propose-patch", repo: "jinwon-int/openclaw-plugin-a2a" },
   };
   assert.equal(shouldUseDockerRunnerForGithub(a2aTask, partialEnv), true);
 });
@@ -316,7 +316,7 @@ test("canary e2e: handler summary includes task ID and Korean context", async ()
   const handlerTask: HandlerTask = {
     id: "한글-카나리-태스크",
     intent: "propose_patch",
-    payload: { mode: "github-propose-patch", repo: "jinon86/a2a-docker-runner", issueUrl: "https://github.com/jinon86/a2a-docker-runner/issues/11" },
+    payload: { mode: "github-propose-patch", repo: "jinwon-int/a2a-docker-runner", issueUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/11" },
   };
 
   const runnerTask = buildRunnerTaskFromHandlerPayload(handlerTask, baseEnv);

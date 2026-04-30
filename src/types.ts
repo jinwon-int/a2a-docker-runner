@@ -38,7 +38,7 @@ export type RunnerPreset = "openclaw-plugin-a2a-dev";
 export interface RunnerRepo {
   /** Logical name used for artifact summaries. */
   name?: string;
-  /** Git remote URL or GitHub shorthand such as "jinon86/openclaw-plugin-a2a". */
+  /** Git remote URL or GitHub shorthand such as "jinwon-int/openclaw-plugin-a2a". */
   url: string;
   /** Checkout branch/tag/ref. Defaults to main. */
   branch?: string;

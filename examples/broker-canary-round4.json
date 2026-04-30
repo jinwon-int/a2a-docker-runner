@@ -4,11 +4,11 @@
   "canary": {
     "mode": "github-propose-patch",
     "requestedBy": "seoseo",
-    "repo": "jinon86/a2a-docker-runner",
+    "repo": "jinwon-int/a2a-docker-runner",
     "baseBranch": "main",
     "issue": "#30",
     "issueNumber": "30",
-    "issueUrl": "https://github.com/jinon86/a2a-docker-runner/issues/30",
+    "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/30",
     "title": "CI-safe broker canary payload for Round 4 rollout",
     "focus": "Validate handler-to-runner conversion and evidence contract with a synthetic payload that does not touch live broker, Docker, or GitHub.",
     "acceptance": "buildRunnerTaskFromHandlerPayload conversion test; rollout docs evidence(PR/Done/Block) guide; npm check/build/lint/test pass",

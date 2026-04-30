@@ -82,9 +82,9 @@ const runnerTask = buildRunnerTaskFromHandlerPayload(task, env);
 //   id: "...",
 //   intent: "propose_patch",
 //   mode: "github-propose-patch",
-//   repo: "jinon86/openclaw-plugin-a2a",
+//   repo: "jinwon-int/openclaw-plugin-a2a",
 //   preset: "openclaw-plugin-a2a-dev",
-//   issueUrl: "https://github.com/jinon86/openclaw-plugin-a2a/issues/42",
+//   issueUrl: "https://github.com/jinwon-int/openclaw-plugin-a2a/issues/42",
 //   ...
 // }
 ```
@@ -192,13 +192,13 @@ export A2A_DOCKER_RUNNER_BIN=a2a-docker-runner
   "id": "canary-smoke-001",
   "intent": "propose_patch",
   "mode": "github-propose-patch",
-  "repo": "jinon86/a2a-docker-runner",
+  "repo": "jinwon-int/a2a-docker-runner",
   "baseBranch": "main",
   "commands": [
     "cd /work/repo && echo 'canary smoke test passed' | tee /work/artifacts/canary-result.txt",
     "cd /work/repo && npm run check 2>&1 | tee /work/artifacts/check.log"
   ],
-  "issueUrl": "https://github.com/jinon86/a2a-docker-runner/issues/11",
+  "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/11",
   "reportLanguage": "ko",
   "requestedBy": "seoseo",
   "timeoutMs": 120000
@@ -313,7 +313,7 @@ export A2A_DOCKER_RUNNER_ALL_GITHUB=0
 
 **영향**:
 - `openclaw-plugin-a2a` repo/preset 태스크 → 계속 Runner 사용
-- 그 외 모든 repo (`jinon86/a2a-docker-runner`, `jinon86/seoyoon-family-wiki` 등) → host-workspace direct execution
+- 그 외 모든 repo (`jinwon-int/a2a-docker-runner`, `jinwon-int/seoyoon-family-wiki` 등) → host-workspace direct execution
 
 ### Rollback 검증
 

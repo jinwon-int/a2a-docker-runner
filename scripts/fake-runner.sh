@@ -55,10 +55,10 @@ case "$MODE" in
   "workDir": "${WORK_DIR}",
   "exitCode": 0,
   "signal": null,
-  "stdout": "PR created: https://github.com/jinon86/a2a-docker-runner/pull/99\\ncanary smoke test passed",
+  "stdout": "PR created: https://github.com/jinwon-int/a2a-docker-runner/pull/99\\ncanary smoke test passed",
   "stderr": "",
   "artifacts": ["${WORK_DIR}/artifacts/summary.txt", "${WORK_DIR}/artifacts/canary-result.txt"],
-  "github": { "prUrl": "https://github.com/jinon86/a2a-docker-runner/pull/99" }
+  "github": { "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/99" }
 }
 EOF
     exit 0
@@ -75,7 +75,7 @@ EOF
   "stdout": "canary smoke test passed (no PR needed)",
   "stderr": "",
   "artifacts": ["${WORK_DIR}/artifacts/summary.txt"],
-  "github": { "doneCommentUrl": "https://github.com/jinon86/a2a-docker-runner/issues/11#issuecomment-canary-done" }
+  "github": { "doneCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/11#issuecomment-canary-done" }
 }
 EOF
     exit 0
@@ -93,7 +93,7 @@ EOF
   "stderr": "build failed: npm ERR! missing dependencies",
   "artifacts": [],
   "error": "build failed: npm ERR! missing dependencies",
-  "github": { "blockCommentUrl": "https://github.com/jinon86/a2a-docker-runner/issues/11#issuecomment-canary-block" }
+  "github": { "blockCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/11#issuecomment-canary-block" }
 }
 EOF
     exit 1

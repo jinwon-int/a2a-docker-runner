@@ -40,7 +40,7 @@ function normalizeRepos(task: RunnerTask): RunnerRepo[] {
   if (task.preset === "openclaw-plugin-a2a-dev" && !repos.length) {
     repos.push({
       name: "openclaw-plugin-a2a",
-      url: "jinon86/openclaw-plugin-a2a",
+      url: "jinwon-int/openclaw-plugin-a2a",
       branch: task.baseBranch ?? "main",
       path: "openclaw-plugin-a2a",
       primary: true,

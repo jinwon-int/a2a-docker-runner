@@ -153,9 +153,9 @@ test("converts broker canary payload to valid RunnerTask", () => {
   const runnerTask = buildRunnerTaskFromHandlerPayload(handlerTask, env);
 
   assert.equal(runnerTask.mode, "github-propose-patch");
-  assert.equal(runnerTask.repo, "jinon86/a2a-docker-runner");
+  assert.equal(runnerTask.repo, "jinwon-int/a2a-docker-runner");
   assert.equal(runnerTask.baseBranch, "main");
-  assert.equal(runnerTask.issueUrl, "https://github.com/jinon86/a2a-docker-runner/issues/30");
+  assert.equal(runnerTask.issueUrl, "https://github.com/jinwon-int/a2a-docker-runner/issues/30");
   assert.equal(runnerTask.reportLanguage, "ko");
   assert.equal(runnerTask.timeoutMs, 300000);
 
@@ -182,7 +182,7 @@ test("builds RunnerTask with issueUrl fallback from issueNumber", () => {
   const runnerTask = buildRunnerTaskFromHandlerPayload(handlerTask, baseEnv);
 
   // issueUrl should be constructed from repo + issueNumber
-  assert.equal(runnerTask.issueUrl, "https://github.com/jinon86/a2a-docker-runner/issues/30");
+  assert.equal(runnerTask.issueUrl, "https://github.com/jinwon-int/a2a-docker-runner/issues/30");
 });
 
 test("builds RunnerTask with issueUrl fallback from issue with # prefix", () => {
@@ -191,14 +191,14 @@ test("builds RunnerTask with issueUrl fallback from issue with # prefix", () => 
     intent: "propose_patch",
     payload: {
       mode: "github-propose-patch",
-      repo: "jinon86/a2a-docker-runner",
+      repo: "jinwon-int/a2a-docker-runner",
       baseBranch: "main",
       issue: "#30",
     },
   };
 
   const runnerTask = buildRunnerTaskFromHandlerPayload(handlerTask, baseEnv);
-  assert.equal(runnerTask.issueUrl, "https://github.com/jinon86/a2a-docker-runner/issues/30");
+  assert.equal(runnerTask.issueUrl, "https://github.com/jinwon-int/a2a-docker-runner/issues/30");
 });
 
 test("respects explicit issueUrl over constructed fallback", () => {
@@ -207,15 +207,15 @@ test("respects explicit issueUrl over constructed fallback", () => {
     intent: "propose_patch",
     payload: {
       mode: "github-propose-patch",
-      repo: "jinon86/a2a-docker-runner",
+      repo: "jinwon-int/a2a-docker-runner",
       baseBranch: "main",
       issue: "#30",
-      issueUrl: "https://github.com/jinon86/a2a-docker-runner/issues/30",
+      issueUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/30",
     },
   };
 
   const runnerTask = buildRunnerTaskFromHandlerPayload(handlerTask, baseEnv);
-  assert.equal(runnerTask.issueUrl, "https://github.com/jinon86/a2a-docker-runner/issues/30");
+  assert.equal(runnerTask.issueUrl, "https://github.com/jinwon-int/a2a-docker-runner/issues/30");
 });
 
 test("timeoutMs from env A2A_DOCKER_RUNNER_TASK_TIMEOUT_MS takes precedence", () => {
@@ -223,7 +223,7 @@ test("timeoutMs from env A2A_DOCKER_RUNNER_TASK_TIMEOUT_MS takes precedence", ()
     id: "canary-timeout-prec",
     payload: {
       mode: "github-propose-patch",
-      repo: "jinon86/a2a-docker-runner",
+      repo: "jinwon-int/a2a-docker-runner",
       timeoutMs: 60000,
     },
   };
@@ -242,7 +242,7 @@ test("default timeoutMs is 45 minutes when no override", () => {
     id: "canary-default-timeout",
     payload: {
       mode: "github-propose-patch",
-      repo: "jinon86/a2a-docker-runner",
+      repo: "jinwon-int/a2a-docker-runner",
     },
   };
 
@@ -259,7 +259,7 @@ test("shouldUseDockerRunnerForGithub routes canary payload when ENABLED + ALL_GI
     id: "canary-route",
     payload: {
       mode: "github-propose-patch",
-      repo: "jinon86/a2a-docker-runner",
+      repo: "jinwon-int/a2a-docker-runner",
     },
   };
 
@@ -276,7 +276,7 @@ test("shouldUseDockerRunnerForGithub does not route canary payload without ALL_G
     id: "canary-no-route",
     payload: {
       mode: "github-propose-patch",
-      repo: "jinon86/a2a-docker-runner",
+      repo: "jinwon-int/a2a-docker-runner",
     },
   };
 
@@ -290,7 +290,7 @@ test("shouldUseDockerRunnerForGithub returns false when ENABLED=0", () => {
     id: "canary-disabled",
     payload: {
       mode: "github-propose-patch",
-      repo: "jinon86/a2a-docker-runner",
+      repo: "jinwon-int/a2a-docker-runner",
     },
   };
 

@@ -49,10 +49,10 @@ The full `github-propose-patch` mode task accepts:
   "id": "canonical-github-propose-patch",
   "intent": "propose_patch",
   "mode": "github-propose-patch",
-  "repo": "jinon86/a2a-docker-runner",
+  "repo": "jinwon-int/a2a-docker-runner",
   "baseBranch": "main",
   "commands": ["..."],
-  "issueUrl": "https://github.com/jinon86/a2a-docker-runner/issues/1",
+  "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/1",
   "reportLanguage": "ko",
   "requestedBy": "dungae",
   "timeoutMs": 300000
@@ -75,10 +75,10 @@ Example task (see `examples/task.github-propose-patch.json`):
   "id": "patch-readme-example",
   "intent": "propose_patch",
   "mode": "github-propose-patch",
-  "repo": "jinon86/a2a-docker-runner",
+  "repo": "jinwon-int/a2a-docker-runner",
   "baseBranch": "main",
   "prompt": "Add a section to README.md.",
-  "issueUrl": "https://github.com/jinon86/a2a-docker-runner/issues/10",
+  "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/10",
   "reportLanguage": "ko",
   "requestedBy": "dungae",
   "timeoutMs": 600000
@@ -105,7 +105,7 @@ The first-class A2A development path is to keep the runner stateless and clone `
 
 The preset expands to:
 
-- checkout `https://github.com/jinon86/openclaw-plugin-a2a.git` into `/work/openclaw-plugin-a2a`
+- checkout `https://github.com/jinwon-int/openclaw-plugin-a2a.git` into `/work/openclaw-plugin-a2a`
 - run `cd /work/openclaw-plugin-a2a && npm ci`
 - run `cd /work/openclaw-plugin-a2a && npm test`
 - write command logs and task metadata under `/work/artifacts`
@@ -117,7 +117,7 @@ For integration jobs, pass explicit repos and commands instead:
   "id": "plugin-core-integration",
   "intent": "propose_patch",
   "repos": [
-    { "name": "plugin", "url": "jinon86/openclaw-plugin-a2a", "path": "plugin", "primary": true },
+    { "name": "plugin", "url": "jinwon-int/openclaw-plugin-a2a", "path": "plugin", "primary": true },
     { "name": "openclaw", "url": "jinon86/openclaw", "path": "openclaw" }
   ],
   "commands": [

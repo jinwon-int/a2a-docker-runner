@@ -36,7 +36,7 @@ a2a-docker-runner
       └─ /work/artifacts             logs, result metadata, evidence
 ```
 
-The built-in `openclaw-plugin-a2a-dev` preset clones `jinon86/openclaw-plugin-a2a` and runs its normal install/test path. More complex jobs should use explicit `repos` and `commands` so each task declares exactly what it needs.
+The built-in `openclaw-plugin-a2a-dev` preset clones `jinwon-int/openclaw-plugin-a2a` and runs its normal install/test path. More complex jobs should use explicit `repos` and `commands` so each task declares exactly what it needs.
 
 ## Non-goals for MVP
 

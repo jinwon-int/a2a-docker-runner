@@ -1,7 +1,7 @@
 {
   "id": "example-github-task",
   "intent": "propose_patch",
-  "repo": "jinon86/seoyoon-family-wiki",
+  "repo": "jinwon-int/seoyoon-family-wiki",
   "baseBranch": "master",
   "commands": [
     "cd /work/repo",

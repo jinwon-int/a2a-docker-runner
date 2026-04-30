@@ -72,7 +72,7 @@ test("extracts PR URL from stdout", async () => {
     id: "pr-extract-test",
     intent: "propose_patch",
     commands: [
-      "printf 'Created pull request: https://github.com/jinon86/a2a-docker-runner/pull/42\\n'",
+      "printf 'Created pull request: https://github.com/jinwon-int/a2a-docker-runner/pull/42\\n'",
     ],
   };
   const config = { ...baseConfig, defaultTimeoutMs: 2000 };
@@ -80,7 +80,7 @@ test("extracts PR URL from stdout", async () => {
   try {
     const result = await runTask(config, task);
     if (result.prUrl) {
-      assert.equal(result.prUrl, "https://github.com/jinon86/a2a-docker-runner/pull/42");
+      assert.equal(result.prUrl, "https://github.com/jinwon-int/a2a-docker-runner/pull/42");
     }
   } catch {
     // Docker not available; skip.
@@ -149,11 +149,11 @@ test("populates github evidence on github-propose-patch mode success", async () 
     id: "evidence-pr-test",
     intent: "propose_patch",
     mode: "github-propose-patch",
-    repo: "jinon86/a2a-docker-runner",
+    repo: "jinwon-int/a2a-docker-runner",
     commands: [
-      "printf 'PR created: https://github.com/jinon86/a2a-docker-runner/pull/77\\n'",
+      "printf 'PR created: https://github.com/jinwon-int/a2a-docker-runner/pull/77\\n'",
     ],
-    issueUrl: "https://github.com/jinon86/a2a-docker-runner/issues/1",
+    issueUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/1",
     reportLanguage: "ko",
     requestedBy: "seoseo",
   };
@@ -163,7 +163,7 @@ test("populates github evidence on github-propose-patch mode success", async () 
     const result = await runTask(config, task);
     if (result.ok) {
       assert.ok(result.github, "Expected github evidence on success");
-      assert.equal(result.github?.prUrl, "https://github.com/jinon86/a2a-docker-runner/pull/77");
+      assert.equal(result.github?.prUrl, "https://github.com/jinwon-int/a2a-docker-runner/pull/77");
     }
   } catch {
     // Docker not available; skip.
@@ -200,7 +200,7 @@ test("generates default commands for single repo task", async () => {
   const task: RunnerTask = {
     id: "default-cmds-test",
     intent: "propose_patch",
-    repo: "jinon86/a2a-docker-runner",
+    repo: "jinwon-int/a2a-docker-runner",
     baseBranch: "main",
   };
   const config = { ...baseConfig, defaultTimeoutMs: 3000 };
@@ -223,7 +223,7 @@ test("handles multi-repo configuration", async () => {
     id: "multi-repo-test",
     intent: "propose_patch",
     repos: [
-      { name: "primary", url: "jinon86/a2a-docker-runner", path: "primary", primary: true },
+      { name: "primary", url: "jinwon-int/a2a-docker-runner", path: "primary", primary: true },
       { name: "secondary", url: "jinon86/openclaw", path: "secondary" },
     ],
     commands: ["cd /work/primary && npm ci", "cd /work/primary && npm test"],

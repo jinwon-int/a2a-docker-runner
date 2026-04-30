@@ -80,22 +80,22 @@ test("isEnvTruthy: false for 0/false/no/off/empty/undefined/whitespace", () => {
 const baseEnv: HandlerEnv = { A2A_DOCKER_RUNNER_ENABLED: "1" };
 
 test("shouldUseDockerRunnerForGithub: false when A2A_DOCKER_RUNNER_ENABLED is 0 (host-workspace bypass)", () => {
-  const task: HandlerTask = { payload: { mode: "github-propose-patch", repo: "jinon86/openclaw-plugin-a2a" } };
+  const task: HandlerTask = { payload: { mode: "github-propose-patch", repo: "jinwon-int/openclaw-plugin-a2a" } };
   assert.equal(shouldUseDockerRunnerForGithub(task, { A2A_DOCKER_RUNNER_ENABLED: "0" }), false);
 });
 
 test("shouldUseDockerRunnerForGithub: false when A2A_DOCKER_RUNNER_ENABLED is not set (host-workspace bypass)", () => {
-  const task: HandlerTask = { payload: { mode: "github-propose-patch", repo: "jinon86/openclaw-plugin-a2a" } };
+  const task: HandlerTask = { payload: { mode: "github-propose-patch", repo: "jinwon-int/openclaw-plugin-a2a" } };
   assert.equal(shouldUseDockerRunnerForGithub(task, {}), false);
 });
 
 test("shouldUseDockerRunnerForGithub: false when A2A_DOCKER_RUNNER_ENABLED is explicitly false", () => {
-  const task: HandlerTask = { payload: { mode: "github-propose-patch", repo: "jinon86/openclaw-plugin-a2a" } };
+  const task: HandlerTask = { payload: { mode: "github-propose-patch", repo: "jinwon-int/openclaw-plugin-a2a" } };
   assert.equal(shouldUseDockerRunnerForGithub(task, { A2A_DOCKER_RUNNER_ENABLED: "false" }), false);
 });
 
 test("shouldUseDockerRunnerForGithub: false when A2A_DOCKER_RUNNER_ENABLED=off (host-workspace bypass)", () => {
-  const task: HandlerTask = { payload: { mode: "github-propose-patch", repo: "jinon86/openclaw-plugin-a2a" } };
+  const task: HandlerTask = { payload: { mode: "github-propose-patch", repo: "jinwon-int/openclaw-plugin-a2a" } };
   assert.equal(shouldUseDockerRunnerForGithub(task, { A2A_DOCKER_RUNNER_ENABLED: "off" }), false);
 });
 
@@ -117,7 +117,7 @@ test("shouldUseDockerRunnerForGithub: true when A2A_DOCKER_RUNNER_ALL_GITHUB=1 r
 
 test("shouldUseDockerRunnerForGithub: A2A_DOCKER_RUNNER_ALL_GITHUB=1 overrides preset-only restriction", () => {
   const env: HandlerEnv = { A2A_DOCKER_RUNNER_ENABLED: "1", A2A_DOCKER_RUNNER_ALL_GITHUB: "1" };
-  const task: HandlerTask = { payload: { mode: "github-propose-patch", repo: "jinon86/a2a-docker-runner" } };
+  const task: HandlerTask = { payload: { mode: "github-propose-patch", repo: "jinwon-int/a2a-docker-runner" } };
   assert.equal(shouldUseDockerRunnerForGithub(task, env), true);
 });
 
@@ -133,12 +133,12 @@ test("shouldUseDockerRunnerForGithub: true for openclaw-plugin-a2a preset from e
 });
 
 test("shouldUseDockerRunnerForGithub: true for openclaw-plugin-a2a repo pattern", () => {
-  const task: HandlerTask = { payload: { mode: "github-propose-patch", repo: "jinon86/openclaw-plugin-a2a" } };
+  const task: HandlerTask = { payload: { mode: "github-propose-patch", repo: "jinwon-int/openclaw-plugin-a2a" } };
   assert.equal(shouldUseDockerRunnerForGithub(task, baseEnv), true);
 });
 
 test("shouldUseDockerRunnerForGithub: false for unrelated repo without all-github flag", () => {
-  const task: HandlerTask = { payload: { mode: "github-propose-patch", repo: "jinon86/a2a-docker-runner" } };
+  const task: HandlerTask = { payload: { mode: "github-propose-patch", repo: "jinwon-int/a2a-docker-runner" } };
   assert.equal(shouldUseDockerRunnerForGithub(task, baseEnv), false);
 });
 
@@ -249,14 +249,14 @@ test("buildRunnerTaskFromHandlerPayload: env extra args JSON passthrough (A2A_DO
 test("buildRunnerTaskFromHandlerPayload: explicit repo path with all fields", () => {
   const task: HandlerTask = {
     id: "task-def",
-    payload: { mode: "github-propose-patch", repo: "jinon86/seoyoon-family-wiki", baseBranch: "master", issue: "42", issueUrl: "https://github.com/jinon86/seoyoon-family-wiki/issues/42" },
+    payload: { mode: "github-propose-patch", repo: "jinwon-int/seoyoon-family-wiki", baseBranch: "master", issue: "42", issueUrl: "https://github.com/jinwon-int/seoyoon-family-wiki/issues/42" },
   };
   const result = buildRunnerTaskFromHandlerPayload(task, baseEnv);
 
   assert.equal(result.id, "task-def");
-  assert.equal(result.repo, "jinon86/seoyoon-family-wiki");
+  assert.equal(result.repo, "jinwon-int/seoyoon-family-wiki");
   assert.equal(result.baseBranch, "master");
-  assert.equal(result.issueUrl, "https://github.com/jinon86/seoyoon-family-wiki/issues/42");
+  assert.equal(result.issueUrl, "https://github.com/jinwon-int/seoyoon-family-wiki/issues/42");
 });
 
 test("buildRunnerTaskFromHandlerPayload: constructs issueUrl from repo + issue number", () => {
@@ -806,17 +806,17 @@ test("integration flow: openclaw-plugin-a2a-dev preset → runner task → parse
     status: "completed",
     workDir: "/var/lib/openclaw-a2a/tasks/a2a-integ-1",
     exitCode: 0,
-    stdout: "PR created: https://github.com/jinon86/openclaw-plugin-a2a/pull/42",
+    stdout: "PR created: https://github.com/jinwon-int/openclaw-plugin-a2a/pull/42",
     stderr: "",
     artifacts: ["/var/lib/openclaw-a2a/tasks/a2a-integ-1/artifacts/summary.txt"],
-    github: { prUrl: "https://github.com/jinon86/openclaw-plugin-a2a/pull/42" },
+    github: { prUrl: "https://github.com/jinwon-int/openclaw-plugin-a2a/pull/42" },
   });
 
   // 5. Parse → evidence → handler result
   const parsed = parseRunnerOutput(raw);
   const evidence = extractGitHubEvidence(parsed);
   assert.ok(evidence);
-  assert.equal(evidence?.prUrl, "https://github.com/jinon86/openclaw-plugin-a2a/pull/42");
+  assert.equal(evidence?.prUrl, "https://github.com/jinwon-int/openclaw-plugin-a2a/pull/42");
 
   const handlerResult = buildHandlerResult(parsed, task, "sogyo");
   assert.equal(handlerResult.status, "pr_opened");
@@ -837,7 +837,7 @@ test("canary flow: shouldUseDockerRunnerForGithub with real-world env (ALL_GITHU
     intent: "propose_patch",
     payload: {
       mode: "github-propose-patch",
-      repo: "jinon86/a2a-docker-runner",
+      repo: "jinwon-int/a2a-docker-runner",
       issue: "11",
     },
   };
@@ -848,7 +848,7 @@ test("canary flow: shouldUseDockerRunnerForGithub with real-world env (ALL_GITHU
   // Build runner task with 2-minute timeout
   const runnerTask = buildRunnerTaskFromHandlerPayload(task, canaryEnv);
   assert.equal(runnerTask.timeoutMs, 120000);
-  assert.equal(runnerTask.issueUrl, "https://github.com/jinon86/a2a-docker-runner/issues/11");
+  assert.equal(runnerTask.issueUrl, "https://github.com/jinwon-int/a2a-docker-runner/issues/11");
 
   // Simulate runner output for a successful canary
   const raw = JSON.stringify({
@@ -860,7 +860,7 @@ test("canary flow: shouldUseDockerRunnerForGithub with real-world env (ALL_GITHU
     stdout: "canary smoke test passed",
     stderr: "",
     artifacts: ["/war/lib/openclaw-a2a/tasks/canary-task-1/artifacts/summary.txt"],
-    github: { doneCommentUrl: "https://github.com/jinon86/a2a-docker-runner/issues/11#issuecomment-cana" },
+    github: { doneCommentUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/11#issuecomment-cana" },
   });
 
   const parsed = parseRunnerOutput(raw);
@@ -879,7 +879,7 @@ test("canary flow: rollback — disable Docker runner, verify bypass", () => {
     intent: "propose_patch",
     payload: {
       mode: "github-propose-patch",
-      repo: "jinon86/openclaw-plugin-a2a",
+      repo: "jinwon-int/openclaw-plugin-a2a",
       issue: "42",
     },
   };
@@ -897,7 +897,7 @@ test("canary flow: rollback — unset env var, verify bypass", () => {
     intent: "propose_patch",
     payload: {
       mode: "github-propose-patch",
-      repo: "jinon86/openclaw-plugin-a2a",
+      repo: "jinwon-int/openclaw-plugin-a2a",
       issue: "42",
     },
   };
@@ -915,13 +915,13 @@ test("canary flow: partial rollback — disable ALL_GITHUB, keep ENABLED, verify
 
   // Should still route openclaw-plugin-a2a tasks
   const a2aTask: HandlerTask = {
-    payload: { mode: "github-propose-patch", repo: "jinon86/openclaw-plugin-a2a" },
+    payload: { mode: "github-propose-patch", repo: "jinwon-int/openclaw-plugin-a2a" },
   };
   assert.equal(shouldUseDockerRunnerForGithub(a2aTask, partialRollbackEnv), true);
 
   // Should NOT route unrelated tasks anymore
   const unrelatedTask: HandlerTask = {
-    payload: { mode: "github-propose-patch", repo: "jinon86/a2a-docker-runner" },
+    payload: { mode: "github-propose-patch", repo: "jinwon-int/a2a-docker-runner" },
   };
   assert.equal(shouldUseDockerRunnerForGithub(unrelatedTask, partialRollbackEnv), false);
 });
