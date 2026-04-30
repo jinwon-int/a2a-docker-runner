@@ -156,6 +156,16 @@ A2A_DOCKER_RUNNER_ROOT=/var/lib/openclaw-a2a/tasks node dist/cli.js cleanup --tt
 A2A_DOCKER_RUNNER_ROOT=/var/lib/openclaw-a2a/tasks node dist/cli.js cleanup --ttl 2d
 ```
 
+## Chaos E2E release gate
+
+Run the CI-safe gate before release prep:
+
+```bash
+npm run chaos:e2e
+```
+
+It prints and writes machine-readable JSON evidence for broker restart, worker kill, stale requeue, duplicate-delivery tolerance, and network interruption/reconnect scenarios. For staging/live-like validation, run `scripts/chaos-e2e-gate.mjs --real` with the command hooks documented in `docs/release-rollout-checklist.md`.
+
 ## Environment
 
 See `.env.example`.

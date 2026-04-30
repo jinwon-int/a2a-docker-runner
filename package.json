@@ -11,7 +11,8 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "node --test dist/**/*.test.js",
-    "lint": "node --check dist/cli.js",
+    "lint": "node --check dist/cli.js && node --check scripts/chaos-e2e-gate.mjs",
+    "chaos:e2e": "node scripts/chaos-e2e-gate.mjs --mock --output tmp/chaos-e2e-evidence.json",
     "pretest": "npm run build"
   },
   "engines": {
