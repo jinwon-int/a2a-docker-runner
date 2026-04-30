@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildRunArgs, jsonArgvToScript, redactSecrets, runTask } from "./runner.js";
+import { buildContainerScript, buildRunArgs, jsonArgvToScript, redactSecrets, runTask } from "./runner.js";
 import type { RunnerConfig, RunnerTask } from "./types.js";
 
 const config: RunnerConfig = {
@@ -107,6 +107,14 @@ test("extraMounts are mounted read-only by default and can opt into rw", () => {
   const args = buildRunArgs(cfg, task, "/tmp/a2a-work");
   assert.ok(args.includes("/root/.claude:/run/secrets/claude-dir:ro"));
   assert.ok(args.includes("/var/lib/a2a-cache:/cache:rw"));
+});
+
+test("container script exposes mounted gh hosts.yml to gh CLI and git", () => {
+  const script = buildContainerScript({ ...task, repos: [], commands: [] });
+  assert.ok(script.includes("cp /run/secrets/gh-hosts.yml /root/.config/gh/hosts.yml"));
+  assert.ok(script.includes("export GH_CONFIG_DIR=/root/.config/gh"));
+  assert.ok(script.includes('export GH_TOKEN="$token"'));
+  assert.ok(script.includes("export GIT_ASKPASS=/tmp/git-askpass"));
 });
 
 test("commandJson has precedence over commandTemplate", () => {

@@ -75,10 +75,9 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
 }
 
 function isMissingPatchCommand(stdout: string, stderr: string): boolean {
-  return stdout.includes("notice=no_patch_command_configured")
-    || stderr.includes("notice=no_patch_command_configured")
-    || stdout.includes("Set commandScript or commandJson in RunnerConfig to inject a coding agent.")
-    || stderr.includes("Set commandScript or commandJson in RunnerConfig to inject a coding agent.");
+  return [stdout, stderr]
+    .flatMap((text) => text.split(/\r?\n/).map((line) => line.trim()))
+    .some((line) => line === "notice=no_patch_command_configured" || line === "error=no_patch_command_configured");
 }
 
 function validateTask(task: RunnerTask): void {
@@ -190,6 +189,11 @@ case "$1" in
 esac
 ASKPASS
     chmod 700 /tmp/git-askpass
+    mkdir -p /root/.config/gh
+    cp /run/secrets/gh-hosts.yml /root/.config/gh/hosts.yml
+    chmod 600 /root/.config/gh/hosts.yml
+    export GH_CONFIG_DIR=/root/.config/gh
+    export GH_TOKEN="$token"
     export GIT_ASKPASS=/tmp/git-askpass
     export GIT_TERMINAL_PROMPT=0
     printf 'github_auth=hosts.yml\\n' | tee -a /work/artifacts/summary.txt
