@@ -89,8 +89,9 @@ function buildDefaultPatchCommands(task: RunnerTask, primaryRepo: RunnerRepo): s
   const repoPath = primaryRepo.path ?? "repo";
   const baseBranch = task.baseBranch ?? primaryRepo.branch ?? "main";
   const safeTitle = (task.id || "a2a-patch").replace(/[^a-zA-Z0-9_.-]/g, "_");
-  const issueRef = task.issueUrl ? `\nIssue: ${task.issueUrl}` : "";
-  const requesterRef = task.requestedBy ? `\nRequested by: ${task.requestedBy}` : "";
+  const issueCommentTarget = task.issueUrl ? shellSingleQuote(task.issueUrl) : "";
+  const issueClosingRef = buildIssueClosingRef(task, primaryRepo);
+  const prBody = buildPrBody(task, safeTitle, issueClosingRef);
 
   // Step 1: materialise prompt + task metadata as artifacts.
   const writePrompt = [
@@ -128,6 +129,18 @@ function buildDefaultPatchCommands(task: RunnerTask, primaryRepo: RunnerRepo): s
     `fi`,
   ].join("\n");
 
+  const issueCommentBlock = task.issueUrl ? [
+    `  PR_URL="$(grep -Eo 'https://github.com/[^[:space:]]+/pull/[0-9]+' /work/artifacts/pr-output.txt | tail -n 1 || true)"`,
+    `  if [ -n "$PR_URL" ]; then`,
+    `    cat > /work/artifacts/issue-comment.md <<A2A_ISSUE_COMMENT_EOF`,
+    `PR: $PR_URL`,
+    ``,
+    `A2A task: \`${safeTitle}\``,
+    `A2A_ISSUE_COMMENT_EOF`,
+    `    gh issue comment ${issueCommentTarget} --body-file /work/artifacts/issue-comment.md 2>&1 | tee /work/artifacts/issue-comment-output.txt || true`,
+    `  fi`,
+  ].join("\n") : "";
+
   const pipeline = [
     `set -euo pipefail`,
     `cd /work/${repoPath}`,
@@ -144,12 +157,16 @@ function buildDefaultPatchCommands(task: RunnerTask, primaryRepo: RunnerRepo): s
     `  git add -A`,
     `  git commit -m "Auto-patch: ${safeTitle}"`,
     `  git push origin "$BRANCH"`,
+    `  cat > /work/artifacts/pr-body.md <<'A2A_PR_BODY_EOF'`,
+    prBody,
+    `A2A_PR_BODY_EOF`,
     `  gh pr create --base "${baseBranch}" --head "$BRANCH" \\`,
     `    --title "Patch: ${safeTitle}" \\`,
-    `    --body "$(printf 'Auto-generated patch for task \`%s\`.%s%s\\n\\n---\\nSee artifacts/prompt.md for full prompt.' "${safeTitle}" "${issueRef}" "${requesterRef}")" \\`,
+    `    --body-file /work/artifacts/pr-body.md \\`,
     `    2>&1 | tee /work/artifacts/pr-output.txt || true`,
     `  if grep -q 'https://github.com/' /work/artifacts/pr-output.txt 2>/dev/null; then`,
     `    printf 'pr_created=1\\n' | tee -a /work/artifacts/summary.txt`,
+    issueCommentBlock,
     `  fi`,
     `else`,
     `  printf 'status=no_changes\\n' | tee -a /work/artifacts/summary.txt`,
@@ -157,6 +174,48 @@ function buildDefaultPatchCommands(task: RunnerTask, primaryRepo: RunnerRepo): s
   ].join("\n");
 
   return [writePrompt, pipeline];
+}
+
+function buildPrBody(task: RunnerTask, safeTitle: string, issueClosingRef?: string): string {
+  const lines = [
+    `Auto-generated patch for task \`${safeTitle}\`.`,
+    ...(task.issueUrl ? [`Issue: ${singleLine(task.issueUrl)}`] : []),
+    ...(task.requestedBy ? [`Requested by: ${singleLine(task.requestedBy)}`] : []),
+    ...(issueClosingRef ? ["", `Closes ${issueClosingRef}`] : []),
+    "",
+    "---",
+    "See artifacts/prompt.md for full prompt.",
+  ];
+  return lines.join("\n");
+}
+
+function buildIssueClosingRef(task: RunnerTask, primaryRepo: RunnerRepo): string | undefined {
+  const issue = parseGitHubIssueUrl(task.issueUrl);
+  if (!issue) return undefined;
+  const primaryRepoSlug = parseGitHubRepoSlug(primaryRepo.url);
+  if (primaryRepoSlug && primaryRepoSlug.toLowerCase() === issue.repo.toLowerCase()) {
+    return `#${issue.number}`;
+  }
+  return `${issue.repo}#${issue.number}`;
+}
+
+function parseGitHubIssueUrl(issueUrl?: string): { repo: string; number: string } | undefined {
+  const match = issueUrl?.match(/^https?:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/issues\/(\d+)(?:$|[/?#])/);
+  return match ? { repo: match[1] ?? "", number: match[2] ?? "" } : undefined;
+}
+
+function parseGitHubRepoSlug(repoUrl: string): string | undefined {
+  const normalized = normalizeRepoUrl(repoUrl);
+  const match = normalized.match(/^https?:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?(?:[/?#].*)?$/);
+  return match?.[1];
+}
+
+function singleLine(value: string): string {
+  return value.replace(/[\r\n]+/g, " ").trim();
+}
+
+function shellSingleQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 function sanitizeRelativePath(path: string): string {
