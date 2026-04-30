@@ -24,8 +24,12 @@ export async function collectGitHubEvidence(
     evidence.prUrl = result.prUrl;
   }
 
-  // If blocked (non-ok) and issueUrl provided: post a Block comment.
-  if (!result.ok && task.issueUrl) {
+  const missingPatchCommand = isMissingPatchCommand(result);
+
+  // If blocked (non-ok) or the default GitHub pipeline had no coding-agent
+  // command configured, post a Block comment. A missing patch command is an
+  // operator/runtime readiness failure, not a successful no-op.
+  if ((!result.ok || missingPatchCommand) && task.issueUrl) {
     try {
       evidence.blockCommentUrl = await postBlockComment(config, task, result);
     } catch (err) {
@@ -36,6 +40,8 @@ export async function collectGitHubEvidence(
   }
 
   // If ok but no PR URL and issueUrl provided: post a Done comment.
+  // Missing patch-command readiness is handled as Block above, so it never
+  // becomes a misleading Done comment.
   if (result.ok && !evidence.prUrl && !evidence.blockCommentUrl && task.issueUrl) {
     try {
       evidence.doneCommentUrl = await postDoneComment(config, task, result);
@@ -46,6 +52,13 @@ export async function collectGitHubEvidence(
   }
 
   return evidence;
+}
+
+function isMissingPatchCommand(result: RunnerResult): boolean {
+  return result.stdout.includes("notice=no_patch_command_configured")
+    || result.stderr.includes("notice=no_patch_command_configured")
+    || result.stdout.includes("Set commandScript or commandJson in RunnerConfig to inject a coding agent.")
+    || result.stderr.includes("Set commandScript or commandJson in RunnerConfig to inject a coding agent.");
 }
 
 function isGitHubEvidenceMode(mode?: string): boolean {
@@ -191,7 +204,9 @@ function buildBlockCommentBody(task: NormalizedRunnerTask, result: RunnerResult)
       ...(result.signal ? [`**시그널**: ${result.signal}`] : []),
       "",
       "### 사유",
-      result.error
+      isMissingPatchCommand(result)
+        ? "GitHub patch task reached the default pipeline, but no coding-agent patch command was configured. Configure `A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT` or `A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON` and retry."
+        : result.error
         ? `\`\`\`\n${truncate(result.error, 2000)}\n\`\`\``
         : `Runner task failed with status \`${result.status}\`.`,
       "",
@@ -212,7 +227,9 @@ function buildBlockCommentBody(task: NormalizedRunnerTask, result: RunnerResult)
     ...(result.signal ? [`**Signal**: ${result.signal}`] : []),
     "",
     "### Reason",
-    result.error
+    isMissingPatchCommand(result)
+      ? "GitHub patch task reached the default pipeline, but no coding-agent patch command was configured. Configure `A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT` or `A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON` and retry."
+      : result.error
       ? `\`\`\`\n${truncate(result.error, 2000)}\n\`\`\``
       : `Runner task failed with status \`${result.status}\`.`,
     "",
