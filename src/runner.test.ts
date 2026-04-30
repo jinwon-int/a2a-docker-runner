@@ -3,8 +3,8 @@ import test from "node:test";
 import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { runTask } from "./runner.js";
-import type { RunnerConfig, RunnerTask } from "./types.js";
+import { buildContainerScript, runTask } from "./runner.js";
+import type { NormalizedRunnerTask, RunnerConfig, RunnerTask } from "./types.js";
 
 const baseConfig: RunnerConfig = {
   rootDir: join(tmpdir(), "a2a-runner-test"),
@@ -256,6 +256,46 @@ test("expands openclaw-plugin-a2a-dev preset correctly", async () => {
   } catch {
     // Docker not available; skip.
   }
+});
+
+// ---------------------------------------------------------------------------
+// buildContainerScript: shell metacharacter safety
+// ---------------------------------------------------------------------------
+
+test("buildContainerScript safely shell-quotes task id with single quote", () => {
+  const task: NormalizedRunnerTask = {
+    id: "task-with-'quote",
+    intent: "propose_patch",
+    repos: [],
+    commands: [],
+  };
+  const script = buildContainerScript(task);
+  // POSIX single-quote escape: task-with-'quote → 'task-with-'\''quote'
+  assert.ok(script.includes("'task-with-'\\''quote'"), `Task id must be POSIX-escaped; got snippet: ${script.slice(0, 300)}`);
+});
+
+test("buildContainerScript safely shell-quotes task id with dollar sign", () => {
+  const task: NormalizedRunnerTask = {
+    id: "task-$HOME-injection",
+    intent: "propose_patch",
+    repos: [],
+    commands: [],
+  };
+  const script = buildContainerScript(task);
+  // $HOME inside single quotes is literal, so the script should contain the literal string
+  assert.ok(script.includes("'task-$HOME-injection'"), "Dollar sign in task id must be inside single quotes (literal, not expanded)");
+});
+
+test("buildContainerScript safely shell-quotes intent with backtick", () => {
+  const task: NormalizedRunnerTask = {
+    id: "safe-id",
+    intent: "propose`date`patch",
+    repos: [],
+    commands: [],
+  };
+  const script = buildContainerScript(task);
+  // Backtick inside single quotes is literal
+  assert.ok(script.includes("'propose`date`patch'"), "Backtick in intent must be inside single quotes (literal, not executed)");
 });
 
 // ---------------------------------------------------------------------------

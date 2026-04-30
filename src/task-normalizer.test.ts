@@ -189,3 +189,189 @@ test("sanitises task id in branch name", () => {
   assert.ok(pipeline.includes("spaces_" + "and_slashes_unsafe"),
     `Expected sanitised id in branch, got snippet: ${pipeline.slice(pipeline.indexOf("BRANCH="), pipeline.indexOf("BRANCH=") + 80)}`);
 });
+
+// ---------------------------------------------------------------------------
+// PR body files: content structure and closing keywords
+// ---------------------------------------------------------------------------
+
+function extractPrBodyFromPipeline(pipeline: string): string {
+  const marker = "<<'A2A_PR_BODY_EOF'\n";
+  const start = pipeline.indexOf(marker);
+  if (start === -1) return "";
+  const bodyStart = start + marker.length;
+  const end = pipeline.indexOf("\nA2A_PR_BODY_EOF", bodyStart);
+  if (end === -1) return "";
+  return pipeline.slice(bodyStart, end);
+}
+
+test("cross-repo closing ref uses owner/repo#N format in PR body", () => {
+  const task = normalizeTask({
+    id: "cross-repo-issue",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repo: "jinon86/other-repo",
+    baseBranch: "main",
+    issueUrl: "https://github.com/jinon86/test-repo/issues/7",
+  });
+
+  const pipeline = task.commands[1] ?? "";
+  const prBody = extractPrBodyFromPipeline(pipeline);
+  assert.ok(prBody.includes("Closes jinon86/test-repo#7"), `Expected cross-repo closing ref, got: ${prBody}`);
+  assert.ok(!prBody.includes("Closes #7"), "Should not use bare #N for cross-repo issue");
+});
+
+test("same-repo closing ref uses bare #N format in PR body", () => {
+  const task = normalizeTask({
+    id: "same-repo-issue",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repo: "jinon86/test-repo",
+    baseBranch: "main",
+    issueUrl: "https://github.com/jinon86/test-repo/issues/12",
+  });
+
+  const pipeline = task.commands[1] ?? "";
+  const prBody = extractPrBodyFromPipeline(pipeline);
+  assert.ok(prBody.includes("Closes #12"), "Expected bare #N closing ref for same-repo issue");
+  assert.ok(!prBody.includes("Closes jinon86/test-repo#12"), "Should not use full org/repo#N for same-repo");
+});
+
+test("no Closes keyword in PR body when issueUrl is absent", () => {
+  const task = normalizeTask({
+    id: "no-issue-url",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repo: "jinon86/test-repo",
+    baseBranch: "main",
+    prompt: "Fix a bug.",
+  });
+
+  const pipeline = task.commands[1] ?? "";
+  const prBody = extractPrBodyFromPipeline(pipeline);
+  assert.ok(!prBody.includes("Closes"), `PR body should not have Closes when no issueUrl, got: ${prBody}`);
+});
+
+test("PR body contains issue URL and requestedBy when set", () => {
+  const task = normalizeTask({
+    id: "with-requester",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repo: "jinon86/test-repo",
+    baseBranch: "main",
+    requestedBy: "jinwon",
+    issueUrl: "https://github.com/jinon86/test-repo/issues/3",
+  });
+
+  const pipeline = task.commands[1] ?? "";
+  const prBody = extractPrBodyFromPipeline(pipeline);
+  assert.ok(prBody.includes("jinwon"), "PR body should include requestedBy");
+  assert.ok(prBody.includes("https://github.com/jinon86/test-repo/issues/3"), "PR body should include issue URL");
+});
+
+test("PR body is written to pr-body.md artifact path", () => {
+  const task = normalizeTask({
+    id: "pr-body-path",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repo: "jinon86/test-repo",
+    baseBranch: "main",
+  });
+
+  const pipeline = task.commands[1] ?? "";
+  assert.ok(pipeline.includes("/work/artifacts/pr-body.md"), "PR body must be written to the pr-body.md artifact");
+  assert.ok(pipeline.includes("--body-file /work/artifacts/pr-body.md"), "gh pr create must use --body-file");
+});
+
+test("PR body heredoc uses quoted delimiter to prevent shell expansion", () => {
+  const task = normalizeTask({
+    id: "heredoc-safety",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repo: "jinon86/test-repo",
+    baseBranch: "main",
+    issueUrl: "https://github.com/jinon86/test-repo/issues/1",
+    prompt: "Fix: add $VARIABLE handling and `backtick` support.",
+  });
+
+  const pipeline = task.commands[1] ?? "";
+  assert.ok(pipeline.includes("<<'A2A_PR_BODY_EOF'"), "PR body heredoc must use single-quoted delimiter to suppress shell expansion");
+});
+
+// ---------------------------------------------------------------------------
+// Issue comments: presence, file-based body, shell metacharacter safety
+// ---------------------------------------------------------------------------
+
+test("no gh issue comment in pipeline when issueUrl is absent", () => {
+  const task = normalizeTask({
+    id: "no-issue-comment",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repo: "jinon86/test-repo",
+    baseBranch: "main",
+  });
+
+  const pipeline = task.commands[1] ?? "";
+  assert.ok(!pipeline.includes("gh issue comment"), "Pipeline must not have issue comment when no issueUrl");
+});
+
+test("issue comment uses --body-file for safety, not inline --body arg", () => {
+  const task = normalizeTask({
+    id: "issue-comment-bodyfile",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repo: "jinon86/test-repo",
+    baseBranch: "main",
+    issueUrl: "https://github.com/jinon86/test-repo/issues/20",
+  });
+
+  const pipeline = task.commands[1] ?? "";
+  assert.ok(pipeline.includes("--body-file /work/artifacts/issue-comment.md"), "Issue comment must use --body-file");
+  assert.ok(pipeline.includes("/work/artifacts/issue-comment-output.txt"), "Issue comment output must be captured to artifact");
+  // Must not use inline --body 'text' or --body "text"
+  const ghCommentIdx = pipeline.indexOf("gh issue comment");
+  const ghCommentLine = pipeline.slice(ghCommentIdx, pipeline.indexOf("\n", ghCommentIdx));
+  assert.ok(!ghCommentLine.includes("--body '") && !ghCommentLine.includes('--body "'), "Issue comment must not use inline --body arg");
+});
+
+test("issue URL is single-quoted in gh issue comment for shell metacharacter safety", () => {
+  const task = normalizeTask({
+    id: "url-quoting",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repo: "jinon86/test-repo",
+    baseBranch: "main",
+    issueUrl: "https://github.com/jinon86/test-repo/issues/5",
+  });
+
+  const pipeline = task.commands[1] ?? "";
+  const ghCommentIdx = pipeline.indexOf("gh issue comment");
+  const ghCommentLine = pipeline.slice(ghCommentIdx, pipeline.indexOf("\n", ghCommentIdx));
+  assert.ok(
+    ghCommentLine.includes("'https://github.com/jinon86/test-repo/issues/5'"),
+    `Issue URL must be single-quoted in gh issue comment, got: ${ghCommentLine}`,
+  );
+});
+
+test("issue URL single quote is shell-escaped in gh issue comment (defensive metachar test)", () => {
+  // Real GitHub URLs never have single quotes, but the quoting must handle them
+  // to prevent any injection if an unusual URL is passed.
+  const task = normalizeTask({
+    id: "singlequote-url",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repo: "jinon86/test-repo",
+    baseBranch: "main",
+    issueUrl: "https://github.com/jinon86/test-repo/issues/5'x",
+  });
+
+  const pipeline = task.commands[1] ?? "";
+  const ghCommentIdx = pipeline.indexOf("gh issue comment");
+  const ghCommentLine = pipeline.slice(ghCommentIdx, pipeline.indexOf("\n", ghCommentIdx));
+  // POSIX escape: 5'x → 5'\''x — the escape sequence must appear
+  assert.ok(ghCommentLine.includes("'\\''"), `Single quote in URL must be POSIX-escaped, got: ${ghCommentLine}`);
+  // The fully-escaped URL argument must appear in one piece
+  assert.ok(
+    ghCommentLine.includes("'https://github.com/jinon86/test-repo/issues/5'\\''x'"),
+    `Expected full POSIX-escaped URL in gh issue comment line, got: ${ghCommentLine}`,
+  );
+});
