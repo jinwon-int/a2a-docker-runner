@@ -2,6 +2,26 @@
 
 Docker/Podman task runner for OpenClaw A2A workers.
 
+
+## Repository role in the A2A layout
+
+`a2a-docker-runner` is the isolated execution engine for A2A worker tasks.
+
+It owns:
+
+- one-container-per-task Docker/Podman execution
+- GitHub repository checkout, patch command execution, commit/push/PR creation, and artifact collection
+- generic coding-agent command injection through safe `commandScript` / `commandJson` paths
+- artifact manifests plus PR/Block/Done evidence used by the broker contract
+- read-only secret/config mounts for coding-agent credentials and GitHub auth
+
+It does **not** own task routing, worker lifecycle, stale recovery, or OpenClaw gateway methods. Those live in [`jinwon-int/a2a-broker`](https://github.com/jinwon-int/a2a-broker) and [`jinwon-int/openclaw-plugin-a2a`](https://github.com/jinwon-int/openclaw-plugin-a2a).
+
+Current production baseline as of 2026-04-30:
+
+- deployed on `bangtong`, `sogyo`, `dungae`, `nosuk`
+- all generic GitHub patch tasks route Docker-first via the broker worker handler
+- the coding-agent command is configured externally by worker environment, not embedded in this repo
 ## Why
 
 A2A workers currently execute delegated work in the host OpenClaw workspace. After many tasks, repos, build artifacts, logs, and session files can mix together and make local OpenClaw unhealthy. This runner keeps task execution isolated:
