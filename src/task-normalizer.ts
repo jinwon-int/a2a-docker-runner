@@ -62,20 +62,19 @@ export function isPatchMode(mode?: string): boolean {
 }
 
 function defaultCommands(task: RunnerTask, primaryRepo?: RunnerRepo): string[] {
+  // Patch mode always takes priority over preset so that
+  // openclaw-plugin-a2a-dev tasks in github-propose-patch / propose_patch
+  // mode produce a PR instead of running test-only commands.
+  if (isPatchMode(task.mode) && primaryRepo) {
+    return buildDefaultPatchCommands(task, primaryRepo);
+  }
+
   if (task.preset === "openclaw-plugin-a2a-dev") {
     const dir = primaryRepo?.path ?? "openclaw-plugin-a2a";
     return [
       `cd /work/${dir} && npm ci`,
       `cd /work/${dir} && npm test`,
     ];
-  }
-
-  // github-propose-patch / propose_patch mode with no explicit commands.
-  // Generate a PR-producing pipeline that writes the prompt to artifacts,
-  // invokes a coding agent via a safe script file, and
-  // commits/pushes/creates a PR when changes are detected.
-  if (isPatchMode(task.mode) && primaryRepo) {
-    return buildDefaultPatchCommands(task, primaryRepo);
   }
 
   if (primaryRepo) {
