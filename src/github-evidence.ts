@@ -55,10 +55,9 @@ export async function collectGitHubEvidence(
 }
 
 function isMissingPatchCommand(result: RunnerResult): boolean {
-  return result.stdout.includes("notice=no_patch_command_configured")
-    || result.stderr.includes("notice=no_patch_command_configured")
-    || result.stdout.includes("Set commandScript or commandJson in RunnerConfig to inject a coding agent.")
-    || result.stderr.includes("Set commandScript or commandJson in RunnerConfig to inject a coding agent.");
+  return [result.stdout, result.stderr]
+    .flatMap((text) => text.split(/\r?\n/).map((line) => line.trim()))
+    .some((line) => line === "notice=no_patch_command_configured" || line === "error=no_patch_command_configured");
 }
 
 function isGitHubEvidenceMode(mode?: string): boolean {
