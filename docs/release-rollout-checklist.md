@@ -13,6 +13,10 @@ Scope: operator checklist for proposing and rolling out an `a2a-docker-runner` r
 - Run the CI-safe canary explicitly when changing handler integration code:
   - `node --test dist/canary.test.js`
   - Covers PR/Done/Block/malformed/failure/crash paths end-to-end with fake runner binary.
+- Run the chaos E2E release gate before cutting a release candidate:
+  - CI-safe/mock evidence: `npm run chaos:e2e`
+  - Real broker/worker evidence: `node scripts/chaos-e2e-gate.mjs --real --output artifacts/chaos-e2e.json` with the command hooks documented below.
+  - Attach the generated JSON evidence to the PR/release gate. It must include passing `broker_restart`, `worker_kill`, `stale_requeue`, `duplicate_delivery_tolerance`, and `network_interrupt_reconnect` scenarios.
 - Verify package entry points before publishing or packaging:
   - `package.json` `bin.a2a-docker-runner` points to `./dist/cli.js`.
   - `npm test` includes the package bin contract test.
@@ -41,6 +45,43 @@ Excluded legacy target:
 5. On each target, run `a2a-docker-runner doctor` and a small non-secret smoke task before sending real GitHub jobs.
 6. Confirm the worker completion payload preserves runner evidence fields when present: `github.prUrl`, `github.doneCommentUrl`, and `github.blockCommentUrl`.
 7. Continue to the next active target only after the previous target reports healthy status and expected evidence output.
+
+## Chaos E2E release gate
+
+`scripts/chaos-e2e-gate.mjs` produces machine-readable JSON evidence with a stable schema (`a2a-docker-runner.chaos-e2e.v1`). The default mock mode is deterministic and CI-safe; it validates the release-gate state machine without Docker, a live broker, or credentials:
+
+```bash
+npm run chaos:e2e
+# writes tmp/chaos-e2e-evidence.json and prints the same JSON to stdout
+```
+
+For a real staging broker/worker run, provide shell command hooks. Each hook receives `A2A_CHAOS_SCENARIO`, `A2A_CHAOS_STEP`, and `A2A_CHAOS_WORK_DIR`. Hook stdout/stderr is captured in the JSON evidence and redacted for common token patterns, so keep hook output concise and sanitized.
+
+Required real-mode hooks by scenario:
+
+- `broker_restart`: `A2A_CHAOS_SUBMIT_TASK_CMD`, `A2A_CHAOS_BROKER_RESTART_CMD`, `A2A_CHAOS_WAIT_RESULT_CMD`, `A2A_CHAOS_ASSERT_NO_DUPLICATE_COMPLETION_CMD`
+- `worker_kill`: `A2A_CHAOS_SUBMIT_TASK_CMD`, `A2A_CHAOS_WORKER_KILL_CMD`, `A2A_CHAOS_WORKER_START_CMD`, `A2A_CHAOS_WAIT_RESULT_CMD`, `A2A_CHAOS_ASSERT_NO_DUPLICATE_COMPLETION_CMD`
+- `stale_requeue`: `A2A_CHAOS_SUBMIT_TASK_CMD`, `A2A_CHAOS_WORKER_KILL_CMD`, `A2A_CHAOS_REQUEUE_STALE_CMD`, `A2A_CHAOS_WORKER_START_CMD`, `A2A_CHAOS_WAIT_RESULT_CMD`
+- `duplicate_delivery_tolerance`: `A2A_CHAOS_SUBMIT_TASK_CMD`, `A2A_CHAOS_INJECT_DUPLICATE_CMD`, `A2A_CHAOS_WAIT_RESULT_CMD`, `A2A_CHAOS_ASSERT_NO_DUPLICATE_COMPLETION_CMD`
+- `network_interrupt_reconnect`: `A2A_CHAOS_SUBMIT_TASK_CMD`, `A2A_CHAOS_NETWORK_DOWN_CMD`, `A2A_CHAOS_NETWORK_UP_CMD`, `A2A_CHAOS_WAIT_RESULT_CMD`, `A2A_CHAOS_ASSERT_NO_DUPLICATE_COMPLETION_CMD`
+
+Example staging invocation:
+
+```bash
+A2A_CHAOS_SUBMIT_TASK_CMD='./ops/submit-chaos-task "$A2A_CHAOS_SCENARIO" "$A2A_CHAOS_WORK_DIR"' \
+A2A_CHAOS_BROKER_RESTART_CMD='./ops/restart-staging-broker' \
+A2A_CHAOS_WORKER_KILL_CMD='./ops/kill-staging-worker' \
+A2A_CHAOS_WORKER_START_CMD='./ops/start-staging-worker' \
+A2A_CHAOS_REQUEUE_STALE_CMD='./ops/requeue-stale --staging' \
+A2A_CHAOS_INJECT_DUPLICATE_CMD='./ops/inject-duplicate-delivery --staging' \
+A2A_CHAOS_NETWORK_DOWN_CMD='./ops/network-partition-worker --down' \
+A2A_CHAOS_NETWORK_UP_CMD='./ops/network-partition-worker --up' \
+A2A_CHAOS_WAIT_RESULT_CMD='./ops/wait-chaos-result "$A2A_CHAOS_SCENARIO" "$A2A_CHAOS_WORK_DIR"' \
+A2A_CHAOS_ASSERT_NO_DUPLICATE_COMPLETION_CMD='./ops/assert-single-completion "$A2A_CHAOS_SCENARIO" "$A2A_CHAOS_WORK_DIR"' \
+node scripts/chaos-e2e-gate.mjs --real --output artifacts/chaos-e2e.json
+```
+
+Failure output is intentionally non-silent: each failed scenario includes the failing hook name, a bounded/redacted output sample, and the required hook list so the operator can find broker/worker logs and task evidence quickly.
 
 ## Rollback plan
 
