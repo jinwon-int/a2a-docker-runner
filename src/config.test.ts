@@ -66,15 +66,13 @@ test("loadConfig reads extra runner mounts", async () => {
   const config = await loadConfig({
     ...baseEnv,
     A2A_DOCKER_RUNNER_EXTRA_MOUNTS_JSON: JSON.stringify([
-      { source: "/root/.claude", target: "/run/secrets/claude-dir" },
-      { source: "/root/.claude.json", target: "/run/secrets/claude.json", readOnly: true },
+      { source: "/var/lib/openclaw/codex", target: "/run/secrets/codex", readOnly: true },
       { source: "/var/tmp/a2a", target: "/scratch", readOnly: false },
     ]),
   });
 
   assert.deepEqual(config.extraMounts, [
-    { source: "/root/.claude", target: "/run/secrets/claude-dir", readOnly: undefined },
-    { source: "/root/.claude.json", target: "/run/secrets/claude.json", readOnly: true },
+    { source: "/var/lib/openclaw/codex", target: "/run/secrets/codex", readOnly: true },
     { source: "/var/tmp/a2a", target: "/scratch", readOnly: false },
   ]);
 });
@@ -87,4 +85,58 @@ test("loadConfig rejects malformed extra runner mounts", async () => {
     }),
     /source must be an absolute path/,
   );
+});
+
+test("loadConfig blocks Claude-in-Docker patch commands by default", async () => {
+  await assert.rejects(
+    () => loadConfig({
+      ...baseEnv,
+      A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT: "npm install -g @anthropic-ai/claude-code\nclaude --print hello",
+    }),
+    /Claude-in-Docker.*A2A_ALLOW_CLAUDE_IN_DOCKER/,
+  );
+
+  await assert.rejects(
+    () => loadConfig({
+      ...baseEnv,
+      A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON: JSON.stringify({ argv: ["claude", "--print", "hello"] }),
+    }),
+    /Claude-in-Docker.*A2A_ALLOW_CLAUDE_IN_DOCKER/,
+  );
+
+  await assert.rejects(
+    () => loadConfig({
+      ...baseEnv,
+      A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE: "claude --print hello",
+    }),
+    /Claude-in-Docker.*A2A_ALLOW_CLAUDE_IN_DOCKER/,
+  );
+});
+
+test("loadConfig blocks Claude credential mounts by default", async () => {
+  await assert.rejects(
+    () => loadConfig({
+      ...baseEnv,
+      A2A_DOCKER_RUNNER_EXTRA_MOUNTS_JSON: JSON.stringify([
+        { source: "/root/.claude", target: "/run/secrets/claude-dir" },
+      ]),
+    }),
+    /Claude credentials.*A2A_ALLOW_CLAUDE_IN_DOCKER/,
+  );
+});
+
+test("loadConfig allows Claude-in-Docker only with explicit legacy opt-in", async () => {
+  const config = await loadConfig({
+    ...baseEnv,
+    A2A_ALLOW_CLAUDE_IN_DOCKER: "1",
+    A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON: JSON.stringify({ argv: ["claude", "--print", "hello"] }),
+    A2A_DOCKER_RUNNER_EXTRA_MOUNTS_JSON: JSON.stringify([
+      { source: "/root/.claude", target: "/run/secrets/claude-dir" },
+    ]),
+  });
+
+  assert.equal(config.commandJson, '{"argv":["claude","--print","hello"]}');
+  assert.deepEqual(config.extraMounts, [
+    { source: "/root/.claude", target: "/run/secrets/claude-dir", readOnly: undefined },
+  ]);
 });
