@@ -3,12 +3,69 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile, utimes, stat, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cleanup, install } from "./ops.js";
+import { checkGitHubPatchReadiness, cleanup, install } from "./ops.js";
 import type { RunnerConfig } from "./types.js";
 
 function config(rootDir: string, githubTokenFile?: string): RunnerConfig {
   return { rootDir, engine: "docker", image: "example:latest", githubTokenFile, defaultTimeoutMs: 1000 };
 }
+
+test("GitHub patch readiness blocks missing command config", () => {
+  const report = checkGitHubPatchReadiness(config("/tmp/a2a-test"));
+
+  assert.equal(report.status, "fail");
+  assert.match(report.message, /blocked: no patch command configured/);
+  assert.deepEqual(report.detail?.missing, [
+    "A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT",
+    "A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON",
+  ]);
+  assert.match(String(report.detail?.fallback), /Block evidence/);
+});
+
+test("GitHub patch readiness accepts safe commandScript", () => {
+  const report = checkGitHubPatchReadiness({
+    ...config("/tmp/a2a-test"),
+    commandScript: "#!/usr/bin/env bash\nprintf 'https://github.com/jinwon-int/a2a-docker-runner/pull/1\\n'\n",
+  });
+
+  assert.equal(report.status, "ok");
+  assert.equal(report.detail?.safe, true);
+  assert.equal(report.detail?.eval, false);
+});
+
+test("GitHub patch readiness accepts commandJson argv and rejects malformed JSON", () => {
+  const ready = checkGitHubPatchReadiness({
+    ...config("/tmp/a2a-test"),
+    commandJson: JSON.stringify({ argv: ["node", "agent.js"], env: { A: "B" } }),
+  });
+  assert.equal(ready.status, "ok");
+  assert.equal(ready.detail?.argvCount, 2);
+
+  const malformed = checkGitHubPatchReadiness({
+    ...config("/tmp/a2a-test"),
+    commandJson: "not-json",
+  });
+  assert.equal(malformed.status, "fail");
+  assert.match(malformed.message, /not valid JSON/);
+
+  const emptyArgv = checkGitHubPatchReadiness({
+    ...config("/tmp/a2a-test"),
+    commandJson: JSON.stringify({ argv: [] }),
+  });
+  assert.equal(emptyArgv.status, "fail");
+  assert.match(emptyArgv.message, /non-empty string argv array/);
+});
+
+test("GitHub patch readiness warns for legacy commandTemplate eval path", () => {
+  const report = checkGitHubPatchReadiness({
+    ...config("/tmp/a2a-test"),
+    commandTemplate: "echo legacy",
+  });
+
+  assert.equal(report.status, "warn");
+  assert.equal(report.detail?.safe, false);
+  assert.equal(report.detail?.eval, true);
+});
 
 test("install is idempotent and validates task root plus read-only secret mount intent", async () => {
   const dir = await mkdtemp(join(tmpdir(), "a2a-install-"));
