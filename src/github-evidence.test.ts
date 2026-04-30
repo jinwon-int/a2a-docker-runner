@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { collectGitHubEvidence } from "./github-evidence.js";
+import { buildBlockCommentBody, buildDoneCommentBody, collectGitHubEvidence } from "./github-evidence.js";
 import type { NormalizedRunnerTask, RunnerConfig } from "./types.js";
 
 const baseConfig: RunnerConfig = {
@@ -118,4 +118,85 @@ test("missing patch command is not treated as Done evidence", async () => {
   assert.equal(evidence?.prUrl, undefined);
   assert.equal(evidence?.doneCommentUrl, undefined);
   assert.equal(evidence?.blockCommentUrl, undefined);
+});
+
+test("block comment includes artifact manifest, command logs, reason and next action safely", () => {
+  const body = buildBlockCommentBody(baseTask, {
+    ok: false,
+    taskId: "t1",
+    status: "failed",
+    workDir: "/root/.openclaw/workspace/private-task/run-1",
+    exitCode: 1,
+    signal: null,
+    stdout: "notice=no_patch_command_configured\nusing /root/.config/gh/hosts.yml",
+    stderr: "Authorization: Bearer ghp_abcdefghijklmnopqrstuvwxyz1234567890",
+    artifacts: ["/tmp/a2a/private/run.log"],
+    artifactManifest: {
+      schemaVersion: 1,
+      manifestPath: "artifacts/manifest.json",
+      generatedAt: "1970-01-01T00:00:00.000Z",
+      artifacts: [{ path: "artifacts/run.log", name: "run.log", sizeBytes: 42 }],
+    },
+    resultSummary: {
+      exitCode: 1,
+      signal: null,
+      timedOut: false,
+      stdout: "notice=no_patch_command_configured\nusing /root/.config/gh/hosts.yml",
+      stderr: "Authorization: Bearer ghp_abcdefghijklmnopqrstuvwxyz1234567890",
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      artifactCount: 1,
+      manifestPath: "artifacts/manifest.json",
+    },
+    error: "raw error from /root/.openclaw/workspace/private-task/run-1",
+  });
+
+  assert.match(body, /### 사유/);
+  assert.match(body, /### 다음 조치/);
+  assert.match(body, /### 아티팩트 manifest 요약/);
+  assert.match(body, /### 명령 로그 요약/);
+  assert.match(body, /`artifacts\/run\.log` \(42 bytes\)/);
+  assert.match(body, /notice=no_patch_command_configured/);
+  assert.doesNotMatch(body, /ghp_[A-Za-z0-9_]+/);
+  assert.doesNotMatch(body, /\/root\/\.config\/gh/);
+  assert.doesNotMatch(body, /\/root\/\.openclaw/);
+});
+
+test("done comment includes manifest summary and bounded command log summary", () => {
+  const body = buildDoneCommentBody(baseTask, {
+    ok: true,
+    taskId: "t1",
+    status: "completed",
+    workDir: "/tmp/a2a/task/run-1",
+    exitCode: 0,
+    signal: null,
+    stdout: "all good",
+    stderr: "",
+    artifacts: ["artifacts/result.json"],
+    artifactManifest: {
+      schemaVersion: 1,
+      manifestPath: "artifacts/manifest.json",
+      generatedAt: "1970-01-01T00:00:00.000Z",
+      artifacts: [{ path: "artifacts/result.json", name: "result.json", sizeBytes: 12 }],
+    },
+    resultSummary: {
+      exitCode: 0,
+      signal: null,
+      timedOut: false,
+      stdout: "all good",
+      stderr: "",
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      artifactCount: 1,
+      manifestPath: "artifacts/manifest.json",
+    },
+  });
+
+  assert.match(body, /## ✅ Done/);
+  assert.match(body, /### 결과/);
+  assert.match(body, /### 다음 조치/);
+  assert.match(body, /### 아티팩트 manifest 요약/);
+  assert.match(body, /### 명령 로그 요약/);
+  assert.match(body, /`artifacts\/result\.json` \(12 bytes\)/);
+  assert.match(body, /all good/);
 });
