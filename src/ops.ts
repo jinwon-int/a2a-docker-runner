@@ -20,6 +20,7 @@ export interface DoctorReport {
   taskRoot: OpsCheck;
   secretMount: OpsCheck;
   baseImage: OpsCheck;
+  githubPatch: OpsCheck;
 }
 
 export interface InstallReport {
@@ -219,15 +220,17 @@ export async function doctor(config: RunnerConfig): Promise<DoctorReport> {
   const baseImage = (engine === "docker" ? docker : podman).status === "ok"
     ? checkBaseImage(engine, config.image)
     : { status: "fail" as const, message: "no container engine available for base image check", detail: { image: config.image } };
+  const githubPatch = checkGitHubPatchReadiness(config);
   const engineReady = docker.status === "ok" || podman.status === "ok";
   return {
-    ok: engineReady && [taskRoot, secretMount, baseImage].every((check) => check.status !== "fail"),
+    ok: engineReady && [taskRoot, secretMount, baseImage, githubPatch].every((check) => check.status !== "fail"),
     engine,
     docker,
     podman,
     taskRoot,
     secretMount,
     baseImage,
+    githubPatch,
   };
 }
 
@@ -273,6 +276,57 @@ async function checkSecretMount(githubTokenFile?: string): Promise<OpsCheck> {
   } catch (error) {
     return { status: "fail", message: "configured secret file is not readable", detail: { path, error: errorMessage(error) } };
   }
+}
+
+export function checkGitHubPatchReadiness(config: RunnerConfig): OpsCheck {
+  if (config.commandScript) {
+    return {
+      status: "ok",
+      message: "GitHub patch execution is ready via commandScript",
+      detail: { path: "/work/patch-command.sh", safe: true, eval: false },
+    };
+  }
+
+  if (config.commandJson) {
+    try {
+      const parsed = JSON.parse(config.commandJson) as { argv?: unknown };
+      if (!Array.isArray(parsed.argv) || parsed.argv.length === 0 || !parsed.argv.every((arg) => typeof arg === "string")) {
+        return {
+          status: "fail",
+          message: "GitHub patch commandJson must contain a non-empty string argv array",
+          detail: { env: "A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON", safe: false },
+        };
+      }
+      return {
+        status: "ok",
+        message: "GitHub patch execution is ready via commandJson",
+        detail: { path: "/work/patch-command.sh", safe: true, eval: false, argvCount: parsed.argv.length },
+      };
+    } catch (error) {
+      return {
+        status: "fail",
+        message: "GitHub patch commandJson is not valid JSON",
+        detail: { env: "A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON", error: errorMessage(error) },
+      };
+    }
+  }
+
+  if (config.commandTemplate) {
+    return {
+      status: "warn",
+      message: "GitHub patch execution uses legacy commandTemplate eval path; prefer commandScript or commandJson",
+      detail: { env: "A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE", safe: false, eval: true },
+    };
+  }
+
+  return {
+    status: "fail",
+    message: "GitHub patch execution is blocked: no patch command configured",
+    detail: {
+      missing: ["A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT", "A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON"],
+      fallback: "missing command yields Block evidence; it must not be reported as Done",
+    },
+  };
 }
 
 function checkBaseImage(engine: RunnerEngine, image: string): OpsCheck {

@@ -137,6 +137,9 @@ This keeps `a2a-docker-runner` as the disposable execution sandbox while `opencl
 - configured task-root access and permissions
 - optional GitHub hosts secret readability and intended `:ro` container mount
 - configured base-image presence or pull readiness
+- `githubPatch` readiness for generic `github-propose-patch` execution
+
+`githubPatch.status` is `ok` when `commandScript` or valid `commandJson` is configured, `warn` for the legacy `commandTemplate` eval path, and `fail` when no patch command is configured. A failed `githubPatch` check means Docker-first generic GitHub patch tasks are not ready and should produce Block evidence instead of Done/no-op success.
 
 `install` (alias: `setup`) is safe to rerun. It creates the task root with private permissions when missing and validates the optional secret file without touching live services.
 
@@ -206,10 +209,21 @@ export A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON='{"argv":["codex","exec","--full-aut
 export A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE="claude --print --permission-mode bypassPermissions -p \"\$(cat /work/artifacts/prompt.md)\""
 ```
 
-When no patch command config is set, the pipeline still runs but skips the
-coding agent step and emits a `no_patch_command_configured` notice. Git
-operations (commit, push, PR create) only fire when `git status --porcelain`
-detects changes.
+When no patch command config is set, `doctor` reports `githubPatch.status: "fail"`. The pipeline still runs safely, skips the coding agent step, and emits a `no_patch_command_configured` notice. Git operations (commit, push, PR create) only fire when `git status --porcelain` detects changes, and GitHub evidence collection treats the notice as Block evidence rather than Done evidence.
+
+A safe Docker-first worker rollout from plugin-only routing to all-GitHub routing should therefore be:
+
+```bash
+# 1. Configure one of the safe command paths on the worker host.
+export A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT='#!/usr/bin/env bash
+codex exec --full-auto "$(cat /work/artifacts/prompt.md)"'
+
+# 2. Verify readiness before enabling all GitHub tasks.
+node dist/cli.js doctor | jq .githubPatch
+
+# 3. Only after githubPatch.status is "ok", route all GitHub patch tasks via Docker.
+export A2A_DOCKER_RUNNER_ALL_GITHUB=1
+```
 
 **Variables/files available inside the container:**
 
