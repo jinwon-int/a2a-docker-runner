@@ -8,6 +8,8 @@ export interface RunnerConfig {
   defaultTimeoutMs: number;
   memory?: string;
   cpus?: string;
+  /** Additional host paths to mount into the runner container. */
+  extraMounts?: RunnerExtraMount[];
   /**
    * Escape hatch for github-propose-patch/propose_patch mode.
    * When set, injected as A2A_PATCH_COMMAND env var into containers.
@@ -31,6 +33,15 @@ export interface RunnerConfig {
    * Runner serialises this into a safe script, avoiding eval.
    */
   commandJson?: string;
+}
+
+export interface RunnerExtraMount {
+  /** Absolute host path. */
+  source: string;
+  /** Absolute container path. */
+  target: string;
+  /** Defaults to true; set false only for explicitly writable scratch mounts. */
+  readOnly?: boolean;
 }
 
 export type RunnerPreset = "openclaw-plugin-a2a-dev";
