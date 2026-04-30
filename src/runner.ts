@@ -57,6 +57,12 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
     error: completed.code === 0 && !completed.timedOut ? undefined : buildActionableError(engine, config.image, completed),
   };
 
+  if (isMissingPatchCommand(stdout, stderr)) {
+    result.ok = false;
+    result.status = "failed";
+    result.error = "GitHub patch task reached the default pipeline, but no coding-agent patch command was configured. Configure A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT or A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON and retry.";
+  }
+
   // Collect structured GitHub evidence for propose_patch / github-propose-patch mode.
   const github = await collectGitHubEvidence(config, normalizedTask, result);
   if (github) {
@@ -66,6 +72,13 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
   }
 
   return result;
+}
+
+function isMissingPatchCommand(stdout: string, stderr: string): boolean {
+  return stdout.includes("notice=no_patch_command_configured")
+    || stderr.includes("notice=no_patch_command_configured")
+    || stdout.includes("Set commandScript or commandJson in RunnerConfig to inject a coding agent.")
+    || stderr.includes("Set commandScript or commandJson in RunnerConfig to inject a coding agent.");
 }
 
 function validateTask(task: RunnerTask): void {

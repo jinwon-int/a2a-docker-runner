@@ -94,3 +94,28 @@ test("parseIssueCommentApiUrl helper (via internal behavior)", async () => {
   assert.ok(evidence);
   assert.equal(evidence?.blockCommentUrl, undefined);
 });
+
+test("missing patch command is not treated as Done evidence", async () => {
+  const task: NormalizedRunnerTask = { ...baseTask };
+  const result = {
+    ok: true,
+    taskId: "t1",
+    status: "completed" as const,
+    workDir: "/tmp",
+    exitCode: 0,
+    signal: null,
+    stdout: [
+      "notice=no_patch_command_configured",
+      "Set commandScript or commandJson in RunnerConfig to inject a coding agent.",
+      "status=no_changes",
+    ].join("\n"),
+    stderr: "",
+    artifacts: ["/tmp/artifacts/patch-command.log"],
+  };
+
+  const evidence = await collectGitHubEvidence({ ...baseConfig, githubTokenFile: undefined }, task, result);
+  assert.ok(evidence);
+  assert.equal(evidence?.prUrl, undefined);
+  assert.equal(evidence?.doneCommentUrl, undefined);
+  assert.equal(evidence?.blockCommentUrl, undefined);
+});
