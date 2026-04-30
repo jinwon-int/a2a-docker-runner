@@ -125,6 +125,9 @@ test("generates PR-producing default commands for github-propose-patch mode with
   assert.ok(pipeline.includes("/work/artifacts/patch-command.log"), "Expected coding agent log artifact");
   assert.ok(pipeline.includes("/work/artifacts/pr-output.txt"), "Expected PR output artifact");
   assert.ok(pipeline.includes("status=no_changes"), "Expected no-changes fallback");
+
+  const generated = task.commands.join("\n");
+  assert.doesNotMatch(generated, /claude-(install|output|prompt)|@anthropic-ai\/claude-code|claude --/i);
 });
 
 test("generates PR-producing default commands for propose_patch mode", () => {

@@ -208,8 +208,12 @@ For `github-propose-patch` / `propose_patch` mode tasks **without** explicit
 2. Creates a branch, invokes the coding agent, commits changes, pushes, and
    opens a PR via `gh pr create`.
 
-Step 2 can be configured from host environment. Prefer the safe paths for new
-rollouts; the legacy template remains available for backwards compatibility.
+Step 2 can be configured from host environment. Prefer the safe host-side
+OpenClaw/Codex paths for new rollouts; the legacy template remains available for
+backwards compatibility. Claude-in-Docker is disabled by default and requires the
+explicit temporary opt-in `A2A_ALLOW_CLAUDE_IN_DOCKER=1` (or
+`A2A_DOCKER_RUNNER_ALLOW_CLAUDE_IN_DOCKER=1`).
+
 Precedence is `commandScript > commandJson > commandTemplate`:
 
 | Host env | Runner config | Container path/variable | Notes |
@@ -226,10 +230,17 @@ codex exec --full-auto "$(cat /work/artifacts/prompt.md)"'
 
 export A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON='{"argv":["codex","exec","--full-auto","example prompt"],"env":{"SAFE":"value"}}'
 
-export A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE="claude --print --permission-mode bypassPermissions -p \"\$(cat /work/artifacts/prompt.md)\""
+# Legacy only, disabled unless A2A_ALLOW_CLAUDE_IN_DOCKER=1 is set:
+# export A2A_ALLOW_CLAUDE_IN_DOCKER=1
+# export A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE="claude --print --permission-mode bypassPermissions -p \"\$(cat /work/artifacts/prompt.md)\""
 ```
 
 When no patch command config is set, `doctor` reports `githubPatch.status: "fail"`. The pipeline still runs safely, skips the coding agent step, and emits a `no_patch_command_configured` notice. Git operations (commit, push, PR create) only fire when `git status --porcelain` detects changes, and GitHub evidence collection treats the notice as Block evidence rather than Done evidence.
+
+If a patch command or extra mount references Claude CLI, Claude credentials, or
+Claude-specific artifacts, config loading fails unless the explicit opt-in is
+set. This prevents accidental production fallback to Claude-in-Docker while still
+leaving a documented escape hatch for short-lived legacy recovery.
 
 A safe Docker-first worker rollout from plugin-only routing to all-GitHub routing should therefore be:
 

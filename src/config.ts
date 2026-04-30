@@ -15,6 +15,8 @@ export async function loadConfig(env = process.env): Promise<RunnerConfig> {
   }
 
   const patchCommand = loadPatchCommandConfig(env);
+  const extraMounts = loadExtraMounts(env);
+  validateClaudeInDockerPolicy(env, patchCommand, extraMounts);
 
   return {
     rootDir: env.A2A_DOCKER_RUNNER_ROOT || DEFAULT_ROOT,
@@ -24,7 +26,7 @@ export async function loadConfig(env = process.env): Promise<RunnerConfig> {
     defaultTimeoutMs: Number(env.A2A_DOCKER_RUNNER_TIMEOUT_MS || 15 * 60 * 1000),
     memory: env.A2A_DOCKER_RUNNER_MEMORY || "2g",
     cpus: env.A2A_DOCKER_RUNNER_CPUS || "2",
-    extraMounts: loadExtraMounts(env),
+    extraMounts,
     ...patchCommand,
   };
 }
@@ -75,6 +77,53 @@ function loadPatchCommandConfig(env: NodeJS.ProcessEnv): Pick<RunnerConfig, "com
   if (commandJson) return { commandJson };
 
   return { commandTemplate: env.A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE || undefined };
+}
+
+function validateClaudeInDockerPolicy(
+  env: NodeJS.ProcessEnv,
+  patchCommand: Pick<RunnerConfig, "commandScript" | "commandJson" | "commandTemplate">,
+  extraMounts?: RunnerExtraMount[],
+): void {
+  if (allowsClaudeInDocker(env)) return;
+
+  for (const [key, value] of Object.entries(patchCommand)) {
+    if (value && referencesClaudeExecutor(value)) {
+      throw new Error(
+        `${key} references Claude-in-Docker but A2A_ALLOW_CLAUDE_IN_DOCKER is not enabled; ` +
+        "use a host-side OpenClaw/Codex commandScript or commandJson, or set A2A_ALLOW_CLAUDE_IN_DOCKER=1 for a temporary legacy opt-in",
+      );
+    }
+  }
+
+  for (const mount of extraMounts ?? []) {
+    if (referencesClaudeMount(mount.source) || referencesClaudeMount(mount.target)) {
+      throw new Error(
+        "extraMounts reference Claude credentials but A2A_ALLOW_CLAUDE_IN_DOCKER is not enabled; " +
+        "remove Claude mounts or set A2A_ALLOW_CLAUDE_IN_DOCKER=1 for a temporary legacy opt-in",
+      );
+    }
+  }
+}
+
+function allowsClaudeInDocker(env: NodeJS.ProcessEnv): boolean {
+  return isTruthy(env.A2A_ALLOW_CLAUDE_IN_DOCKER) || isTruthy(env.A2A_DOCKER_RUNNER_ALLOW_CLAUDE_IN_DOCKER);
+}
+
+function isTruthy(value?: string): boolean {
+  return /^(1|true|yes|on)$/i.test(String(value ?? "").trim());
+}
+
+function referencesClaudeExecutor(value: string): boolean {
+  return [
+    /@anthropic-ai\/claude-code/i,
+    /(^|[\s;|&"'`])claude([\s;|&"'`-]|$)/i,
+    /\.claude(?:\.json|\/|$)/i,
+    /claude-(?:install|output|prompt)\.log|claude-prompt\.md/i,
+  ].some((pattern) => pattern.test(value));
+}
+
+function referencesClaudeMount(value: string): boolean {
+  return /(^|\/)\.claude(?:\.json|\/|$)/i.test(value) || /(^|\/)claude(?:\.json|-dir)?$/i.test(value);
 }
 
 function normalizeEngine(value?: string): RunnerEngine | undefined {
