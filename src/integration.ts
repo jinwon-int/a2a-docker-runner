@@ -323,7 +323,8 @@ const BROKER_RUNNER_STREAM_LIMIT = 2_000;
 function brokerBoundText(value: string): string {
   if (value.length <= BROKER_RUNNER_STREAM_LIMIT) return value;
   const omitted = value.length - BROKER_RUNNER_STREAM_LIMIT;
-  return `${value.slice(0, BROKER_RUNNER_STREAM_LIMIT)}\n<truncated ${omitted} chars for broker update>`;
+  return `${value.slice(0, BROKER_RUNNER_STREAM_LIMIT)}
+<truncated ${omitted} chars for broker update>`;
 }
 
 function omitUndefined(value: Record<string, unknown>): Record<string, unknown> {

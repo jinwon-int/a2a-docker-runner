@@ -774,33 +774,50 @@ test("buildHandlerResult: exposes bounded resultSummary stdout/stderr instead of
   assert.ok(!runnerRaw.stderr.includes("raw-stderr-raw-stderr-"));
 });
 
-test("buildHandlerResult: broker runnerRaw omits heavyweight/private runner internals", () => {
+test("buildHandlerResult: broker runnerRaw trims non-broker fields while preserving evidence", () => {
   const result: RawRunnerOutput = {
-    ok: true, taskId: "t-diet", status: "completed", workDir: "/var/lib/openclaw-a2a/tasks/t-diet/run-1",
-    stdout: "raw stdout", stderr: "raw stderr", artifacts: ["/var/lib/openclaw-a2a/tasks/t-diet/run-1/artifacts/summary.txt"],
+    ok: true, taskId: "t-diet", status: "completed", workDir: "/tmp/runner/private-workdir",
+    exitCode: 0, signal: null,
+    stdout: "raw stdout ".repeat(5000), stderr: "raw stderr ".repeat(5000),
+    artifacts: ["/tmp/runner/private-workdir/artifacts/summary.txt"],
     artifactManifest: {
       schemaVersion: 1,
       manifestPath: "artifacts/manifest.json",
       generatedAt: "1970-01-01T00:00:00.000Z",
-      artifacts: [{ path: "artifacts/summary.txt", name: "summary.txt", sizeBytes: 10 }],
+      artifacts: [
+        { path: "artifacts/summary.txt", name: "summary.txt", sizeBytes: 10 },
+        { path: "artifacts/patch.diff", name: "patch.diff", sizeBytes: 1000 },
+      ],
     },
     resultSummary: {
       exitCode: 0, signal: null, timedOut: false,
       stdout: "bounded stdout", stderr: "bounded stderr",
-      stdoutTruncated: false, stderrTruncated: false, artifactCount: 1, manifestPath: "artifacts/manifest.json",
+      stdoutTruncated: true, stderrTruncated: true, artifactCount: 2, manifestPath: "artifacts/manifest.json",
     },
-    github: { doneCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-456" },
+    github: { prUrl: "https://github.com/jinwon-int/repo/pull/123" },
   };
+
   const handlerResult = buildHandlerResult(result, { id: "t-diet" }, "sogyo");
   const runnerRaw = handlerResult.runnerRaw as Record<string, unknown>;
+  const legacyPayloadSize = Buffer.byteLength(JSON.stringify({
+    ...result,
+    stdout: result.resultSummary?.stdout,
+    stderr: result.resultSummary?.stderr,
+    artifacts: ["artifacts/summary.txt", "artifacts/patch.diff"],
+  }));
+  const trimmedPayloadSize = Buffer.byteLength(JSON.stringify(runnerRaw));
 
+  assert.equal(runnerRaw.github, result.github);
   assert.equal(runnerRaw.ok, true);
   assert.equal(runnerRaw.status, "completed");
-  assert.deepEqual(runnerRaw.artifacts, ["artifacts/summary.txt"]);
+  assert.equal(runnerRaw.stdout, "bounded stdout");
+  assert.equal(runnerRaw.stderr, "bounded stderr");
+  assert.deepEqual(runnerRaw.artifacts, ["artifacts/summary.txt", "artifacts/patch.diff"]);
   assert.equal(runnerRaw.manifestPath, "artifacts/manifest.json");
-  assert.equal(runnerRaw.workDir, undefined);
-  assert.equal(runnerRaw.artifactManifest, undefined);
-  assert.equal(runnerRaw.resultSummary, undefined);
+  assert.equal(Object.hasOwn(runnerRaw, "workDir"), false);
+  assert.equal(Object.hasOwn(runnerRaw, "artifactManifest"), false);
+  assert.equal(Object.hasOwn(runnerRaw, "resultSummary"), false);
+  assert.ok(trimmedPayloadSize < legacyPayloadSize, trimmedPayloadSize + " should be smaller than " + legacyPayloadSize);
 });
 
 test("buildHandlerResult: broker runnerRaw bounds legacy raw streams when resultSummary is absent", () => {
