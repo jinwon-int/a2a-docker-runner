@@ -169,9 +169,9 @@ printf 'status=completed\n' | tee -a /work/artifacts/summary.txt
 }
 
 function installBaseToolsScript(): string {
-  return `if ! command -v git >/dev/null 2>&1; then
+  return `if ! command -v git >/dev/null 2>&1 || ! command -v gh >/dev/null 2>&1; then
   apt-get update >/dev/null
-  apt-get install -y git ca-certificates >/dev/null
+  apt-get install -y git gh ca-certificates >/dev/null
 fi
 `;
 }

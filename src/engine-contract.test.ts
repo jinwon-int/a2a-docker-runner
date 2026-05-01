@@ -116,8 +116,10 @@ test("extraMounts are mounted read-only by default and can opt into rw", () => {
   assert.ok(args.includes("/var/lib/a2a-cache:/cache:rw"));
 });
 
-test("container script exposes mounted gh hosts.yml to gh CLI and git", () => {
+test("container script installs and exposes mounted gh hosts.yml to gh CLI and git", () => {
   const script = buildContainerScript({ ...task, repos: [], commands: [] });
+  assert.ok(script.includes("! command -v gh >/dev/null 2>&1"));
+  assert.ok(script.includes("apt-get install -y git gh ca-certificates"));
   assert.ok(script.includes("cp /run/secrets/gh-hosts.yml /root/.config/gh/hosts.yml"));
   assert.ok(script.includes("export GH_CONFIG_DIR=/root/.config/gh"));
   assert.ok(script.includes('export GH_TOKEN="$token"'));
