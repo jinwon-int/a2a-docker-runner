@@ -27,7 +27,7 @@ test("loadConfig builds first-class OpenClaw patch profile", async () => {
   assert.match(config.commandScript ?? "", /openclaw agent/);
   assert.match(config.commandScript ?? "", /--model 'openai-codex\/gpt-5\.5'/);
   assert.match(config.commandScript ?? "", /--thinking 'medium'/);
-  assert.match(config.commandScript ?? "", /OPENCLAW_DISABLE_BUNDLED_PLUGINS='1'/);
+  assert.match(config.commandScript ?? "", /OPENCLAW_DISABLE_BUNDLED_PLUGINS='0'/);
   assert.equal(config.network, "host");
   assert.match(config.commandScript ?? "", /copy_file_if_exists \/run\/secrets\/openclaw-dir\/openclaw\.json/);
   assert.match(config.commandScript ?? "", /auth-profiles\.json/);
@@ -36,6 +36,8 @@ test("loadConfig builds first-class OpenClaw patch profile", async () => {
   assert.match(config.commandScript ?? "", /A2A_SANITIZE_OPENCLAW_CONFIG/);
   assert.match(config.commandScript ?? "", /delete config\.plugins/);
   assert.match(config.commandScript ?? "", /delete config\.channels/);
+  assert.match(config.commandScript ?? "", /delete defaults\.models/);
+  assert.match(config.commandScript ?? "", /delete entry\.models/);
   assert.match(config.commandScript ?? "", /openai-codex/);
   assert.match(config.commandScript ?? "", /openclaw_config_bytes=/);
   assert.doesNotMatch(config.commandScript ?? "", /tar -C \/run\/secrets\/openclaw-dir/);

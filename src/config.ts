@@ -107,7 +107,7 @@ function buildOpenClawPatchCommandScript(env: NodeJS.ProcessEnv): string {
   const model = shellSingleQuote(env.A2A_OPENCLAW_MODEL || "openai-codex/gpt-5.5");
   const thinking = shellSingleQuote(env.A2A_OPENCLAW_THINKING || "medium");
   const timeout = shellSingleQuote(env.A2A_OPENCLAW_TIMEOUT_SEC || "1800");
-  const disableBundledPlugins = shellSingleQuote(env.A2A_OPENCLAW_DISABLE_BUNDLED_PLUGINS || "1");
+  const disableBundledPlugins = shellSingleQuote(env.A2A_OPENCLAW_DISABLE_BUNDLED_PLUGINS || "0");
   return `#!/usr/bin/env bash
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -185,17 +185,19 @@ if (defaults && typeof defaults === "object") {
     defaults.model.primary = "openai-codex/gpt-5.5";
     defaults.model.fallbacks = [];
   }
-  if (defaults.models && typeof defaults.models === "object") {
-    for (const key of Object.keys(defaults.models)) {
-      if (key.startsWith("openai/")) delete defaults.models[key];
-    }
-  }
+  delete defaults.models;
 }
 
 const agentList = config.agents?.list;
 if (Array.isArray(agentList)) {
   for (const entry of agentList) {
-    if (entry && typeof entry === "object") delete entry.heartbeat;
+    if (!entry || typeof entry !== "object") continue;
+    delete entry.heartbeat;
+    delete entry.models;
+    if (entry.model && typeof entry.model === "object") {
+      entry.model.primary = "openai-codex/gpt-5.5";
+      entry.model.fallbacks = [];
+    }
   }
 }
 
