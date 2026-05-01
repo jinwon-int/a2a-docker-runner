@@ -107,9 +107,11 @@ function buildOpenClawPatchCommandScript(env: NodeJS.ProcessEnv): string {
   const model = shellSingleQuote(env.A2A_OPENCLAW_MODEL || "openai-codex/gpt-5.5");
   const thinking = shellSingleQuote(env.A2A_OPENCLAW_THINKING || "medium");
   const timeout = shellSingleQuote(env.A2A_OPENCLAW_TIMEOUT_SEC || "1800");
+  const disableBundledPlugins = shellSingleQuote(env.A2A_OPENCLAW_DISABLE_BUNDLED_PLUGINS || "1");
   return `#!/usr/bin/env bash
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
+export OPENCLAW_DISABLE_BUNDLED_PLUGINS=${disableBundledPlugins}
 
 if [ ! -d /run/secrets/openclaw-dir ]; then
   printf 'error=openclaw_config_mount_missing\\n' | tee -a /work/artifacts/summary.txt
@@ -122,30 +124,39 @@ if ! command -v openclaw >/dev/null 2>&1; then
 fi
 
 rm -rf /root/.openclaw
-mkdir -p /root/.openclaw
+mkdir -p /root/.openclaw/agents/${agent}/agent
 
-# Copy only the small runtime configuration needed by the embedded OpenClaw
-# process.  Worker hosts can have multi-GB workspaces, caches, archives, and
-# session logs under ~/.openclaw; copying the whole tree makes Docker patch
-# execution look stuck before the agent even starts.
-tar -C /run/secrets/openclaw-dir \
-  --exclude='./workspace' \
-  --exclude='./workspace-*' \
-  --exclude='./logs' \
-  --exclude='./cache' \
-  --exclude='./tmp' \
-  --exclude='./archive' \
-  --exclude='./backups' \
-  --exclude='./delivery-queue' \
-  --exclude='./media' \
-  --exclude='./memory-cache' \
-  --exclude='./memory-wiki-vault' \
-  --exclude='./plugin-runtime-deps' \
-  --exclude='./openclaw-hotpatch' \
-  --exclude='./agents/*/sessions' \
-  --exclude='./agents/*/sessions.json' \
-  -cf - . | tar -C /root/.openclaw -xf -
+# Copy only the authentication/configuration files needed by the embedded
+# OpenClaw process.  Worker hosts can have multi-GB workspaces, caches,
+# plugin runtimes, archives, and session logs under ~/.openclaw; a broad copy
+# makes Docker patch execution look stuck before the agent even starts.
+copy_file_if_exists() {
+  src="$1"
+  dst="$2"
+  if [ -f "$src" ]; then
+    mkdir -p "$(dirname "$dst")"
+    cp -p "$src" "$dst"
+  fi
+}
+
+copy_dir_if_exists() {
+  src="$1"
+  dst="$2"
+  if [ -d "$src" ]; then
+    mkdir -p "$(dirname "$dst")"
+    cp -a "$src" "$dst"
+  fi
+}
+
+copy_file_if_exists /run/secrets/openclaw-dir/openclaw.json /root/.openclaw/openclaw.json
+copy_file_if_exists /run/secrets/openclaw-dir/node.json /root/.openclaw/node.json
+copy_dir_if_exists /run/secrets/openclaw-dir/credentials /root/.openclaw/credentials
+copy_file_if_exists /run/secrets/openclaw-dir/agents/${agent}/agent/auth-profiles.json /root/.openclaw/agents/${agent}/agent/auth-profiles.json
+copy_file_if_exists /run/secrets/openclaw-dir/agents/${agent}/agent/auth-state.json /root/.openclaw/agents/${agent}/agent/auth-state.json
+copy_file_if_exists /run/secrets/openclaw-dir/agents/${agent}/agent/models.json /root/.openclaw/agents/${agent}/agent/models.json
+
 chmod -R u+rwX /root/.openclaw
+printf 'openclaw_config_bytes=%s\n' "$(du -sb /root/.openclaw | awk '{print $1}')" | tee -a /work/artifacts/summary.txt
 
 cat > /work/artifacts/openclaw-prompt.md <<'A2A_OPENCLAW_PROMPT_EOF'
 You are running inside the A2A Docker Runner on a checked-out GitHub repository.
