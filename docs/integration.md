@@ -178,7 +178,7 @@ The handler continues to claim → execute → report using the same broker prot
 1. **타겟 노드에 환경변수 설정**
 
 ```bash
-# worker systemd drop-in 또는 handler 환경
+# worker runtime 환경(systemd drop-in, Docker Compose env_file, shell export 등)
 export A2A_DOCKER_RUNNER_ENABLED=1
 export A2A_DOCKER_RUNNER_ALL_GITHUB=1
 export A2A_DOCKER_RUNNER_TASK_TIMEOUT_MS=120000  # canary는 2분 타임아웃
@@ -286,6 +286,8 @@ FAKE_RUNNER_MODE=pr bash scripts/fake-runner.sh run examples/task.canary.json
 ## Rollback
 
 handler integration 문제가 발생하거나 host-workspace direct execution으로 복귀해야 할 때 아래 절차를 따른다.
+
+Broker 런타임은 이 절차의 대상이 아니다. Worker는 기존 HTTP broker endpoint와 edge-secret 설정으로 claim → execute → report를 계속 수행하며, broker가 Docker Compose로 실행되는지 systemd로 실행되는지는 runner 설정/rollback 판단에 영향을 주지 않는다.
 
 ### 즉시 Rollback (전체 비활성화)
 

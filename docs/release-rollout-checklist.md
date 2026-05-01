@@ -17,6 +17,7 @@ Scope: operator checklist for proposing and rolling out an `a2a-docker-runner` r
   - CI-safe/mock evidence: `npm run chaos:e2e`
   - Real broker/worker evidence: `node scripts/chaos-e2e-gate.mjs --real --output artifacts/chaos-e2e.json` with the command hooks documented below.
   - Attach the generated JSON evidence to the PR/release gate. It must include passing `broker_restart`, `worker_kill`, `stale_requeue`, `duplicate_delivery_tolerance`, and `network_interrupt_reconnect` scenarios.
+- Treat the broker as a runtime-agnostic HTTP dependency. Real broker hooks may call Docker Compose, systemd, Kubernetes, or operator scripts, but docs/tests must not assume the broker itself is a host systemd service.
 - Verify package entry points before publishing or packaging:
   - `package.json` `bin.a2a-docker-runner` points to `./dist/cli.js`.
   - `npm test` includes the package bin contract test.
@@ -55,7 +56,7 @@ npm run chaos:e2e
 # writes tmp/chaos-e2e-evidence.json and prints the same JSON to stdout
 ```
 
-For a real staging broker/worker run, provide shell command hooks. Each hook receives `A2A_CHAOS_SCENARIO`, `A2A_CHAOS_STEP`, and `A2A_CHAOS_WORK_DIR`. Hook stdout/stderr is captured in the JSON evidence and redacted for common token patterns, so keep hook output concise and sanitized.
+For a real staging broker/worker run, provide shell command hooks. Each hook receives `A2A_CHAOS_SCENARIO`, `A2A_CHAOS_STEP`, and `A2A_CHAOS_WORK_DIR`. Hook stdout/stderr is captured in the JSON evidence and redacted for common token patterns, so keep hook output concise and sanitized. The broker hook contract is deliberately supervisor-neutral: `A2A_CHAOS_BROKER_RESTART_CMD` can be a Docker Compose restart, a systemd restart, or any sanitized operator wrapper that restarts the broker behind the same HTTP endpoint and edge-secret configuration.
 
 Required real-mode hooks by scenario:
 
