@@ -298,6 +298,22 @@ test("buildContainerScript safely shell-quotes intent with backtick", () => {
   assert.ok(script.includes("'propose`date`patch'"), "Backtick in intent must be inside single quotes (literal, not executed)");
 });
 
+test("buildContainerScript provisions latest-capable gh and update-branch fallback helper", () => {
+  const task: NormalizedRunnerTask = {
+    id: "github-cli-tools",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repos: [],
+    commands: [],
+  };
+
+  const script = buildContainerScript(task);
+  assert.ok(script.includes("gh pr update-branch --help"), "Expected gh capability check for update-branch");
+  assert.ok(script.includes("cli.github.com/packages"), "Expected official GitHub CLI apt repository");
+  assert.ok(script.includes("/usr/local/bin/a2a-gh-pr-update-branch"), "Expected fallback helper installation");
+  assert.ok(script.includes("warning=gh_pr_update_branch_failed_using_git_fallback"), "Expected git fallback marker");
+});
+
 // ---------------------------------------------------------------------------
 // error handling: invalid commands
 // ---------------------------------------------------------------------------

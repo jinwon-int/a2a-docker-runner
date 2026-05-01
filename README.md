@@ -239,6 +239,13 @@ Important defaults:
 - image: `node:22-bookworm-slim`
 - engine: auto-detect `docker` then `podman`
 
+GitHub patch containers need a `gh` version with `gh pr update-branch` support.
+The runner checks that capability at container startup. If `gh` is missing or too
+old, it installs/updates GitHub CLI from the official `cli.github.com` apt
+repository instead of relying on the older Debian package. For faster cold starts,
+operators may still set `A2A_DOCKER_RUNNER_IMAGE` to a prebuilt image that already
+contains current `git`, `gh`, `curl`, `gnupg`, and `ca-certificates`.
+
 Build metadata injection:
 
 - `A2A_DOCKER_RUNNER_BUILD_VERSION`
@@ -298,6 +305,14 @@ export A2A_OPENCLAW_TIMEOUT_SEC=1800
 
 When no patch command config is set, `doctor` reports `githubPatch.status: "fail"`. The generated patch pipeline now emits `error=no_patch_command_configured` and exits non-zero before any no-op PR flow can be reported as success. GitHub evidence collection treats the diagnostic as Block evidence rather than Done evidence.
 
+After creating a PR, the default pipeline calls
+`a2a-gh-pr-update-branch "$PR_URL" "$baseBranch"`. That helper first uses
+`gh pr update-branch`; if GitHub CLI/API update fails, it falls back to
+`git fetch origin <base>`, `git merge --no-edit origin/<base>`, and
+`git push origin <head>`. Output is captured in
+`/work/artifacts/pr-update-branch-output.txt`, and failures are recorded as a
+warning instead of deleting or duplicating the newly created PR.
+
 If a patch command or extra mount references Claude CLI, Claude credentials, or
 Claude-specific artifacts, config loading fails. This prevents accidental
 production fallback to Claude-in-Docker.
@@ -326,6 +341,7 @@ export A2A_DOCKER_RUNNER_ALL_GITHUB=1
 | `/work/patch-command.sh` | `A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT` or generated from `A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON` |
 | `A2A_PATCH_COMMAND_JSON` | `A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON` host env |
 | `A2A_PATCH_COMMAND` | `A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE` host env |
+| `/usr/local/bin/a2a-gh-pr-update-branch` | Helper that wraps `gh pr update-branch` with a git merge/push fallback |
 | `/work/artifacts/prompt.md` | Task `prompt` field |
 | `/work/artifacts/task.json` | Full normalised task payload |
 
