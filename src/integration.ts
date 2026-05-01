@@ -33,6 +33,14 @@ export interface HandlerTaskPayload {
   issue?: string;
   issueNumber?: string;
   issueUrl?: string;
+  existingPrUrl?: string;
+  existingPrNumber?: string | number;
+  prUrl?: string;
+  prNumber?: string | number;
+  forbidNewPr?: boolean;
+  noNewPr?: boolean;
+  commentOnly?: boolean;
+  evidenceOnly?: boolean;
   baseBranch?: string;
   title?: string;
   focus?: string;
@@ -132,6 +140,10 @@ export function buildRunnerTaskFromHandlerPayload(
     issueUrl: normalizeString(task?.payload?.issueUrl) ?? undefined,
     reportLanguage: "ko",
     requestedBy: undefined,
+    existingPrUrl: normalizeExistingPrUrl(task, repo),
+    existingPrNumber: task?.payload?.existingPrNumber ?? task?.payload?.prNumber,
+    forbidNewPr: Boolean(task?.payload?.forbidNewPr ?? task?.payload?.noNewPr),
+    commentOnly: Boolean(task?.payload?.commentOnly ?? task?.payload?.evidenceOnly),
     timeoutMs:
       !isNaN(envTimeoutMs)
         ? envTimeoutMs
@@ -297,6 +309,16 @@ function brokerFacingRunnerRaw(result: RawRunnerOutput): Record<string, unknown>
 
 function normalizeString(value?: string): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function normalizeExistingPrUrl(task: HandlerTask, repo?: string): string | undefined {
+  const explicit = normalizeString(task?.payload?.existingPrUrl ?? task?.payload?.prUrl);
+  if (explicit) return explicit;
+
+  const prNumber = task?.payload?.existingPrNumber ?? task?.payload?.prNumber;
+  const pr = prNumber != null ? String(prNumber).match(/#?(\d+)/)?.[1] : undefined;
+  if (!repo || !pr) return undefined;
+  return `https://github.com/${repo}/pull/${pr}`;
 }
 
 function extractIssueNumber(task: HandlerTask): string | undefined {

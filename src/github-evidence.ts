@@ -255,6 +255,7 @@ export function buildDoneCommentBody(task: NormalizedRunnerTask, result: RunnerR
   const requestedBy = task.requestedBy ?? "a2a-broker";
   const artifactLines = buildArtifactSummaryLines(result, lang);
   const commandLogLines = buildCommandLogLines(result, lang);
+  const existingPr = buildExistingPrLine(task, lang);
 
   if (lang === "ko") {
     return [
@@ -263,6 +264,7 @@ export function buildDoneCommentBody(task: NormalizedRunnerTask, result: RunnerR
       `**요청 노드**: ${requestedBy}`,
       `**Task ID**: \`${task.id}\``,
       `**상태**: ${result.status} (PR URL 없음 — no-op 또는 PR 생성 불필요 태스크)`,
+      ...(existingPr ? [existingPr] : []),
       "",
       "### 결과",
       "작업은 완료됐지만 PR URL은 감지되지 않았습니다. no-op 또는 PR 생성이 필요 없는 태스크로 처리합니다.",
@@ -286,6 +288,7 @@ export function buildDoneCommentBody(task: NormalizedRunnerTask, result: RunnerR
     `**Requested by**: ${requestedBy}`,
     `**Task ID**: \`${task.id}\``,
     `**Status**: ${result.status} (no PR URL — no-op or PR-less task)`,
+    ...(existingPr ? [existingPr] : []),
     "",
     "### Result",
     "The task completed, but no PR URL was detected. Treating as no-op or PR-less completion.",
@@ -301,6 +304,27 @@ export function buildDoneCommentBody(task: NormalizedRunnerTask, result: RunnerR
     "",
     "> Auto-generated Done comment — A2A Docker Runner",
   ].join("\n");
+}
+
+function buildExistingPrLine(task: NormalizedRunnerTask, lang: string): string | undefined {
+  const existingPrUrl = task.existingPrUrl ?? buildExistingPrUrl(task);
+  if (!existingPrUrl) return undefined;
+  return lang === "ko" ? `**기존 PR**: ${existingPrUrl}` : `**Existing PR**: ${existingPrUrl}`;
+}
+
+function buildExistingPrUrl(task: NormalizedRunnerTask): string | undefined {
+  const repo = task.repo ?? task.repos?.find((candidate) => candidate.primary)?.url ?? task.repos?.[0]?.url;
+  const repoSlug = repo ? parseGitHubRepoSlug(repo) : undefined;
+  const rawNumber = task.existingPrNumber != null ? String(task.existingPrNumber) : undefined;
+  const prNumber = rawNumber?.match(/#?(\d+)/)?.[1];
+  if (!repoSlug || !prNumber) return undefined;
+  return `https://github.com/${repoSlug}/pull/${prNumber}`;
+}
+
+function parseGitHubRepoSlug(repoUrl: string): string | undefined {
+  const normalized = repoUrl.match(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/) ? `https://github.com/${repoUrl}.git` : repoUrl;
+  const match = normalized.match(/^https?:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?(?:[/?#].*)?$/);
+  return match?.[1];
 }
 
 function buildReason(result: RunnerResult): string {

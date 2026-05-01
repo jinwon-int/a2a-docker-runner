@@ -119,7 +119,7 @@ test("generates PR-producing default commands for github-propose-patch mode with
   assert.ok(pipeline.includes("/work/artifacts/issue-start-comment.md"), "Expected start comment artifact");
   assert.ok(pipeline.indexOf("issue-start-comment.md") < pipeline.indexOf("patch-command.sh"), "Expected start comment before patch execution");
   assert.ok(pipeline.includes("notice=gh_unavailable_start_comment_skipped"), "Expected non-fatal gh-missing marker");
-  assert.ok(pipeline.includes("gh issue comment 'https://github.com/jinon86/test-repo/issues/5'"), "Expected issue PR comment");
+  assert.ok(pipeline.includes("gh issue comment 'https://github.com/jinwon-int/test-repo/issues/5'"), "Expected issue PR comment");
   assert.ok(pipeline.includes("/work/artifacts/issue-comment-output.txt"), "Expected issue comment output artifact");
   assert.ok(pipeline.includes("patch-command.sh"), "Expected script file reference");
   assert.ok(pipeline.includes("patch_mode=script"), "Expected script mode marker");
@@ -135,6 +135,42 @@ test("generates PR-producing default commands for github-propose-patch mode with
 
   const generated = task.commands.join("\n");
   assert.doesNotMatch(generated, /claude-(install|output|prompt)|@anthropic-ai\/claude-code|claude --/i);
+});
+
+test("generates comment-only closeout commands without PR creation", () => {
+  const task = normalizeTask({
+    id: "closeout-only",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repo: "jinwon-int/test-repo",
+    existingPrNumber: 42,
+    commentOnly: true,
+    forbidNewPr: true,
+    prompt: "Close out the existing PR with evidence only.",
+  });
+
+  assert.equal(task.commands.length, 1);
+  const command = task.commands[0] ?? "";
+  assert.ok(command.includes("patch_mode=comment_only"), "Expected comment-only marker");
+  assert.ok(command.includes("new_pr_allowed=0"), "Expected no-new-PR marker");
+  assert.ok(command.includes("existing_pr=%s\\n' 'https://github.com/jinwon-int/test-repo/pull/42'"), "Expected derived existing PR URL");
+  assert.ok(!command.includes("gh pr create"), "Must not create a duplicate PR");
+  assert.ok(!command.includes("git push origin"), "Must not push a duplicate branch");
+});
+
+test("forbidNewPr blocks default patch pipeline before push or PR creation", () => {
+  const task = normalizeTask({
+    id: "no-duplicate-pr",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repo: "jinwon-int/test-repo",
+    forbidNewPr: true,
+  });
+
+  const pipeline = task.commands[1] ?? "";
+  assert.ok(pipeline.includes("error=new_pr_forbidden"), "Expected explicit block marker");
+  assert.ok(!pipeline.includes("git push origin"), "Must not push a new branch when new PRs are forbidden");
+  assert.ok(!pipeline.includes("gh pr create"), "Must not create a duplicate PR when forbidden");
 });
 
 test("generates PR-producing default commands for propose_patch mode", () => {

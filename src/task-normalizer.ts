@@ -65,6 +65,10 @@ function defaultCommands(task: RunnerTask, primaryRepo?: RunnerRepo): string[] {
   // Patch mode always takes priority over preset so that
   // openclaw-plugin-a2a-dev tasks in github-propose-patch / propose_patch
   // mode produce a PR instead of running test-only commands.
+  if (isPatchMode(task.mode) && task.commentOnly) {
+    return buildDefaultCommentOnlyCommands(task);
+  }
+
   if (isPatchMode(task.mode) && primaryRepo) {
     return buildDefaultPatchCommands(task, primaryRepo);
   }
@@ -82,6 +86,22 @@ function defaultCommands(task: RunnerTask, primaryRepo?: RunnerRepo): string[] {
   }
 
   return [];
+}
+
+function buildDefaultCommentOnlyCommands(task: RunnerTask): string[] {
+  const safeTitle = (task.id || "a2a-closeout").replace(/[^a-zA-Z0-9_.-]/g, "_");
+  const existingPrUrl = task.existingPrUrl ?? buildExistingPrUrl(task);
+
+  return [[
+    `cat > /work/artifacts/prompt.md << 'A2A_PROMPT_EOF'`,
+    task.prompt ?? `Comment-only closeout task ${task.id}`,
+    `A2A_PROMPT_EOF`,
+    `printf 'patch_mode=comment_only\\n' | tee -a /work/artifacts/summary.txt`,
+    `printf 'new_pr_allowed=0\\n' | tee -a /work/artifacts/summary.txt`,
+    `printf 'task=%s\\n' ${shellSingleQuote(safeTitle)} | tee -a /work/artifacts/summary.txt`,
+    ...(existingPrUrl ? [`printf 'existing_pr=%s\\n' ${shellSingleQuote(existingPrUrl)} | tee -a /work/artifacts/summary.txt`] : []),
+    `printf 'status=comment_only_done\\n' | tee -a /work/artifacts/summary.txt`,
+  ].join("\n")];
 }
 
 function buildDefaultPatchCommands(task: RunnerTask, primaryRepo: RunnerRepo): string[] {
@@ -169,16 +189,22 @@ function buildDefaultPatchCommands(task: RunnerTask, primaryRepo: RunnerRepo): s
     ``,
     `# Commit and create PR if changes exist.`,
     `if [ -n "$(git status --porcelain)" ]; then`,
-    `  git add -A`,
-    `  git commit -m "Auto-patch: ${safeTitle}"`,
-    `  git push origin "$BRANCH"`,
-    `  cat > /work/artifacts/pr-body.md <<'A2A_PR_BODY_EOF'`,
-    prBody,
-    `A2A_PR_BODY_EOF`,
-    `  gh pr create --base "${baseBranch}" --head "$BRANCH" \\`,
-    `    --title "Patch: ${safeTitle}" \\`,
-    `    --body-file /work/artifacts/pr-body.md \\`,
-    `    2>&1 | tee /work/artifacts/pr-output.txt || true`,
+    ...(task.forbidNewPr ? [
+      `  printf 'error=new_pr_forbidden\\n' | tee -a /work/artifacts/summary.txt`,
+      `  printf 'Task forbids creating a new PR; use an existing PR refresh path or comment-only closeout.\\n' | tee /work/artifacts/pr-output.txt`,
+      `  exit 2`,
+    ] : [
+      `  git add -A`,
+      `  git commit -m "Auto-patch: ${safeTitle}"`,
+      `  git push origin "$BRANCH"`,
+      `  cat > /work/artifacts/pr-body.md <<'A2A_PR_BODY_EOF'`,
+      prBody,
+      `A2A_PR_BODY_EOF`,
+      `  gh pr create --base "${baseBranch}" --head "$BRANCH" \\`,
+      `    --title "Patch: ${safeTitle}" \\`,
+      `    --body-file /work/artifacts/pr-body.md \\`,
+      `    2>&1 | tee /work/artifacts/pr-output.txt || true`,
+    ]),
     `  PR_URL="$(grep -Eo 'https://github.com/[^[:space:]]+/pull/[0-9]+' /work/artifacts/pr-output.txt | tail -n 1 || true)"`,
     `  if [ -z "$PR_URL" ]; then`,
     `    printf 'error=pr_create_failed_or_missing_url\\n' | tee -a /work/artifacts/summary.txt`,
@@ -206,6 +232,15 @@ function buildPrBody(task: RunnerTask, safeTitle: string, issueClosingRef?: stri
     "See artifacts/prompt.md for full prompt.",
   ];
   return lines.join("\n");
+}
+
+function buildExistingPrUrl(task: RunnerTask): string | undefined {
+  const repo = task.repo ?? task.repos?.find((candidate) => candidate.primary)?.url ?? task.repos?.[0]?.url;
+  const repoSlug = repo ? parseGitHubRepoSlug(repo) : undefined;
+  const rawNumber = task.existingPrNumber != null ? String(task.existingPrNumber) : undefined;
+  const prNumber = rawNumber?.match(/#?(\d+)/)?.[1];
+  if (!repoSlug || !prNumber) return undefined;
+  return `https://github.com/${repoSlug}/pull/${prNumber}`;
 }
 
 function buildIssueClosingRef(task: RunnerTask, primaryRepo: RunnerRepo): string | undefined {
