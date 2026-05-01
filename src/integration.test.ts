@@ -835,6 +835,70 @@ test("buildHandlerResult: includes terminal evidence for broker push notificatio
   assert.equal(handlerResult.terminalEvidence.testSummary.exitCode, 1);
 });
 
+test("buildHandlerResult: broker runnerRaw trims non-broker fields while preserving evidence", () => {
+  const result: RawRunnerOutput = {
+    ok: true, taskId: "t-diet", status: "completed", workDir: "/tmp/runner/private-workdir",
+    exitCode: 0, signal: null,
+    stdout: "raw stdout ".repeat(5000), stderr: "raw stderr ".repeat(5000),
+    artifacts: ["/tmp/runner/private-workdir/artifacts/summary.txt"],
+    artifactManifest: {
+      schemaVersion: 1,
+      manifestPath: "artifacts/manifest.json",
+      generatedAt: "1970-01-01T00:00:00.000Z",
+      artifacts: [
+        { path: "artifacts/summary.txt", name: "summary.txt", sizeBytes: 10 },
+        { path: "artifacts/patch.diff", name: "patch.diff", sizeBytes: 1000 },
+      ],
+    },
+    resultSummary: {
+      exitCode: 0, signal: null, timedOut: false,
+      stdout: "bounded stdout", stderr: "bounded stderr",
+      stdoutTruncated: true, stderrTruncated: true, artifactCount: 2, manifestPath: "artifacts/manifest.json",
+    },
+    github: { prUrl: "https://github.com/jinwon-int/repo/pull/123" },
+  };
+
+  const handlerResult = buildHandlerResult(result, { id: "t-diet" }, "sogyo");
+  const runnerRaw = handlerResult.runnerRaw as Record<string, unknown>;
+  const legacyPayloadSize = Buffer.byteLength(JSON.stringify({
+    ...result,
+    stdout: result.resultSummary?.stdout,
+    stderr: result.resultSummary?.stderr,
+    artifacts: ["artifacts/summary.txt", "artifacts/patch.diff"],
+  }));
+  const trimmedPayloadSize = Buffer.byteLength(JSON.stringify(runnerRaw));
+
+  assert.equal(runnerRaw.github, result.github);
+  assert.equal(runnerRaw.ok, true);
+  assert.equal(runnerRaw.status, "completed");
+  assert.equal(runnerRaw.stdout, "bounded stdout");
+  assert.equal(runnerRaw.stderr, "bounded stderr");
+  assert.deepEqual(runnerRaw.artifacts, ["artifacts/summary.txt", "artifacts/patch.diff"]);
+  assert.equal(runnerRaw.manifestPath, "artifacts/manifest.json");
+  assert.equal(Object.hasOwn(runnerRaw, "workDir"), false);
+  assert.equal(Object.hasOwn(runnerRaw, "artifactManifest"), false);
+  assert.equal(Object.hasOwn(runnerRaw, "resultSummary"), false);
+  assert.ok(trimmedPayloadSize < legacyPayloadSize, trimmedPayloadSize + " should be smaller than " + legacyPayloadSize);
+});
+
+test("buildHandlerResult: broker runnerRaw bounds legacy raw streams when resultSummary is absent", () => {
+  const result: RawRunnerOutput = {
+    ok: false, taskId: "t-legacy-large", status: "failed", workDir: "/tmp",
+    stdout: "legacy-stdout-".repeat(500),
+    stderr: "legacy-stderr-".repeat(500),
+    artifacts: [],
+    error: "legacy-error-".repeat(500),
+    github: { blockCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-123" },
+  };
+  const handlerResult = buildHandlerResult(result, { id: "t-legacy-large" }, "sogyo");
+  const runnerRaw = handlerResult.runnerRaw as Record<string, string>;
+
+  assert.ok(runnerRaw.stdout.length < result.stdout.length);
+  assert.ok(runnerRaw.stderr.length < result.stderr.length);
+  assert.ok(runnerRaw.error.length < result.error!.length);
+  assert.match(runnerRaw.stdout, /truncated \d+ chars for broker update/);
+});
+
 test("buildHandlerResult: PR takes precedence over block in evidence (deterministic ordering)", () => {
   const result: RawRunnerOutput = {
     ok: false, taskId: "mixed", status: "failed", workDir: "/tmp",
