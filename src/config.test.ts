@@ -15,6 +15,45 @@ test("loadConfig reads OpenClaw patch command script env var", async () => {
   assert.equal(config.commandScript, "#!/usr/bin/env bash\nopenclaw agent --help");
 });
 
+test("loadConfig builds first-class OpenClaw patch profile", async () => {
+  const config = await loadConfig({
+    ...baseEnv,
+    A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE: "openclaw",
+    A2A_OPENCLAW_AGENT_ID: "main",
+    A2A_OPENCLAW_THINKING: "medium",
+    A2A_OPENCLAW_TIMEOUT_SEC: "1800",
+  });
+
+  assert.match(config.commandScript ?? "", /openclaw agent/);
+  assert.match(config.commandScript ?? "", /--thinking 'medium'/);
+  assert.equal(config.commandJson, undefined);
+  assert.deepEqual(config.extraMounts, [
+    { source: "/root/.openclaw", target: "/run/secrets/openclaw-dir", readOnly: true },
+  ]);
+});
+
+test("loadConfig OpenClaw patch profile honors custom config dir", async () => {
+  const config = await loadConfig({
+    ...baseEnv,
+    A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE: "openclaw",
+    A2A_DOCKER_RUNNER_OPENCLAW_CONFIG_DIR: "/srv/openclaw-profile",
+  });
+
+  assert.deepEqual(config.extraMounts, [
+    { source: "/srv/openclaw-profile", target: "/run/secrets/openclaw-dir", readOnly: true },
+  ]);
+});
+
+test("loadConfig rejects unsupported patch command profile", async () => {
+  await assert.rejects(
+    () => loadConfig({
+      ...baseEnv,
+      A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE: "claude",
+    }),
+    /unsupported A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE/,
+  );
+});
+
 test("loadConfig reads Codex patch command JSON env var", async () => {
   const config = await loadConfig({
     ...baseEnv,
@@ -37,6 +76,7 @@ test("loadConfig rejects legacy patch command template even with allowed executo
 test("loadConfig patch command precedence is script > json > template", async () => {
   const scriptConfig = await loadConfig({
     ...baseEnv,
+    A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE: "openclaw",
     A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT: "codex exec script",
     A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON: JSON.stringify({ argv: ["codex", "exec", "json"] }),
     A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE: "openclaw agent --help",
