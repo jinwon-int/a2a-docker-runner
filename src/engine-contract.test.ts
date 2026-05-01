@@ -53,6 +53,13 @@ test("builds a Docker/Podman-compatible invocation contract without requiring an
   assert.deepEqual(args.slice(-3), ["example/image:ci", "bash", "/work/run.sh"]);
 });
 
+test("buildRunArgs uses configured container network", () => {
+  const args = buildRunArgs({ ...config, network: "host" }, task, "/tmp/a2a-work", "ci-run-2");
+
+  const networkIndex = args.indexOf("--network");
+  assert.equal(args[networkIndex + 1], "host");
+});
+
 // ---------------------------------------------------------------------------
 // Safe patch command paths: buildRunArgs injection behaviour
 // ---------------------------------------------------------------------------

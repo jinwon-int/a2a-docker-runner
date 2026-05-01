@@ -8,6 +8,8 @@ export interface RunnerConfig {
   defaultTimeoutMs: number;
   memory?: string;
   cpus?: string;
+  /** Container network mode. Defaults to bridge; OpenClaw profile uses host to reach the local gateway. */
+  network?: string;
   /** Additional host paths to mount into the runner container. */
   extraMounts?: RunnerExtraMount[];
   /**
