@@ -138,7 +138,6 @@ tar -C /run/secrets/openclaw-dir \
   --exclude='./memory-wiki-vault' \
   --exclude='./plugin-runtime-deps' \
   --exclude='./openclaw-hotpatch' \
-  --exclude='./a2a-broker-runtime' \
   --exclude='./agents/*/sessions' \
   --exclude='./agents/*/sessions.json' \
   -cf - . | tar -C /root/.openclaw -xf -
