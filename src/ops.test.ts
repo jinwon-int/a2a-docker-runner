@@ -36,10 +36,10 @@ test("GitHub patch readiness accepts safe commandScript", () => {
 test("GitHub patch readiness accepts commandJson argv and rejects malformed JSON", () => {
   const ready = checkGitHubPatchReadiness({
     ...config("/tmp/a2a-test"),
-    commandJson: JSON.stringify({ argv: ["node", "agent.js"], env: { A: "B" } }),
+    commandJson: JSON.stringify({ argv: ["codex", "exec", "--help"], env: { A: "B" } }),
   });
   assert.equal(ready.status, "ok");
-  assert.equal(ready.detail?.argvCount, 2);
+  assert.equal(ready.detail?.argvCount, 3);
 
   const malformed = checkGitHubPatchReadiness({
     ...config("/tmp/a2a-test"),
@@ -56,15 +56,17 @@ test("GitHub patch readiness accepts commandJson argv and rejects malformed JSON
   assert.match(emptyArgv.message, /non-empty string argv array/);
 });
 
-test("GitHub patch readiness warns for legacy commandTemplate eval path", () => {
+test("GitHub patch readiness fails for legacy commandTemplate eval path", () => {
   const report = checkGitHubPatchReadiness({
     ...config("/tmp/a2a-test"),
-    commandTemplate: "echo legacy",
+    commandTemplate: "openclaw agent --help",
   });
 
-  assert.equal(report.status, "warn");
+  assert.equal(report.status, "fail");
+  assert.match(report.message, /blocks legacy commandTemplate/);
   assert.equal(report.detail?.safe, false);
   assert.equal(report.detail?.eval, true);
+  assert.deepEqual(report.detail?.allowedExecutors, ["openclaw", "codex"]);
 });
 
 test("install is idempotent and validates task root plus read-only secret mount intent", async () => {
