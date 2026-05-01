@@ -299,12 +299,25 @@ function brokerFacingRunnerRaw(result: RawRunnerOutput): Record<string, unknown>
     return result as unknown as Record<string, unknown>;
   }
 
-  return {
-    ...result,
+  const payload: Record<string, unknown> = {
+    ok: result.ok,
+    taskId: result.taskId,
+    status: result.status,
     stdout: result.resultSummary.stdout,
     stderr: result.resultSummary.stderr,
     artifacts: resultFilesChanged(result),
-  } as unknown as Record<string, unknown>;
+    resultSummary: result.resultSummary,
+  };
+
+  if (result.exitCode !== undefined) payload.exitCode = result.exitCode;
+  if (result.signal !== undefined) payload.signal = result.signal;
+  if (result.error !== undefined) payload.error = result.error;
+  if (result.prUrl !== undefined) payload.prUrl = result.prUrl;
+  if (result.github !== undefined) payload.github = result.github;
+
+  return {
+    ...payload,
+  };
 }
 
 function normalizeString(value?: string): string | undefined {
