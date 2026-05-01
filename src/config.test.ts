@@ -6,6 +6,36 @@ const baseEnv = {
   A2A_DOCKER_RUNNER_SKIP_ENGINE_DETECT: "1",
 };
 
+test("loadConfig reads bounded safe runner build metadata", async () => {
+  const config = await loadConfig({
+    ...baseEnv,
+    A2A_DOCKER_RUNNER_IMAGE: "ghcr.io/jinwon-int/a2a-docker-runner:ci",
+    A2A_DOCKER_RUNNER_BUILD_VERSION: "0.1.0",
+    A2A_DOCKER_RUNNER_BUILD_SOURCE: "https://github.com/jinwon-int/a2a-docker-runner",
+    A2A_DOCKER_RUNNER_BUILD_REVISION: "0123456789abcdef",
+    A2A_DOCKER_RUNNER_BUILD_BUILT_AT: "2026-05-01T00:00:00Z",
+  });
+
+  assert.deepEqual(config.buildMetadata, {
+    version: "0.1.0",
+    source: "https://github.com/jinwon-int/a2a-docker-runner",
+    revision: "0123456789abcdef",
+    builtAt: "2026-05-01T00:00:00Z",
+    image: "ghcr.io/jinwon-int/a2a-docker-runner:ci",
+  });
+});
+
+test("loadConfig drops unsafe runner build metadata values", async () => {
+  const config = await loadConfig({
+    ...baseEnv,
+    A2A_DOCKER_RUNNER_BUILD_SOURCE: "/root/private/checkout",
+    A2A_DOCKER_RUNNER_BUILD_REVISION: "token=ghp_" + "x".repeat(36),
+    A2A_DOCKER_RUNNER_BUILD_IMAGE: "safe-image:latest\nignored-line",
+  });
+
+  assert.deepEqual(config.buildMetadata, { image: "safe-image:latest ignored-line" });
+});
+
 test("loadConfig reads OpenClaw patch command script env var", async () => {
   const config = await loadConfig({
     ...baseEnv,

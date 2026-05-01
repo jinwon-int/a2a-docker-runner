@@ -56,6 +56,35 @@ test("builds a Docker/Podman-compatible invocation contract without requiring an
   assert.deepEqual(args.slice(-3), ["example/image:ci", "bash", "/work/run.sh"]);
 });
 
+test("buildRunArgs injects safe runner build metadata env", () => {
+  const args = buildRunArgs({
+    ...config,
+    buildMetadata: {
+      version: "0.1.0",
+      source: "https://github.com/jinwon-int/a2a-docker-runner",
+      revision: "abc123",
+      builtAt: "2026-05-01T00:00:00Z",
+      image: "ghcr.io/jinwon-int/a2a-docker-runner:abc123",
+    },
+  }, task, "/tmp/a2a-work", "ci-run-build");
+
+  assert.ok(args.includes("A2A_RUNNER_BUILD_VERSION=0.1.0"));
+  assert.ok(args.includes("A2A_RUNNER_BUILD_SOURCE=https://github.com/jinwon-int/a2a-docker-runner"));
+  assert.ok(args.includes("A2A_RUNNER_BUILD_REVISION=abc123"));
+  assert.ok(args.includes("A2A_RUNNER_BUILD_BUILT_AT=2026-05-01T00:00:00Z"));
+  assert.ok(args.includes("A2A_RUNNER_BUILD_IMAGE=ghcr.io/jinwon-int/a2a-docker-runner:abc123"));
+});
+
+test("container script records injected runner build metadata in summary", () => {
+  const script = buildContainerScript({ ...task, repos: [], commands: [] });
+
+  assert.match(script, /runner\.version/);
+  assert.match(script, /runner\.revision/);
+  assert.match(script, /runner\.source/);
+  assert.match(script, /runner\.builtAt/);
+  assert.match(script, /runner\.image/);
+});
+
 test("buildRunArgs uses configured container network", () => {
   const args = buildRunArgs({ ...config, network: "host" }, task, "/tmp/a2a-work", "ci-run-2");
 

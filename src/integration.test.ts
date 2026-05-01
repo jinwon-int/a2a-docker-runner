@@ -787,6 +787,13 @@ test("buildTerminalEvidenceEvent: emits compact safe PR evidence without raw log
       exitCode: 0, signal: null, timedOut: false,
       stdout: "bounded stdout", stderr: "bounded stderr",
       stdoutTruncated: false, stderrTruncated: false, artifactCount: 1, manifestPath: "artifacts/manifest.json",
+      runnerBuild: {
+        version: "0.1.0",
+        source: "https://github.com/jinwon-int/a2a-docker-runner",
+        revision: "abc123",
+        builtAt: "2026-05-01T00:00:00Z",
+        image: "ghcr.io/jinwon-int/a2a-docker-runner:abc123",
+      },
     },
     github: { prUrl: "https://github.com/jinwon-int/repo/pull/79" },
   };
@@ -806,6 +813,13 @@ test("buildTerminalEvidenceEvent: emits compact safe PR evidence without raw log
   assert.equal(event.issue, "https://github.com/jinwon-int/repo/issues/79");
   assert.equal(event.prUrl, "https://github.com/jinwon-int/repo/pull/79");
   assert.equal(event.testSummary.label, "a2a-docker-runner completed; PR evidence; exit=0; timedOut=false; artifacts=1");
+  assert.deepEqual(event.runnerBuild, {
+    version: "0.1.0",
+    source: "https://github.com/jinwon-int/a2a-docker-runner",
+    revision: "abc123",
+    builtAt: "2026-05-01T00:00:00Z",
+    image: "ghcr.io/jinwon-int/a2a-docker-runner:abc123",
+  });
   assert.deepEqual(event.timestamps, { emittedAt: "2026-05-01T12:00:00.000Z" });
 
   const serialized = JSON.stringify(event);

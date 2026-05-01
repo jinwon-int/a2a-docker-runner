@@ -8,7 +8,7 @@
  * Broker claim/heartbeat logic is NOT touched by this module.
  */
 
-import type { ArtifactManifest, GitHubEvidence, ResultSummary, RunnerTask } from "./types.js";
+import type { ArtifactManifest, GitHubEvidence, ResultSummary, RunnerBuildMetadata, RunnerTask } from "./types.js";
 
 // ── Handler payload shape (what the broker sends to the worker) ────────────
 
@@ -102,6 +102,8 @@ export interface TerminalEvidenceEvent {
     stdoutTruncated?: boolean;
     stderrTruncated?: boolean;
   };
+  /** Bounded build/source metadata; no raw env, secrets, or host paths. */
+  runnerBuild?: RunnerBuildMetadata;
   timestamps: {
     emittedAt: string;
   };
@@ -230,6 +232,7 @@ export interface RawRunnerOutput {
   artifactManifest?: ArtifactManifest;
   /** Bounded/redacted payload-safe summary emitted by modern runner versions. */
   resultSummary?: ResultSummary;
+  runnerBuild?: RunnerBuildMetadata;
   prUrl?: string;
   error?: string;
   github?: GitHubEvidence;
@@ -367,6 +370,7 @@ export function buildTerminalEvidenceEvent(
       stdoutTruncated: summary?.stdoutTruncated,
       stderrTruncated: summary?.stderrTruncated,
     },
+    runnerBuild: summary?.runnerBuild ?? result.runnerBuild,
     timestamps: { emittedAt },
   };
 }
@@ -399,6 +403,7 @@ function brokerFacingRunnerRaw(result: RawRunnerOutput): Record<string, unknown>
     artifactCount: result.resultSummary?.artifactCount ?? resultFilesChanged(result).length,
     artifacts: resultFilesChanged(result),
     manifestPath: result.resultSummary?.manifestPath ?? result.artifactManifest?.manifestPath,
+    runnerBuild: result.resultSummary?.runnerBuild ?? result.runnerBuild,
     prUrl: result.prUrl,
     github: result.github,
     error,

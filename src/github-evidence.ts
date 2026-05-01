@@ -194,6 +194,7 @@ export function buildBlockCommentBody(task: NormalizedRunnerTask, result: Runner
   const reason = buildReason(result);
   const action = buildAction(result, lang);
   const artifactLines = buildArtifactSummaryLines(result, lang);
+  const buildLines = buildRunnerBuildLines(result, lang);
   const commandLogLines = buildCommandLogLines(result, lang);
 
   if (lang === "ko") {
@@ -214,6 +215,9 @@ export function buildBlockCommentBody(task: NormalizedRunnerTask, result: Runner
       "",
       "### 아티팩트 manifest 요약",
       ...artifactLines,
+      "",
+      "### Runner build",
+      ...buildLines,
       "",
       "### 명령 로그 요약",
       ...commandLogLines,
@@ -240,6 +244,9 @@ export function buildBlockCommentBody(task: NormalizedRunnerTask, result: Runner
     "### Artifact manifest summary",
     ...artifactLines,
     "",
+    "### Runner build",
+    ...buildLines,
+    "",
     "### Command log summary",
     ...commandLogLines,
     "",
@@ -254,6 +261,7 @@ export function buildDoneCommentBody(task: NormalizedRunnerTask, result: RunnerR
   const lang = task.reportLanguage ?? "ko";
   const requestedBy = task.requestedBy ?? "a2a-broker";
   const artifactLines = buildArtifactSummaryLines(result, lang);
+  const buildLines = buildRunnerBuildLines(result, lang);
   const commandLogLines = buildCommandLogLines(result, lang);
   const existingPr = buildExistingPrLine(task, lang);
 
@@ -274,6 +282,9 @@ export function buildDoneCommentBody(task: NormalizedRunnerTask, result: RunnerR
       "",
       "### 아티팩트 manifest 요약",
       ...artifactLines,
+      "",
+      "### Runner build",
+      ...buildLines,
       "",
       "### 명령 로그 요약",
       ...commandLogLines,
@@ -298,6 +309,9 @@ export function buildDoneCommentBody(task: NormalizedRunnerTask, result: RunnerR
     "",
     "### Artifact manifest summary",
     ...artifactLines,
+    "",
+    "### Runner build",
+    ...buildLines,
     "",
     "### Command log summary",
     ...commandLogLines,
@@ -365,6 +379,24 @@ function buildArtifactSummaryLines(result: RunnerResult, lang: string): string[]
   }
   if (entries.length > 10) lines.push(`- ... ${entries.length - 10} more`);
   return lines;
+}
+
+function buildRunnerBuildLines(result: RunnerResult, lang: string): string[] {
+  const build = result.resultSummary?.runnerBuild ?? result.runnerBuild;
+  if (!build || Object.values(build).every((value) => !value)) {
+    return [lang === "ko" ? "- 주입된 runner build metadata 없음" : "- No runner build metadata injected"];
+  }
+
+  const labels: Array<[string, string | undefined]> = [
+    ["version", build.version],
+    ["revision", build.revision],
+    ["source", build.source],
+    ["builtAt", build.builtAt],
+    ["image", build.image],
+  ];
+  return labels
+    .filter(([, value]) => Boolean(value))
+    .map(([key, value]) => `- ${key}: \`${sanitizeCommentText(truncate(value!, 200))}\``);
 }
 
 function buildCommandLogLines(result: RunnerResult, lang: string): string[] {

@@ -4,6 +4,8 @@ export interface RunnerConfig {
   rootDir: string;
   engine?: RunnerEngine;
   image: string;
+  /** Safe runner build/source metadata propagated to containers and evidence. */
+  buildMetadata?: RunnerBuildMetadata;
   githubTokenFile?: string;
   defaultTimeoutMs: number;
   memory?: string;
@@ -35,6 +37,14 @@ export interface RunnerConfig {
    * Runner serialises this into a safe script, avoiding eval.
    */
   commandJson?: string;
+}
+
+export interface RunnerBuildMetadata {
+  version?: string;
+  source?: string;
+  revision?: string;
+  builtAt?: string;
+  image?: string;
 }
 
 export interface RunnerExtraMount {
@@ -137,6 +147,8 @@ export interface ResultSummary {
   stderrTruncated: boolean;
   artifactCount: number;
   manifestPath: string;
+  /** Bounded, secret-free runner build metadata suitable for broker/operator evidence. */
+  runnerBuild?: RunnerBuildMetadata;
 }
 
 export interface RunnerResult {
@@ -153,6 +165,8 @@ export interface RunnerResult {
   artifactManifest?: ArtifactManifest;
   /** Bounded/redacted payload-safe result summary. */
   resultSummary?: ResultSummary;
+  /** Bounded, secret-free runner build metadata. Prefer resultSummary.runnerBuild for evidence payloads. */
+  runnerBuild?: RunnerBuildMetadata;
   /** @deprecated Prefer github.prUrl for structured evidence. */
   prUrl?: string;
   error?: string;
