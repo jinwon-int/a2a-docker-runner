@@ -15,6 +15,7 @@ export interface OpsCheck {
 export interface DoctorReport {
   ok: boolean;
   engine: RunnerEngine;
+  runnerRevision: OpsCheck;
   docker: OpsCheck;
   podman: OpsCheck;
   taskRoot: OpsCheck;
@@ -208,6 +209,7 @@ async function runAgeMs(runDir: string, nowMs: number, mtimeMsFallback: number):
 }
 
 export async function doctor(config: RunnerConfig): Promise<DoctorReport> {
+  const runnerRevision = await checkDeployedRevision();
   const docker = checkEngine("docker");
   const podman = checkEngine("podman");
   const configuredEngine = config.engine;
@@ -225,8 +227,9 @@ export async function doctor(config: RunnerConfig): Promise<DoctorReport> {
   const githubPatch = checkGitHubPatchReadiness(config);
   const engineReady = docker.status === "ok" || podman.status === "ok";
   return {
-    ok: engineReady && [taskRoot, secretMount, extraMounts, baseImage, githubPatch].every((check) => check.status !== "fail"),
+    ok: engineReady && [runnerRevision, taskRoot, secretMount, extraMounts, baseImage, githubPatch].every((check) => check.status !== "fail"),
     engine,
+    runnerRevision,
     docker,
     podman,
     taskRoot,
@@ -234,6 +237,53 @@ export async function doctor(config: RunnerConfig): Promise<DoctorReport> {
     extraMounts,
     baseImage,
     githubPatch,
+  };
+}
+
+export async function checkDeployedRevision(cwd = process.cwd(), upstreamRef = "origin/main"): Promise<OpsCheck> {
+  const version = await readPackageVersion(cwd);
+  const insideWorkTree = git(cwd, ["rev-parse", "--is-inside-work-tree"]);
+
+  if (insideWorkTree.status !== 0 || insideWorkTree.stdout.trim() !== "true") {
+    return {
+      status: version ? "warn" : "fail",
+      message: version
+        ? "runner version is available but deployed git revision is not inspectable"
+        : "runner deployed revision is not inspectable",
+      detail: compactRevisionDetail({ version, summaryStatus: version ? "WARN" : "FAIL", reason: "not a git checkout" }),
+    };
+  }
+
+  const localSha = git(cwd, ["rev-parse", "--short=12", "HEAD"]).stdout.trim() || undefined;
+  const fullLocalSha = git(cwd, ["rev-parse", "HEAD"]).stdout.trim() || undefined;
+  const branch = git(cwd, ["branch", "--show-current"]).stdout.trim() || "detached";
+  const dirty = git(cwd, ["status", "--porcelain"]).stdout.trim().length > 0;
+  const upstreamSha = await resolveUpstreamMainSha(cwd, upstreamRef);
+
+  const reasons: string[] = [];
+  if (!localSha) reasons.push("local SHA unavailable");
+  if (dirty) reasons.push("dirty worktree");
+  if (branch !== "main") reasons.push(`branch is ${branch}`);
+  if (upstreamSha && fullLocalSha && upstreamSha.full !== fullLocalSha) reasons.push("local revision differs from upstream main");
+  if (!upstreamSha) reasons.push("upstream main unavailable");
+
+  const status: OpsStatus = !localSha ? "fail" : reasons.length ? "warn" : "ok";
+  const summaryStatus = status === "ok" ? "PASS" : status === "warn" ? "WARN" : "FAIL";
+
+  return {
+    status,
+    message: status === "ok"
+      ? "runner deployed revision matches upstream main"
+      : "runner deployed revision needs operator review",
+    detail: compactRevisionDetail({
+      version,
+      localSha,
+      upstreamMainSha: upstreamSha?.short,
+      branch,
+      dirty,
+      summaryStatus,
+      reason: reasons.join("; ") || undefined,
+    }),
   };
 }
 
@@ -358,6 +408,70 @@ export function checkGitHubPatchReadiness(config: RunnerConfig): OpsCheck {
       missing: ["A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT", "A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON"],
       fallback: "missing command yields Block evidence; it must not be reported as Done",
     },
+  };
+}
+
+function git(cwd: string, args: string[]): { status: number | null; stdout: string; stderr: string } {
+  const result = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8", timeout: 5000 });
+  return { status: result.status, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
+}
+
+async function readPackageVersion(cwd: string): Promise<string | undefined> {
+  try {
+    const parsed = JSON.parse(await readFile(join(cwd, "package.json"), "utf8")) as { version?: unknown };
+    return typeof parsed.version === "string" ? parsed.version : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function resolveUpstreamMainSha(cwd: string, upstreamRef: string): Promise<{ full: string; short: string } | undefined> {
+  const remote = upstreamRef.includes("/") ? upstreamRef.slice(0, upstreamRef.indexOf("/")) : "origin";
+  const remoteHead = git(cwd, ["ls-remote", "--heads", remote, "main"]);
+  const match = /(^|\n)([0-9a-f]{40})\s+refs\/heads\/main(?:\n|$)/i.exec(remoteHead.stdout);
+  if (match) {
+    const full = match[2].toLowerCase();
+    return { full, short: full.slice(0, 12) };
+  }
+
+  const localRef = git(cwd, ["rev-parse", upstreamRef]);
+  const localRefSha = normalizeSha(localRef.stdout.trim());
+  if (localRefSha) return { full: localRefSha, short: localRefSha.slice(0, 12) };
+  return undefined;
+}
+
+function normalizeSha(value: string): string | undefined {
+  return /^[0-9a-f]{40}$/i.test(value) ? value.toLowerCase() : undefined;
+}
+
+function compactRevisionDetail(input: {
+  version?: string;
+  localSha?: string;
+  upstreamMainSha?: string;
+  branch?: string;
+  dirty?: boolean;
+  summaryStatus: "PASS" | "WARN" | "FAIL";
+  reason?: string;
+}): Record<string, unknown> {
+  const branch = input.branch ?? "unknown";
+  const dirty = input.dirty ?? false;
+  const summary = [
+    input.summaryStatus,
+    `runner=${input.version ? `v${input.version}` : "unknown"}`,
+    `local=${input.localSha ?? "unknown"}`,
+    `upstreamMain=${input.upstreamMainSha ?? "unknown"}`,
+    `branch=${branch}`,
+    `dirty=${dirty ? "yes" : "no"}`,
+  ].join(" ");
+
+  return {
+    version: input.version,
+    localSha: input.localSha,
+    upstreamMainSha: input.upstreamMainSha,
+    branch,
+    dirty,
+    summary,
+    ...(input.reason ? { reason: input.reason } : {}),
   };
 }
 

@@ -177,6 +177,26 @@ command output. Detailed logs remain in runner artifacts and bounded
 - optional GitHub hosts secret readability and intended `:ro` container mount
 - configured base-image presence or pull readiness
 - `githubPatch` readiness for generic `github-propose-patch` execution
+- `runnerRevision` deployed-revision drift status for the runner checkout/package
+
+`runnerRevision.detail.summary` is a compact operator line suitable for broker/plugin surfaces. It reports the deployed package version, local runner SHA, upstream GitHub `main` SHA when available, branch, and dirty-worktree state without echoing remotes, tokens, secret files, or host-specific paths. A clean current checkout returns `status: "ok"`; stale, dirty, non-main, or upstream-unavailable source checkouts return `status: "warn"` so rollout operators can review drift without blocking unrelated readiness checks.
+
+Examples:
+
+```text
+PASS runner=v0.1.0 local=ff4c244a38a7 upstreamMain=ff4c244a38a7 branch=main dirty=no
+WARN runner=v0.1.0 local=160bd95af6b4 upstreamMain=ff4c244a38a7 branch=main dirty=no
+WARN runner=v0.1.0 local=ff4c244a38a7 upstreamMain=ff4c244a38a7 branch=feature/drift dirty=yes
+```
+
+To check the four deployed workers from an operator shell, run the doctor in each runner checkout and print only the compact line:
+
+```bash
+for host in bangtong dungae sogyo nosuk; do
+  printf '%s ' "$host"
+  ssh "$host" 'cd /opt/a2a-docker-runner && node dist/cli.js doctor | jq -r .runnerRevision.detail.summary'
+done
+```
 
 `githubPatch.status` is `ok` when `commandScript` or valid `commandJson` is configured and `fail` when no patch command is configured or a legacy `commandTemplate` eval path is present. A failed `githubPatch` check means Docker-first generic GitHub patch tasks are not ready and should produce Block evidence instead of Done/no-op success.
 
