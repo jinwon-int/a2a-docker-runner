@@ -159,7 +159,7 @@ This keeps `a2a-docker-runner` as the disposable execution sandbox while `opencl
 - configured base-image presence or pull readiness
 - `githubPatch` readiness for generic `github-propose-patch` execution
 
-`githubPatch.status` is `ok` when `commandScript` or valid `commandJson` is configured, `warn` for the legacy `commandTemplate` eval path, and `fail` when no patch command is configured. A failed `githubPatch` check means Docker-first generic GitHub patch tasks are not ready and should produce Block evidence instead of Done/no-op success.
+`githubPatch.status` is `ok` when `commandScript` or valid `commandJson` is configured and `fail` when no patch command is configured or a legacy `commandTemplate` eval path is present. A failed `githubPatch` check means Docker-first generic GitHub patch tasks are not ready and should produce Block evidence instead of Done/no-op success.
 
 `install` (alias: `setup`) is safe to rerun. It creates the task root with private permissions when missing and validates the optional secret file without touching live services.
 
@@ -209,18 +209,18 @@ For `github-propose-patch` / `propose_patch` mode tasks **without** explicit
    opens a PR via `gh pr create`.
 
 Step 2 can be configured from host environment. Prefer the safe host-side
-OpenClaw/Codex paths for new rollouts; the legacy template remains available for
-backwards compatibility. Claude-in-Docker is disabled by default and requires the
-explicit temporary opt-in `A2A_ALLOW_CLAUDE_IN_DOCKER=1` (or
-`A2A_DOCKER_RUNNER_ALLOW_CLAUDE_IN_DOCKER=1`).
+OpenClaw/Codex paths for new rollouts. The legacy template eval path is blocked
+for GitHub patch execution, and Claude-in-Docker references are rejected even if
+an old opt-in variable is present. This keeps plugin preset patch tasks from
+falling back to a blocked Claude-in-Docker command and falsely succeeding.
 
 Precedence is `commandScript > commandJson > commandTemplate`:
 
 | Host env | Runner config | Container path/variable | Notes |
 |---|---|---|---|
 | `A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT` | `commandScript` | `/work/patch-command.sh` | Recommended. Script content is written to a file and executed without `eval`. |
-| `A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON` | `commandJson` | `/work/patch-command.sh` and `A2A_PATCH_COMMAND_JSON` | JSON `{ "argv": [...], "env": {...} }` is converted into a quoted argv script. |
-| `A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE` | `commandTemplate` | `A2A_PATCH_COMMAND` | Legacy eval path; keep only for existing workers that still need it. |
+| `A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON` | `commandJson` | `/work/patch-command.sh` | JSON `{ "argv": [...], "env": {...} }` is converted into a quoted argv script. |
+| `A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE` | `commandTemplate` | blocked | Legacy eval path; rejected for GitHub patch execution. |
 
 Examples:
 
@@ -230,17 +230,15 @@ codex exec --full-auto "$(cat /work/artifacts/prompt.md)"'
 
 export A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON='{"argv":["codex","exec","--full-auto","example prompt"],"env":{"SAFE":"value"}}'
 
-# Legacy only, disabled unless A2A_ALLOW_CLAUDE_IN_DOCKER=1 is set:
-# export A2A_ALLOW_CLAUDE_IN_DOCKER=1
-# export A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE="claude --print --permission-mode bypassPermissions -p \"\$(cat /work/artifacts/prompt.md)\""
+# Legacy Claude-in-Docker commands are intentionally rejected for GitHub patch tasks.
+# Use host-side OpenClaw/Codex commandScript or commandJson instead.
 ```
 
-When no patch command config is set, `doctor` reports `githubPatch.status: "fail"`. The pipeline still runs safely, skips the coding agent step, and emits a `no_patch_command_configured` notice. Git operations (commit, push, PR create) only fire when `git status --porcelain` detects changes, and GitHub evidence collection treats the notice as Block evidence rather than Done evidence.
+When no patch command config is set, `doctor` reports `githubPatch.status: "fail"`. The generated patch pipeline now emits `error=no_patch_command_configured` and exits non-zero before any no-op PR flow can be reported as success. GitHub evidence collection treats the diagnostic as Block evidence rather than Done evidence.
 
 If a patch command or extra mount references Claude CLI, Claude credentials, or
-Claude-specific artifacts, config loading fails unless the explicit opt-in is
-set. This prevents accidental production fallback to Claude-in-Docker while still
-leaving a documented escape hatch for short-lived legacy recovery.
+Claude-specific artifacts, config loading fails. This prevents accidental
+production fallback to Claude-in-Docker.
 
 A safe Docker-first worker rollout from plugin-only routing to all-GitHub routing should therefore be:
 

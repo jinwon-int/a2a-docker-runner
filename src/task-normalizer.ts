@@ -123,8 +123,9 @@ function buildDefaultPatchCommands(task: RunnerTask, primaryRepo: RunnerRepo): s
     `  printf 'warning=deprecated_eval_path_prefer_commandScript_or_commandJson\\n' | tee -a /work/artifacts/summary.txt`,
     `  eval "\${A2A_PATCH_COMMAND}" 2>&1 | tee /work/artifacts/patch-command.log`,
     `else`,
-    `  printf 'notice=no_patch_command_configured\\n' | tee -a /work/artifacts/summary.txt`,
-    `  printf 'Set commandScript or commandJson in RunnerConfig to inject a coding agent.\\n' | tee /work/artifacts/patch-command.log`,
+    `  printf 'error=no_patch_command_configured\\n' | tee -a /work/artifacts/summary.txt`,
+    `  printf 'Set A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT or A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON to inject a host-side OpenClaw/Codex coding agent.\\n' | tee /work/artifacts/patch-command.log`,
+    `  exit 2`,
     `fi`,
   ].join("\n");
 
