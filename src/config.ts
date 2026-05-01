@@ -33,7 +33,17 @@ export async function loadConfig(env = process.env): Promise<RunnerConfig> {
 
 function loadExtraMounts(env: NodeJS.ProcessEnv): RunnerExtraMount[] | undefined {
   const raw = env.A2A_DOCKER_RUNNER_EXTRA_MOUNTS_JSON;
-  if (!raw) return undefined;
+  if (!raw) {
+    const profile = normalizePatchCommandProfile(env.A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE);
+    if (profile === "openclaw") {
+      return [{
+        source: env.A2A_DOCKER_RUNNER_OPENCLAW_CONFIG_DIR || "/root/.openclaw",
+        target: "/run/secrets/openclaw-dir",
+        readOnly: true,
+      }];
+    }
+    return undefined;
+  }
 
   let parsed: unknown;
   try {
@@ -76,7 +86,78 @@ function loadPatchCommandConfig(env: NodeJS.ProcessEnv): Pick<RunnerConfig, "com
   const commandJson = env.A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON || undefined;
   if (commandJson) return { commandJson };
 
+  const profile = normalizePatchCommandProfile(env.A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE);
+  if (profile === "openclaw") return { commandScript: buildOpenClawPatchCommandScript(env) };
+
   return { commandTemplate: env.A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE || undefined };
+}
+
+function normalizePatchCommandProfile(value?: string): "openclaw" | undefined {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase().replace(/_/g, "-");
+  if (normalized === "openclaw") return "openclaw";
+  throw new Error(`unsupported A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE: ${value}`);
+}
+
+function buildOpenClawPatchCommandScript(env: NodeJS.ProcessEnv): string {
+  const agent = shellSingleQuote(env.A2A_OPENCLAW_AGENT_ID || "main");
+  const thinking = shellSingleQuote(env.A2A_OPENCLAW_THINKING || "medium");
+  const timeout = shellSingleQuote(env.A2A_OPENCLAW_TIMEOUT_SEC || "1800");
+  return `#!/usr/bin/env bash
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+if [ ! -d /run/secrets/openclaw-dir ]; then
+  printf 'error=openclaw_config_mount_missing\\n' | tee -a /work/artifacts/summary.txt
+  printf 'Set A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE=openclaw and mount an OpenClaw config dir via A2A_DOCKER_RUNNER_OPENCLAW_CONFIG_DIR or A2A_DOCKER_RUNNER_EXTRA_MOUNTS_JSON.\\n' | tee /work/artifacts/patch-command.log
+  exit 2
+fi
+
+if ! command -v openclaw >/dev/null 2>&1; then
+  npm install -g openclaw >/work/artifacts/openclaw-install.log 2>&1
+fi
+
+rm -rf /root/.openclaw
+cp -a /run/secrets/openclaw-dir /root/.openclaw
+chmod -R u+rwX /root/.openclaw
+
+cat > /work/artifacts/openclaw-prompt.md <<'A2A_OPENCLAW_PROMPT_EOF'
+You are running inside the A2A Docker Runner on a checked-out GitHub repository.
+
+Use /work/artifacts/prompt.md as the assignment. Complete a minimal, safe patch in the current repository only.
+
+Rules:
+- Use OpenClaw tools available inside this container.
+- Do not run git commit, git push, or gh pr create; the runner will do that after you exit.
+- Do not write secrets, host-specific private paths, or raw session dumps.
+- Prefer small focused changes and tests.
+- If the assignment is unsafe or impossible, explain why and exit non-zero without changing files.
+- If no safe code/doc change is needed, exit non-zero so the runner posts Block evidence instead of a false Done.
+A2A_OPENCLAW_PROMPT_EOF
+
+printf '\\n--- A2A assignment ---\\n' >> /work/artifacts/openclaw-prompt.md
+cat /work/artifacts/prompt.md >> /work/artifacts/openclaw-prompt.md
+
+OPENCLAW_ASSIGNMENT_PROMPT="$(cat /work/artifacts/openclaw-prompt.md)"
+openclaw agent \\
+  --local \\
+  --agent ${agent} \\
+  --message "$OPENCLAW_ASSIGNMENT_PROMPT" \\
+  --thinking ${thinking} \\
+  --timeout ${timeout} \\
+  --json \\
+  2>&1 | tee /work/artifacts/openclaw-output.txt
+
+if [ -z "$(git status --porcelain)" ]; then
+  printf 'error=openclaw_completed_without_changes\\n' | tee -a /work/artifacts/summary.txt
+  printf 'OpenClaw produced no repository changes; refusing false Done.\\n' | tee -a /work/artifacts/patch-command.log
+  exit 2
+fi
+`;
+}
+
+function shellSingleQuote(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
 function validatePatchExecutorPolicy(

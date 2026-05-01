@@ -214,12 +214,13 @@ for GitHub patch execution, and Claude-in-Docker references are rejected even if
 an old opt-in variable is present. This keeps plugin preset patch tasks from
 falling back to a blocked Claude-in-Docker command and falsely succeeding.
 
-Precedence is `commandScript > commandJson > commandTemplate`:
+Precedence is `commandScript > commandJson > commandProfile > commandTemplate`:
 
 | Host env | Runner config | Container path/variable | Notes |
 |---|---|---|---|
 | `A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT` | `commandScript` | `/work/patch-command.sh` | Recommended. Script content is written to a file and executed without `eval`. |
 | `A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON` | `commandJson` | `/work/patch-command.sh` | JSON `{ "argv": [...], "env": {...} }` is converted into a quoted argv script. |
+| `A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE=openclaw` | generated `commandScript` | `/work/patch-command.sh` | First-class OpenClaw profile. Mounts `A2A_DOCKER_RUNNER_OPENCLAW_CONFIG_DIR` or `/root/.openclaw` read-only at `/run/secrets/openclaw-dir`, then runs `openclaw agent` in the checked-out repo. |
 | `A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE` | `commandTemplate` | blocked | Legacy eval path; rejected for GitHub patch execution. |
 
 Examples:
@@ -229,6 +230,12 @@ export A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT='#!/usr/bin/env bash
 codex exec --full-auto "$(cat /work/artifacts/prompt.md)"'
 
 export A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON='{"argv":["codex","exec","--full-auto","example prompt"],"env":{"SAFE":"value"}}'
+
+# Preferred fleet default when standardising A2A Docker patch execution on OpenClaw.
+export A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE=openclaw
+export A2A_DOCKER_RUNNER_OPENCLAW_CONFIG_DIR=/root/.openclaw
+export A2A_OPENCLAW_THINKING=medium
+export A2A_OPENCLAW_TIMEOUT_SEC=1800
 
 # Legacy Claude-in-Docker commands are intentionally rejected for GitHub patch tasks.
 # Use host-side OpenClaw/Codex commandScript or commandJson instead.
@@ -244,8 +251,10 @@ A safe Docker-first worker rollout from plugin-only routing to all-GitHub routin
 
 ```bash
 # 1. Configure one of the safe command paths on the worker host.
-export A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT='#!/usr/bin/env bash
-codex exec --full-auto "$(cat /work/artifacts/prompt.md)"'
+export A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE=openclaw
+export A2A_DOCKER_RUNNER_OPENCLAW_CONFIG_DIR=/root/.openclaw
+export A2A_OPENCLAW_THINKING=medium
+export A2A_OPENCLAW_TIMEOUT_SEC=1800
 
 # 2. Verify readiness before enabling all GitHub tasks.
 node dist/cli.js doctor | jq .githubPatch
