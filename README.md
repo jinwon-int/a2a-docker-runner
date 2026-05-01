@@ -220,7 +220,7 @@ Precedence is `commandScript > commandJson > commandProfile > commandTemplate`:
 |---|---|---|---|
 | `A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT` | `commandScript` | `/work/patch-command.sh` | Recommended. Script content is written to a file and executed without `eval`. |
 | `A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON` | `commandJson` | `/work/patch-command.sh` | JSON `{ "argv": [...], "env": {...} }` is converted into a quoted argv script. |
-| `A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE=openclaw` | generated `commandScript` | `/work/patch-command.sh` | First-class OpenClaw profile. Mounts `A2A_DOCKER_RUNNER_OPENCLAW_CONFIG_DIR` or `/root/.openclaw` read-only at `/run/secrets/openclaw-dir`, then runs `openclaw agent` in the checked-out repo. |
+| `A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE=openclaw` | generated `commandScript` | `/work/patch-command.sh` | First-class OpenClaw profile. Mounts `A2A_DOCKER_RUNNER_OPENCLAW_CONFIG_DIR` or `/root/.openclaw` read-only at `/run/secrets/openclaw-dir`, then runs `openclaw agent` in the checked-out repo. Defaults to `A2A_OPENCLAW_MODEL=openai-codex/gpt-5.5` so OAuth-backed Codex auth is used instead of same-name OpenAI API-key models. |
 | `A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE` | `commandTemplate` | blocked | Legacy eval path; rejected for GitHub patch execution. |
 
 Examples:
@@ -234,6 +234,7 @@ export A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON='{"argv":["codex","exec","--full-aut
 # Preferred fleet default when standardising A2A Docker patch execution on OpenClaw.
 export A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE=openclaw
 export A2A_DOCKER_RUNNER_OPENCLAW_CONFIG_DIR=/root/.openclaw
+export A2A_OPENCLAW_MODEL=openai-codex/gpt-5.5
 export A2A_OPENCLAW_THINKING=medium
 export A2A_OPENCLAW_TIMEOUT_SEC=1800
 
@@ -253,6 +254,7 @@ A safe Docker-first worker rollout from plugin-only routing to all-GitHub routin
 # 1. Configure one of the safe command paths on the worker host.
 export A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE=openclaw
 export A2A_DOCKER_RUNNER_OPENCLAW_CONFIG_DIR=/root/.openclaw
+export A2A_OPENCLAW_MODEL=openai-codex/gpt-5.5
 export A2A_OPENCLAW_THINKING=medium
 export A2A_OPENCLAW_TIMEOUT_SEC=1800
 

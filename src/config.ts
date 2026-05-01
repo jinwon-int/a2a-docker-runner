@@ -104,6 +104,7 @@ function normalizePatchCommandProfile(value?: string): "openclaw" | undefined {
 
 function buildOpenClawPatchCommandScript(env: NodeJS.ProcessEnv): string {
   const agent = shellSingleQuote(env.A2A_OPENCLAW_AGENT_ID || "main");
+  const model = shellSingleQuote(env.A2A_OPENCLAW_MODEL || "openai-codex/gpt-5.5");
   const thinking = shellSingleQuote(env.A2A_OPENCLAW_THINKING || "medium");
   const timeout = shellSingleQuote(env.A2A_OPENCLAW_TIMEOUT_SEC || "1800");
   return `#!/usr/bin/env bash
@@ -167,6 +168,7 @@ OPENCLAW_ASSIGNMENT_PROMPT="$(cat /work/artifacts/openclaw-prompt.md)"
 openclaw agent \\
   --local \\
   --agent ${agent} \\
+  --model ${model} \\
   --message "$OPENCLAW_ASSIGNMENT_PROMPT" \\
   --thinking ${thinking} \\
   --timeout ${timeout} \\
