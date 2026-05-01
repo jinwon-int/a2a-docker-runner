@@ -90,6 +90,14 @@ export interface RunnerTask {
   timeoutMs?: number;
   /** GitHub issue URL for evidence-mode Block/Done comment posting. */
   issueUrl?: string;
+  /** Existing PR URL for closeout/comment-only evidence tasks. */
+  existingPrUrl?: string;
+  /** Existing PR number; used with repo to derive existingPrUrl when provided by broker payloads. */
+  existingPrNumber?: string | number;
+  /** When true, the default GitHub pipeline must not create a new PR. */
+  forbidNewPr?: boolean;
+  /** When true, skip patch execution and finish with Done/Block comment-only evidence. */
+  commentOnly?: boolean;
   /** Language hint for comment formatting (e.g. "ko"). */
   reportLanguage?: string;
   /** A2A broker node that requested the task. */

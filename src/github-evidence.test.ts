@@ -162,6 +162,23 @@ test("block comment includes artifact manifest, command logs, reason and next ac
   assert.doesNotMatch(body, /\/root\/\.openclaw/);
 });
 
+test("done comment includes existing PR closeout context", () => {
+  const body = buildDoneCommentBody({ ...baseTask, existingPrNumber: 42, repo: "jinwon-int/test-repo" }, {
+    ok: true,
+    taskId: "t1",
+    status: "completed",
+    workDir: "/tmp/a2a/task/run-1",
+    exitCode: 0,
+    signal: null,
+    stdout: "status=comment_only_done",
+    stderr: "",
+    artifacts: [],
+  });
+
+  assert.match(body, /## ✅ Done/);
+  assert.match(body, /기존 PR\*\*: https:\/\/github\.com\/jinwon-int\/test-repo\/pull\/42/);
+});
+
 test("done comment includes manifest summary and bounded command log summary", () => {
   const body = buildDoneCommentBody(baseTask, {
     ok: true,

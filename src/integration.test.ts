@@ -217,6 +217,28 @@ test("buildRunnerTaskFromHandlerPayload: env timeout override takes precedence o
   assert.equal(result.timeoutMs, 300000);
 });
 
+test("buildRunnerTaskFromHandlerPayload: closeout/comment-only flags and existing PR passthrough", () => {
+  const task: HandlerTask = {
+    id: "task-closeout",
+    intent: "propose_patch",
+    payload: {
+      mode: "github-propose-patch",
+      repo: "jinwon-int/test-repo",
+      issueNumber: "73",
+      prNumber: "#12",
+      noNewPr: true,
+      evidenceOnly: true,
+    },
+  };
+  const result = buildRunnerTaskFromHandlerPayload(task, baseEnv);
+
+  assert.equal(result.issueUrl, "https://github.com/jinwon-int/test-repo/issues/73");
+  assert.equal(result.existingPrUrl, "https://github.com/jinwon-int/test-repo/pull/12");
+  assert.equal(result.existingPrNumber, "#12");
+  assert.equal(result.forbidNewPr, true);
+  assert.equal(result.commentOnly, true);
+});
+
 test("buildRunnerTaskFromHandlerPayload: payload timeout used when env timeout is unset", () => {
   const task: HandlerTask = {
     id: "task-payload-timeout",
