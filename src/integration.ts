@@ -70,8 +70,39 @@ export interface HandlerResult {
   tests: string[];
   filesChanged: string[];
   risks: string[];
+  /** Compact, payload-safe terminal event for broker push/SSE/webhook delivery. */
+  terminalEvidence: TerminalEvidenceEvent;
   /** Raw runner stdout JSON (for debugging). */
   runnerRaw?: Record<string, unknown>;
+}
+
+export type TerminalEvidenceStatus = "succeeded" | "failed" | "cancelled" | "blocked";
+export type TerminalEvidenceKind = "PR" | "Done" | "Block" | "MissingEvidence";
+
+export interface TerminalEvidenceEvent {
+  schemaVersion: "a2a.runner.terminal-evidence.v1";
+  /** Stable idempotency key for broker replay/deduplication. */
+  eventId: string;
+  taskId: string;
+  status: TerminalEvidenceStatus;
+  evidenceKind: TerminalEvidenceKind;
+  worker: string;
+  repo?: string;
+  issue?: string;
+  prUrl?: string;
+  doneUrl?: string;
+  blockUrl?: string;
+  testSummary: {
+    label: string;
+    exitCode?: number | null;
+    timedOut?: boolean;
+    artifactCount?: number;
+    stdoutTruncated?: boolean;
+    stderrTruncated?: boolean;
+  };
+  timestamps: {
+    emittedAt: string;
+  };
 }
 
 // ── Detection helpers ──────────────────────────────────────────────────────
@@ -261,6 +292,7 @@ export function buildHandlerResult(
       tests: [],
       filesChanged: resultFilesChanged(result),
       risks: ["runner completed without structured GitHub evidence"],
+      terminalEvidence: buildTerminalEvidenceEvent(result, task, nodeId),
       runnerRaw: brokerFacingRunnerRaw(result),
     };
   }
@@ -280,7 +312,59 @@ export function buildHandlerResult(
     tests: ["a2a-docker-runner run -> completed"],
     filesChanged: resultFilesChanged(result),
     risks: evidence.prUrl ? [] : ["runner completed without PR evidence"],
+    terminalEvidence: buildTerminalEvidenceEvent(result, task, nodeId),
     runnerRaw: brokerFacingRunnerRaw(result),
+  };
+}
+
+export function buildTerminalEvidenceEvent(
+  result: RawRunnerOutput,
+  task: HandlerTask,
+  nodeId: string,
+  emittedAt = new Date().toISOString(),
+): TerminalEvidenceEvent {
+  const evidence = extractGitHubEvidence(result);
+  const evidenceKind: TerminalEvidenceKind = evidence?.prUrl
+    ? "PR"
+    : evidence?.doneCommentUrl
+      ? "Done"
+      : evidence?.blockCommentUrl
+        ? "Block"
+        : "MissingEvidence";
+  const status: TerminalEvidenceStatus = evidenceKind === "PR" || evidenceKind === "Done"
+    ? "succeeded"
+    : evidenceKind === "Block"
+      ? "blocked"
+      : result.status === "timeout"
+        ? "cancelled"
+        : result.ok
+          ? "blocked"
+          : "failed";
+  const url = evidence?.prUrl ?? evidence?.doneCommentUrl ?? evidence?.blockCommentUrl ?? "none";
+  const taskId = task?.id ?? result.taskId ?? "unknown";
+  const summary = result.resultSummary;
+
+  return {
+    schemaVersion: "a2a.runner.terminal-evidence.v1",
+    eventId: stableEventId(taskId, status, evidenceKind, url),
+    taskId,
+    status,
+    evidenceKind,
+    worker: normalizeString(nodeId) ?? "unknown",
+    repo: normalizeString(task?.payload?.repo),
+    issue: normalizeIssueReference(task),
+    prUrl: evidence?.prUrl,
+    doneUrl: evidence?.doneCommentUrl,
+    blockUrl: evidence?.blockCommentUrl,
+    testSummary: {
+      label: buildTestSummaryLabel(result, evidenceKind),
+      exitCode: summary?.exitCode ?? result.exitCode,
+      timedOut: summary?.timedOut ?? result.status === "timeout",
+      artifactCount: summary?.artifactCount ?? result.artifacts?.length,
+      stdoutTruncated: summary?.stdoutTruncated,
+      stderrTruncated: summary?.stderrTruncated,
+    },
+    timestamps: { emittedAt },
   };
 }
 
@@ -305,6 +389,29 @@ function brokerFacingRunnerRaw(result: RawRunnerOutput): Record<string, unknown>
     stderr: result.resultSummary.stderr,
     artifacts: resultFilesChanged(result),
   } as unknown as Record<string, unknown>;
+}
+
+function stableEventId(taskId: string, status: TerminalEvidenceStatus, kind: TerminalEvidenceKind, url: string): string {
+  return ["a2a-terminal", taskId, status, kind, url]
+    .map((part) => part.replace(/[^A-Za-z0-9_.:/#-]+/g, "_").slice(0, 160))
+    .join(":");
+}
+
+function normalizeIssueReference(task: HandlerTask): string | undefined {
+  const issueUrl = normalizeString(task?.payload?.issueUrl);
+  if (issueUrl) return issueUrl;
+  const issue = extractIssueNumber(task);
+  const repo = normalizeString(task?.payload?.repo);
+  if (repo && issue && /^\d+$/.test(issue)) return `https://github.com/${repo}/issues/${issue}`;
+  return issue;
+}
+
+function buildTestSummaryLabel(result: RawRunnerOutput, kind: TerminalEvidenceKind): string {
+  const exit = result.resultSummary?.exitCode ?? result.exitCode;
+  const timedOut = result.resultSummary?.timedOut ?? result.status === "timeout";
+  const artifacts = result.resultSummary?.artifactCount ?? result.artifacts?.length ?? 0;
+  const outcome = kind === "PR" ? "PR evidence" : kind === "Done" ? "Done evidence" : kind === "Block" ? "Block evidence" : "missing terminal evidence";
+  return `a2a-docker-runner ${result.status}; ${outcome}; exit=${exit ?? "null"}; timedOut=${timedOut}; artifacts=${artifacts}`;
 }
 
 function normalizeString(value?: string): string | undefined {

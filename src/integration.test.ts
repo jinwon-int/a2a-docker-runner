@@ -18,6 +18,7 @@ import {
   parseRunnerOutput,
   extractGitHubEvidence,
   buildHandlerResult,
+  buildTerminalEvidenceEvent,
 } from "./integration.js";
 import type { HandlerTask, HandlerEnv, RawRunnerOutput } from "./integration.js";
 
@@ -772,6 +773,66 @@ test("buildHandlerResult: exposes bounded resultSummary stdout/stderr instead of
   assert.equal(runnerRaw.stderr, "bounded stderr\n<truncated 49900 chars>");
   assert.ok(!runnerRaw.stdout.includes("raw-stdout-raw-stdout-"));
   assert.ok(!runnerRaw.stderr.includes("raw-stderr-raw-stderr-"));
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Terminal evidence event — compact broker push/SSE/webhook payload
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("buildTerminalEvidenceEvent: emits compact safe PR evidence without raw logs or private paths", () => {
+  const result: RawRunnerOutput = {
+    ok: true, taskId: "task-79", status: "completed", workDir: "/private/runner/work/task-79/run-1",
+    stdout: "raw log with token=secret should not appear", stderr: "raw stderr should not appear", artifacts: ["/private/runner/work/task-79/run-1/artifacts/summary.txt"],
+    resultSummary: {
+      exitCode: 0, signal: null, timedOut: false,
+      stdout: "bounded stdout", stderr: "bounded stderr",
+      stdoutTruncated: false, stderrTruncated: false, artifactCount: 1, manifestPath: "artifacts/manifest.json",
+    },
+    github: { prUrl: "https://github.com/jinwon-int/repo/pull/79" },
+  };
+  const event = buildTerminalEvidenceEvent(
+    result,
+    { id: "task-79", payload: { repo: "jinwon-int/repo", issue: "79" } },
+    "sogyo",
+    "2026-05-01T12:00:00.000Z",
+  );
+
+  assert.equal(event.schemaVersion, "a2a.runner.terminal-evidence.v1");
+  assert.equal(event.eventId, "a2a-terminal:task-79:succeeded:PR:https://github.com/jinwon-int/repo/pull/79");
+  assert.equal(event.status, "succeeded");
+  assert.equal(event.evidenceKind, "PR");
+  assert.equal(event.worker, "sogyo");
+  assert.equal(event.repo, "jinwon-int/repo");
+  assert.equal(event.issue, "https://github.com/jinwon-int/repo/issues/79");
+  assert.equal(event.prUrl, "https://github.com/jinwon-int/repo/pull/79");
+  assert.equal(event.testSummary.label, "a2a-docker-runner completed; PR evidence; exit=0; timedOut=false; artifacts=1");
+  assert.deepEqual(event.timestamps, { emittedAt: "2026-05-01T12:00:00.000Z" });
+
+  const serialized = JSON.stringify(event);
+  assert.ok(!serialized.includes("raw log"));
+  assert.ok(!serialized.includes("raw stderr"));
+  assert.ok(!serialized.includes("/private/runner"));
+  assert.ok(!serialized.includes("token=secret"));
+});
+
+test("buildHandlerResult: includes terminal evidence for broker push notifications", () => {
+  const result: RawRunnerOutput = {
+    ok: false, taskId: "task-block", status: "failed", workDir: "/tmp/work",
+    stdout: "", stderr: "", artifacts: [],
+    resultSummary: {
+      exitCode: 1, signal: null, timedOut: false,
+      stdout: "", stderr: "", stdoutTruncated: false, stderrTruncated: false,
+      artifactCount: 0, manifestPath: "artifacts/manifest.json",
+    },
+    github: { blockCommentUrl: "https://github.com/jinwon-int/repo/issues/79#issuecomment-1" },
+  };
+  const handlerResult = buildHandlerResult(result, { id: "task-block", payload: { repo: "jinwon-int/repo", issueUrl: "https://github.com/jinwon-int/repo/issues/79" } }, "bangtong");
+
+  assert.equal(handlerResult.status, "blocked");
+  assert.equal(handlerResult.terminalEvidence.status, "blocked");
+  assert.equal(handlerResult.terminalEvidence.evidenceKind, "Block");
+  assert.equal(handlerResult.terminalEvidence.blockUrl, "https://github.com/jinwon-int/repo/issues/79#issuecomment-1");
+  assert.equal(handlerResult.terminalEvidence.testSummary.exitCode, 1);
 });
 
 test("buildHandlerResult: PR takes precedence over block in evidence (deterministic ordering)", () => {
