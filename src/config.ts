@@ -118,7 +118,30 @@ if ! command -v openclaw >/dev/null 2>&1; then
 fi
 
 rm -rf /root/.openclaw
-cp -a /run/secrets/openclaw-dir /root/.openclaw
+mkdir -p /root/.openclaw
+
+# Copy only the small runtime configuration needed by the embedded OpenClaw
+# process.  Worker hosts can have multi-GB workspaces, caches, archives, and
+# session logs under ~/.openclaw; copying the whole tree makes Docker patch
+# execution look stuck before the agent even starts.
+tar -C /run/secrets/openclaw-dir \
+  --exclude='./workspace' \
+  --exclude='./workspace-*' \
+  --exclude='./logs' \
+  --exclude='./cache' \
+  --exclude='./tmp' \
+  --exclude='./archive' \
+  --exclude='./backups' \
+  --exclude='./delivery-queue' \
+  --exclude='./media' \
+  --exclude='./memory-cache' \
+  --exclude='./memory-wiki-vault' \
+  --exclude='./plugin-runtime-deps' \
+  --exclude='./openclaw-hotpatch' \
+  --exclude='./a2a-broker-runtime' \
+  --exclude='./agents/*/sessions' \
+  --exclude='./agents/*/sessions.json' \
+  -cf - . | tar -C /root/.openclaw -xf -
 chmod -R u+rwX /root/.openclaw
 
 cat > /work/artifacts/openclaw-prompt.md <<'A2A_OPENCLAW_PROMPT_EOF'
