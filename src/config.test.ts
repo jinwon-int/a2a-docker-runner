@@ -26,6 +26,10 @@ test("loadConfig builds first-class OpenClaw patch profile", async () => {
 
   assert.match(config.commandScript ?? "", /openclaw agent/);
   assert.match(config.commandScript ?? "", /--thinking 'medium'/);
+  assert.match(config.commandScript ?? "", /tar -C \/run\/secrets\/openclaw-dir/);
+  assert.match(config.commandScript ?? "", /--exclude='\.\/workspace'/);
+  assert.match(config.commandScript ?? "", /--exclude='\.\/agents\/\*\/sessions'/);
+  assert.doesNotMatch(config.commandScript ?? "", /cp -a \/run\/secrets\/openclaw-dir/);
   assert.equal(config.commandJson, undefined);
   assert.deepEqual(config.extraMounts, [
     { source: "/root/.openclaw", target: "/run/secrets/openclaw-dir", readOnly: true },
