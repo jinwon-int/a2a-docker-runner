@@ -295,29 +295,40 @@ function resultFilesChanged(result: RawRunnerOutput): string[] {
 }
 
 function brokerFacingRunnerRaw(result: RawRunnerOutput): Record<string, unknown> {
-  if (!result.resultSummary) {
-    return result as unknown as Record<string, unknown>;
-  }
+  const stdout = result.resultSummary?.stdout ?? brokerBoundText(result.stdout);
+  const stderr = result.resultSummary?.stderr ?? brokerBoundText(result.stderr);
+  const error = result.error ? brokerBoundText(result.error) : undefined;
 
-  const payload: Record<string, unknown> = {
+  return omitUndefined({
     ok: result.ok,
     taskId: result.taskId,
     status: result.status,
-    stdout: result.resultSummary.stdout,
-    stderr: result.resultSummary.stderr,
+    exitCode: result.exitCode,
+    signal: result.signal,
+    stdout,
+    stderr,
+    stdoutTruncated: result.resultSummary?.stdoutTruncated ?? stdout !== result.stdout,
+    stderrTruncated: result.resultSummary?.stderrTruncated ?? stderr !== result.stderr,
+    artifactCount: result.resultSummary?.artifactCount ?? resultFilesChanged(result).length,
     artifacts: resultFilesChanged(result),
-    resultSummary: result.resultSummary,
-  };
+    manifestPath: result.resultSummary?.manifestPath ?? result.artifactManifest?.manifestPath,
+    prUrl: result.prUrl,
+    github: result.github,
+    error,
+  });
+}
 
-  if (result.exitCode !== undefined) payload.exitCode = result.exitCode;
-  if (result.signal !== undefined) payload.signal = result.signal;
-  if (result.error !== undefined) payload.error = result.error;
-  if (result.prUrl !== undefined) payload.prUrl = result.prUrl;
-  if (result.github !== undefined) payload.github = result.github;
+const BROKER_RUNNER_STREAM_LIMIT = 2_000;
 
-  return {
-    ...payload,
-  };
+function brokerBoundText(value: string): string {
+  if (value.length <= BROKER_RUNNER_STREAM_LIMIT) return value;
+  const omitted = value.length - BROKER_RUNNER_STREAM_LIMIT;
+  return `${value.slice(0, BROKER_RUNNER_STREAM_LIMIT)}
+<truncated ${omitted} chars for broker update>`;
+}
+
+function omitUndefined(value: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
 }
 
 function normalizeString(value?: string): string | undefined {

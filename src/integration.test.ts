@@ -774,7 +774,6 @@ test("buildHandlerResult: exposes bounded resultSummary stdout/stderr instead of
   assert.ok(!runnerRaw.stderr.includes("raw-stderr-raw-stderr-"));
 });
 
-
 test("buildHandlerResult: broker runnerRaw trims non-broker fields while preserving evidence", () => {
   const result: RawRunnerOutput = {
     ok: true, taskId: "t-diet", status: "completed", workDir: "/tmp/runner/private-workdir",
@@ -809,11 +808,34 @@ test("buildHandlerResult: broker runnerRaw trims non-broker fields while preserv
   const trimmedPayloadSize = Buffer.byteLength(JSON.stringify(runnerRaw));
 
   assert.equal(runnerRaw.github, result.github);
-  assert.equal(runnerRaw.resultSummary, result.resultSummary);
+  assert.equal(runnerRaw.ok, true);
+  assert.equal(runnerRaw.status, "completed");
+  assert.equal(runnerRaw.stdout, "bounded stdout");
+  assert.equal(runnerRaw.stderr, "bounded stderr");
   assert.deepEqual(runnerRaw.artifacts, ["artifacts/summary.txt", "artifacts/patch.diff"]);
+  assert.equal(runnerRaw.manifestPath, "artifacts/manifest.json");
   assert.equal(Object.hasOwn(runnerRaw, "workDir"), false);
   assert.equal(Object.hasOwn(runnerRaw, "artifactManifest"), false);
+  assert.equal(Object.hasOwn(runnerRaw, "resultSummary"), false);
   assert.ok(trimmedPayloadSize < legacyPayloadSize, trimmedPayloadSize + " should be smaller than " + legacyPayloadSize);
+});
+
+test("buildHandlerResult: broker runnerRaw bounds legacy raw streams when resultSummary is absent", () => {
+  const result: RawRunnerOutput = {
+    ok: false, taskId: "t-legacy-large", status: "failed", workDir: "/tmp",
+    stdout: "legacy-stdout-".repeat(500),
+    stderr: "legacy-stderr-".repeat(500),
+    artifacts: [],
+    error: "legacy-error-".repeat(500),
+    github: { blockCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-123" },
+  };
+  const handlerResult = buildHandlerResult(result, { id: "t-legacy-large" }, "sogyo");
+  const runnerRaw = handlerResult.runnerRaw as Record<string, string>;
+
+  assert.ok(runnerRaw.stdout.length < result.stdout.length);
+  assert.ok(runnerRaw.stderr.length < result.stderr.length);
+  assert.ok(runnerRaw.error.length < result.error!.length);
+  assert.match(runnerRaw.stdout, /truncated \d+ chars for broker update/);
 });
 
 test("buildHandlerResult: PR takes precedence over block in evidence (deterministic ordering)", () => {
