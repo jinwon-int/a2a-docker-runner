@@ -38,7 +38,7 @@ test("keeps explicit multi-repo and command configuration", () => {
     intent: "propose_patch",
     repos: [
       { name: "plugin", url: "jinwon-int/openclaw-plugin-a2a", path: "plugin", primary: true },
-      { name: "core", url: "jinon86/openclaw", path: "openclaw", branch: "develop" },
+      { name: "core", url: "jinwon-int/openclaw", path: "openclaw", branch: "develop" },
     ],
     commands: ["cd /work/plugin && npm ci", "cd /work/plugin && npm test"],
   });
@@ -55,18 +55,18 @@ test("passes through mode, issueUrl, reportLanguage, and requestedBy", () => {
     id: "github-evidence-task",
     intent: "propose_patch",
     mode: "github-propose-patch",
-    repo: "jinon86/test-repo",
-    issueUrl: "https://github.com/jinon86/test-repo/issues/5",
+    repo: "jinwon-int/test-repo",
+    issueUrl: "https://github.com/jinwon-int/test-repo/issues/5",
     reportLanguage: "ko",
     requestedBy: "seoseo",
   });
 
   assert.equal(task.mode, "github-propose-patch");
-  assert.equal(task.issueUrl, "https://github.com/jinon86/test-repo/issues/5");
+  assert.equal(task.issueUrl, "https://github.com/jinwon-int/test-repo/issues/5");
   assert.equal(task.reportLanguage, "ko");
   assert.equal(task.requestedBy, "seoseo");
   assert.equal(task.repos.length, 1);
-  assert.equal(task.repos[0]?.url, "https://github.com/jinon86/test-repo.git");
+  assert.equal(task.repos[0]?.url, "https://github.com/jinwon-int/test-repo.git");
   assert.ok(task.commands.length > 0);
 });
 
@@ -91,10 +91,10 @@ test("generates PR-producing default commands for github-propose-patch mode with
     id: "auto-patch-test",
     intent: "propose_patch",
     mode: "github-propose-patch",
-    repo: "jinon86/test-repo",
+    repo: "jinwon-int/test-repo",
     baseBranch: "main",
     prompt: "Fix the broken test.",
-    issueUrl: "https://github.com/jinon86/test-repo/issues/5",
+    issueUrl: "https://github.com/jinwon-int/test-repo/issues/5",
     requestedBy: "seoseo",
   });
 
@@ -142,7 +142,7 @@ test("generates PR-producing default commands for propose_patch mode", () => {
     id: "legacy-patch-mode",
     intent: "propose_patch",
     mode: "propose_patch",
-    repo: "jinon86/test-repo",
+    repo: "jinwon-int/test-repo",
     baseBranch: "develop",
     prompt: "Update README.",
     requestedBy: "dungae",
@@ -160,7 +160,7 @@ test("does not override explicit commands even in github-propose-patch mode", ()
     id: "explicit-cmds",
     intent: "propose_patch",
     mode: "github-propose-patch",
-    repo: "jinon86/test-repo",
+    repo: "jinwon-int/test-repo",
     commands: explicit,
     prompt: "This prompt should not appear in commands.",
   });
@@ -173,7 +173,7 @@ test("handles patch mode with no prompt gracefully", () => {
     id: "no-prompt-patch",
     intent: "propose_patch",
     mode: "github-propose-patch",
-    repo: "jinon86/test-repo",
+    repo: "jinwon-int/test-repo",
     baseBranch: "main",
   });
 
@@ -247,7 +247,7 @@ test("sanitises task id in branch name", () => {
     id: "spaces and/slashes:unsafe",
     intent: "propose_patch",
     mode: "github-propose-patch",
-    repo: "jinon86/test-repo",
+    repo: "jinwon-int/test-repo",
     baseBranch: "main",
     prompt: "Test.",
   });

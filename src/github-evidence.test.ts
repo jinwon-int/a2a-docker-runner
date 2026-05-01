@@ -13,10 +13,10 @@ const baseTask: NormalizedRunnerTask = {
   id: "test-task",
   intent: "propose_patch",
   mode: "github-propose-patch",
-  repo: "jinon86/test-repo",
+  repo: "jinwon-int/test-repo",
   repos: [],
   commands: [],
-  issueUrl: "https://github.com/jinon86/test-repo/issues/1",
+  issueUrl: "https://github.com/jinwon-int/test-repo/issues/1",
   reportLanguage: "ko",
   requestedBy: "seoseo",
 };
@@ -45,12 +45,12 @@ test("recognizes propose_patch mode as evidence mode", async () => {
   const task: NormalizedRunnerTask = { ...baseTask, mode: "propose_patch" };
   const result = {
     ok: true, taskId: "t1", status: "completed" as const, workDir: "/tmp",
-    exitCode: 0, signal: null, stdout: "PR created: https://github.com/jinon86/test-repo/pull/42", stderr: "", artifacts: [],
-    prUrl: "https://github.com/jinon86/test-repo/pull/42",
+    exitCode: 0, signal: null, stdout: "PR created: https://github.com/jinwon-int/test-repo/pull/42", stderr: "", artifacts: [],
+    prUrl: "https://github.com/jinwon-int/test-repo/pull/42",
   };
   const evidence = await collectGitHubEvidence(baseConfig, task, result);
   assert.ok(evidence);
-  assert.equal(evidence?.prUrl, "https://github.com/jinon86/test-repo/pull/42");
+  assert.equal(evidence?.prUrl, "https://github.com/jinwon-int/test-repo/pull/42");
 });
 
 test("extracts prUrl into evidence on success", async () => {
@@ -58,13 +58,13 @@ test("extracts prUrl into evidence on success", async () => {
   const result = {
     ok: true, taskId: "t1", status: "completed" as const, workDir: "/tmp",
     exitCode: 0, signal: null,
-    stdout: "Pushed and created https://github.com/jinon86/test-repo/pull/99", stderr: "",
+    stdout: "Pushed and created https://github.com/jinwon-int/test-repo/pull/99", stderr: "",
     artifacts: [],
-    prUrl: "https://github.com/jinon86/test-repo/pull/99",
+    prUrl: "https://github.com/jinwon-int/test-repo/pull/99",
   };
   const evidence = await collectGitHubEvidence(baseConfig, task, result);
   assert.ok(evidence);
-  assert.equal(evidence?.prUrl, "https://github.com/jinon86/test-repo/pull/99");
+  assert.equal(evidence?.prUrl, "https://github.com/jinwon-int/test-repo/pull/99");
   assert.equal(evidence?.blockCommentUrl, undefined);
 });
 

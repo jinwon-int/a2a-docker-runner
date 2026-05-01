@@ -224,7 +224,7 @@ test("handles multi-repo configuration", async () => {
     intent: "propose_patch",
     repos: [
       { name: "primary", url: "jinwon-int/a2a-docker-runner", path: "primary", primary: true },
-      { name: "secondary", url: "jinon86/openclaw", path: "secondary" },
+      { name: "secondary", url: "jinwon-int/openclaw", path: "secondary" },
     ],
     commands: ["cd /work/primary && npm ci", "cd /work/primary && npm test"],
   };

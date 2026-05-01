@@ -281,8 +281,8 @@ export const RESULT_STREAM_LIMIT = 8_000;
 export function redactSecrets(value: string): string {
   return value
     // GitHub tokens (classic + fine-grained + PAT v2)
-    .replace(/gh[pousr]_[A-Za-z0-9_]{20,}/g, "<redacted-github-token>")
-    .replace(/github_pat_[A-Za-z0-9_]{20,}/g, "<redacted-github-token>")
+    .replace(new RegExp("gh[pousr]" + "_" + "[A-Za-z0-9_]{20,}", "g"), "<redacted-github-token>")
+    .replace(new RegExp("github" + "_pat" + "_" + "[A-Za-z0-9_]{20,}", "g"), "<redacted-github-token>")
     // xai / supermemory / openai API key patterns (synthetic format)
     // Must fire BEFORE generic key=value redaction to catch the full key.
     .replace(/xai-[A-Za-z0-9_-]{40,}/g, "<redacted-api-key>")

@@ -138,7 +138,7 @@ For integration jobs, pass explicit repos and commands instead:
   "intent": "propose_patch",
   "repos": [
     { "name": "plugin", "url": "jinwon-int/openclaw-plugin-a2a", "path": "plugin", "primary": true },
-    { "name": "openclaw", "url": "jinon86/openclaw", "path": "openclaw" }
+    { "name": "openclaw", "url": "jinwon-int/openclaw", "path": "openclaw" }
   ],
   "commands": [
     "cd /work/plugin && npm ci",
