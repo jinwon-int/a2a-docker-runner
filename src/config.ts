@@ -155,6 +155,54 @@ copy_file_if_exists /run/secrets/openclaw-dir/agents/${agent}/agent/auth-profile
 copy_file_if_exists /run/secrets/openclaw-dir/agents/${agent}/agent/auth-state.json /root/.openclaw/agents/${agent}/agent/auth-state.json
 copy_file_if_exists /run/secrets/openclaw-dir/agents/${agent}/agent/models.json /root/.openclaw/agents/${agent}/agent/models.json
 
+if [ -f /root/.openclaw/openclaw.json ]; then
+  node <<'A2A_SANITIZE_OPENCLAW_CONFIG'
+const fs = require("node:fs");
+const path = "/root/.openclaw/openclaw.json";
+const config = JSON.parse(fs.readFileSync(path, "utf8"));
+
+// The host gateway config can reference runtime-only plugins, channel targets,
+// and API-key providers that are not present inside the short-lived Docker
+// patch container. Keep the model/auth information needed by openclaw agent,
+// but drop gateway/plugin/channel wiring so config validation does not fail
+// before the OAuth-backed agent can start.
+delete config.plugins;
+delete config.channels;
+delete config.gateway;
+delete config.cron;
+delete config.bindings;
+delete config.hooks;
+
+const providers = config.models?.providers;
+if (providers && typeof providers === "object" && providers["openai-codex"]) {
+  config.models.providers = { "openai-codex": providers["openai-codex"] };
+}
+
+const defaults = config.agents?.defaults;
+if (defaults && typeof defaults === "object") {
+  delete defaults.heartbeat;
+  if (defaults.model && typeof defaults.model === "object") {
+    defaults.model.primary = "openai-codex/gpt-5.5";
+    defaults.model.fallbacks = [];
+  }
+  if (defaults.models && typeof defaults.models === "object") {
+    for (const key of Object.keys(defaults.models)) {
+      if (key.startsWith("openai/")) delete defaults.models[key];
+    }
+  }
+}
+
+const agentList = config.agents?.list;
+if (Array.isArray(agentList)) {
+  for (const entry of agentList) {
+    if (entry && typeof entry === "object") delete entry.heartbeat;
+  }
+}
+
+fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\\n");
+A2A_SANITIZE_OPENCLAW_CONFIG
+fi
+
 chmod -R u+rwX /root/.openclaw
 printf 'openclaw_config_bytes=%s\n' "$(du -sb /root/.openclaw | awk '{print $1}')" | tee -a /work/artifacts/summary.txt
 
