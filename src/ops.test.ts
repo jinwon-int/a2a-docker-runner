@@ -1,10 +1,69 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile, utimes, stat, readdir } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkGitHubPatchReadiness, cleanup, install } from "./ops.js";
+import { checkDeployedRevision, checkGitHubPatchReadiness, cleanup, install } from "./ops.js";
 import type { RunnerConfig } from "./types.js";
+
+function runGit(cwd: string, args: string[]): void {
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: "A2A Test",
+      GIT_AUTHOR_EMAIL: "a2a-test@example.invalid",
+      GIT_COMMITTER_NAME: "A2A Test",
+      GIT_COMMITTER_EMAIL: "a2a-test@example.invalid",
+    },
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+}
+
+async function makeRevisionRepo(): Promise<{ repo: string; head: string }> {
+  const repo = await mkdtemp(join(tmpdir(), "a2a-revision-"));
+  runGit(repo, ["init", "-b", "main"]);
+  await writeFile(join(repo, "package.json"), JSON.stringify({ version: "0.1.0" }));
+  runGit(repo, ["add", "package.json"]);
+  runGit(repo, ["commit", "-m", "initial"]);
+  const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).stdout.trim();
+  runGit(repo, ["update-ref", "refs/remotes/origin/main", head]);
+  return { repo, head };
+}
+
+test("deployed revision doctor passes for clean main matching upstream", async () => {
+  const { repo, head } = await makeRevisionRepo();
+
+  const report = await checkDeployedRevision(repo);
+
+  assert.equal(report.status, "ok");
+  assert.equal(report.detail?.localSha, head.slice(0, 12));
+  assert.equal(report.detail?.upstreamMainSha, head.slice(0, 12));
+  assert.match(String(report.detail?.summary), /^PASS /);
+});
+
+test("deployed revision doctor warns for stale, dirty, non-main checkouts", async () => {
+  const { repo, head } = await makeRevisionRepo();
+  await writeFile(join(repo, "README.md"), "change on feature branch\n");
+  runGit(repo, ["checkout", "-b", "feature/drift"]);
+  await writeFile(join(repo, "local.txt"), "local change\n");
+  runGit(repo, ["add", "README.md"]);
+  runGit(repo, ["commit", "-m", "feature change"]);
+  await writeFile(join(repo, "dirty.txt"), "uncommitted\n");
+
+  const report = await checkDeployedRevision(repo);
+
+  assert.equal(report.status, "warn");
+  assert.equal(report.detail?.upstreamMainSha, head.slice(0, 12));
+  assert.equal(report.detail?.branch, "feature/drift");
+  assert.equal(report.detail?.dirty, true);
+  assert.match(String(report.detail?.reason), /dirty worktree/);
+  assert.match(String(report.detail?.reason), /branch is feature\/drift/);
+  assert.match(String(report.detail?.reason), /differs from upstream main/);
+  assert.match(String(report.detail?.summary), /^WARN /);
+});
 
 function config(rootDir: string, githubTokenFile?: string): RunnerConfig {
   return { rootDir, engine: "docker", image: "example:latest", githubTokenFile, defaultTimeoutMs: 1000 };
