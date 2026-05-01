@@ -30,7 +30,7 @@ A2A workers currently execute delegated work in the host OpenClaw workspace. Aft
 A2A Broker → Host A2A Worker → A2A Docker Runner → one task container
 ```
 
-The broker stays unchanged. The host worker still claims tasks and reports results. The runner is the execution engine used by the worker for file-heavy jobs.
+The broker stays unchanged. The host worker still claims tasks and reports results over the existing HTTP broker endpoint and edge-secret contract. The broker may be hosted by Docker Compose, systemd, or another supervisor; this runner does not require or manage the broker process. The runner is only the execution engine used by the worker for file-heavy jobs.
 
 ## MVP Scope
 
