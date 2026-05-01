@@ -115,6 +115,10 @@ test("generates PR-producing default commands for github-propose-patch mode with
   assert.ok(pipeline.includes("gh pr create"), "Expected PR create step");
   assert.ok(pipeline.includes("--body-file /work/artifacts/pr-body.md"), "Expected PR body file use");
   assert.ok(pipeline.includes("Closes #5"), "Expected same-repo closing keyword in PR body");
+  assert.ok(pipeline.includes("## 🔁 Rerun started"), "Expected Start/Rerun issue comment body");
+  assert.ok(pipeline.includes("/work/artifacts/issue-start-comment.md"), "Expected start comment artifact");
+  assert.ok(pipeline.indexOf("issue-start-comment.md") < pipeline.indexOf("patch-command.sh"), "Expected start comment before patch execution");
+  assert.ok(pipeline.includes("notice=gh_unavailable_start_comment_skipped"), "Expected non-fatal gh-missing marker");
   assert.ok(pipeline.includes("gh issue comment 'https://github.com/jinon86/test-repo/issues/5'"), "Expected issue PR comment");
   assert.ok(pipeline.includes("/work/artifacts/issue-comment-output.txt"), "Expected issue comment output artifact");
   assert.ok(pipeline.includes("patch-command.sh"), "Expected script file reference");
@@ -126,7 +130,8 @@ test("generates PR-producing default commands for github-propose-patch mode with
   assert.ok(pipeline.includes("deprecated_eval_path"), "Expected deprecation warning");
   assert.ok(pipeline.includes("/work/artifacts/patch-command.log"), "Expected coding agent log artifact");
   assert.ok(pipeline.includes("/work/artifacts/pr-output.txt"), "Expected PR output artifact");
-  assert.ok(pipeline.includes("status=no_changes"), "Expected no-changes fallback");
+  assert.ok(pipeline.includes("error=pr_create_failed_or_missing_url"), "Expected missing PR URL to fail safely");
+  assert.ok(pipeline.includes("error=no_changes_after_patch_command"), "Expected no-changes fallback to fail safely");
 
   const generated = task.commands.join("\n");
   assert.doesNotMatch(generated, /claude-(install|output|prompt)|@anthropic-ai\/claude-code|claude --/i);
