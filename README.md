@@ -162,6 +162,7 @@ The event is intentionally small and secret-free:
 - `repo` and `issue`: repository plus canonical issue URL/reference
 - `prUrl`, `doneUrl`, or `blockUrl`: the chosen completion evidence URL
 - `testSummary.label`: one-line runner outcome with exit, timeout, artifact count
+- `runnerBuild`: optional bounded build metadata (`version`, `source`, `revision`, `builtAt`, `image`)
 - `reason`: short human-facing Done/Block/failure reason
 
 It must not include raw stdout/stderr, host work directories, secrets, or oversized
@@ -237,6 +238,20 @@ Important defaults:
 - task root: `/var/lib/openclaw-a2a/tasks`
 - image: `node:22-bookworm-slim`
 - engine: auto-detect `docker` then `podman`
+
+Build metadata injection:
+
+- `A2A_DOCKER_RUNNER_BUILD_VERSION`
+- `A2A_DOCKER_RUNNER_BUILD_SOURCE`
+- `A2A_DOCKER_RUNNER_BUILD_REVISION`
+- `A2A_DOCKER_RUNNER_BUILD_BUILT_AT`
+- `A2A_DOCKER_RUNNER_BUILD_IMAGE` (falls back to `A2A_DOCKER_RUNNER_IMAGE`)
+
+These values are injected into task containers as `A2A_RUNNER_BUILD_*`, recorded in
+`run.json` / `artifacts/summary.txt`, and propagated through `resultSummary.runnerBuild`,
+GitHub Done/Block comments, and terminal evidence. Keep them public and compact: the
+loader bounds values, collapses newlines, and drops obvious tokens or host-specific
+absolute paths instead of forwarding them.
 
 ### Patch command config
 

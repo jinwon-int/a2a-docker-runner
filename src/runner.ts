@@ -16,7 +16,13 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
   await mkdir(taskRoot, { recursive: true, mode: 0o700 });
   await mkdir(workDir, { recursive: false, mode: 0o700 });
   await writeFile(join(workDir, "task.json"), JSON.stringify(normalizedTask, null, 2));
-  await writeFile(join(workDir, "run.json"), JSON.stringify({ taskId: task.id, safeTaskId, runToken, createdAt: new Date().toISOString() }, null, 2));
+  await writeFile(join(workDir, "run.json"), JSON.stringify({
+    taskId: task.id,
+    safeTaskId,
+    runToken,
+    createdAt: new Date().toISOString(),
+    ...(config.buildMetadata ? { runnerBuild: config.buildMetadata } : {}),
+  }, null, 2));
 
   // Write safe patch command script if configured.
   // Priority: commandScript > commandJson > commandTemplate (legacy eval).
@@ -39,7 +45,7 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
   await writeArtifactManifest(workDir, manifest);
   const stdout = redactAndBound(completed.stdout);
   const stderr = redactAndBound(completed.stderr);
-  const resultSummary = buildResultSummary(completed, stdout, stderr, artifacts, manifest);
+  const resultSummary = buildResultSummary(completed, stdout, stderr, artifacts, manifest, config.buildMetadata);
 
   const result: RunnerResult = {
     ok: completed.code === 0 && !completed.timedOut,
@@ -53,6 +59,7 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
     artifacts,
     artifactManifest: manifest,
     resultSummary,
+    runnerBuild: config.buildMetadata,
     prUrl: extractPrUrl(completed.stdout),
     error: completed.code === 0 && !completed.timedOut ? undefined : buildActionableError(engine, config.image, completed),
   };
@@ -144,12 +151,28 @@ export function buildRunArgs(config: RunnerConfig, task: RunnerTask, workDir: st
     args.push("-e", `A2A_PATCH_COMMAND=${config.commandTemplate}`);
   }
 
+  for (const [key, value] of Object.entries(buildMetadataEnv(config))) {
+    args.push("-e", `${key}=${value}`);
+  }
+
   for (const [key, value] of Object.entries(task.env ?? {})) {
     args.push("-e", `${key}=${value}`);
   }
 
   args.push(config.image, "bash", "/work/run.sh");
   return args;
+}
+
+function buildMetadataEnv(config: RunnerConfig): Record<string, string> {
+  const build = config.buildMetadata;
+  if (!build) return {};
+  return Object.fromEntries(Object.entries({
+    A2A_RUNNER_BUILD_VERSION: build.version,
+    A2A_RUNNER_BUILD_SOURCE: build.source,
+    A2A_RUNNER_BUILD_REVISION: build.revision,
+    A2A_RUNNER_BUILD_BUILT_AT: build.builtAt,
+    A2A_RUNNER_BUILD_IMAGE: build.image,
+  }).filter(([, value]) => typeof value === "string" && value.length > 0)) as Record<string, string>;
 }
 
 export function buildContainerScript(task: NormalizedRunnerTask): string {
@@ -159,6 +182,11 @@ mkdir -p /work/artifacts
 printf 'A2A Docker Runner task %s\n' ${shellQuote(task.id)} | tee /work/artifacts/summary.txt
 printf 'intent=%s\n' ${shellQuote(task.intent)} | tee -a /work/artifacts/summary.txt
 printf 'preset=%s\n' ${shellQuote(task.preset ?? "")} | tee -a /work/artifacts/summary.txt
+if [ -n "\${A2A_RUNNER_BUILD_VERSION:-}" ]; then printf 'runner.version=%s\n' "$A2A_RUNNER_BUILD_VERSION" | tee -a /work/artifacts/summary.txt; fi
+if [ -n "\${A2A_RUNNER_BUILD_REVISION:-}" ]; then printf 'runner.revision=%s\n' "$A2A_RUNNER_BUILD_REVISION" | tee -a /work/artifacts/summary.txt; fi
+if [ -n "\${A2A_RUNNER_BUILD_SOURCE:-}" ]; then printf 'runner.source=%s\n' "$A2A_RUNNER_BUILD_SOURCE" | tee -a /work/artifacts/summary.txt; fi
+if [ -n "\${A2A_RUNNER_BUILD_BUILT_AT:-}" ]; then printf 'runner.builtAt=%s\n' "$A2A_RUNNER_BUILD_BUILT_AT" | tee -a /work/artifacts/summary.txt; fi
+if [ -n "\${A2A_RUNNER_BUILD_IMAGE:-}" ]; then printf 'runner.image=%s\n' "$A2A_RUNNER_BUILD_IMAGE" | tee -a /work/artifacts/summary.txt; fi
 ${installBaseToolsScript()}
 ${githubAuthScript()}
 ${checkoutReposScript(task)}
@@ -315,6 +343,7 @@ export function buildResultSummary(
   stderr: string,
   artifacts: string[],
   manifest: ArtifactManifest,
+  runnerBuild?: RunnerConfig["buildMetadata"],
 ): ResultSummary {
   return {
     exitCode: completed.code,
@@ -326,6 +355,7 @@ export function buildResultSummary(
     stderrTruncated: stderr.includes("\n<truncated "),
     artifactCount: artifacts.length,
     manifestPath: manifest.manifestPath,
+    ...(runnerBuild ? { runnerBuild } : {}),
   };
 }
 

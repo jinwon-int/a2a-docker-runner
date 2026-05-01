@@ -147,6 +147,13 @@ test("block comment includes artifact manifest, command logs, reason and next ac
       stderrTruncated: false,
       artifactCount: 1,
       manifestPath: "artifacts/manifest.json",
+      runnerBuild: {
+        version: "0.1.0",
+        revision: "abc123",
+        source: "https://github.com/jinwon-int/a2a-docker-runner",
+        builtAt: "2026-05-01T00:00:00Z",
+        image: "ghcr.io/jinwon-int/a2a-docker-runner:abc123",
+      },
     },
     error: "raw error from /root/.openclaw/workspace/private-task/run-1",
   });
@@ -154,6 +161,8 @@ test("block comment includes artifact manifest, command logs, reason and next ac
   assert.match(body, /### 사유/);
   assert.match(body, /### 다음 조치/);
   assert.match(body, /### 아티팩트 manifest 요약/);
+  assert.match(body, /### Runner build/);
+  assert.match(body, /revision: `abc123`/);
   assert.match(body, /### 명령 로그 요약/);
   assert.match(body, /`artifacts\/run\.log` \(42 bytes\)/);
   assert.match(body, /notice=no_patch_command_configured/);

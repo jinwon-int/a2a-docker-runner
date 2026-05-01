@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { constants } from "node:fs";
 import { spawnSync } from "node:child_process";
-import type { RunnerConfig, RunnerEngine, RunnerExtraMount } from "./types.js";
+import type { RunnerBuildMetadata, RunnerConfig, RunnerEngine, RunnerExtraMount } from "./types.js";
 
 const DEFAULT_ROOT = "/var/lib/openclaw-a2a/tasks";
 const DEFAULT_IMAGE = "node:22-bookworm-slim";
@@ -19,11 +19,13 @@ export async function loadConfig(env = process.env): Promise<RunnerConfig> {
   validatePatchExecutorPolicy(patchCommand, extraMounts);
 
   const profile = normalizePatchCommandProfile(env.A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE);
+  const image = env.A2A_DOCKER_RUNNER_IMAGE || DEFAULT_IMAGE;
 
   return {
     rootDir: env.A2A_DOCKER_RUNNER_ROOT || DEFAULT_ROOT,
     engine,
-    image: env.A2A_DOCKER_RUNNER_IMAGE || DEFAULT_IMAGE,
+    image,
+    buildMetadata: loadBuildMetadata(env, image),
     githubTokenFile,
     defaultTimeoutMs: Number(env.A2A_DOCKER_RUNNER_TIMEOUT_MS || 15 * 60 * 1000),
     memory: env.A2A_DOCKER_RUNNER_MEMORY || "2g",
@@ -32,6 +34,35 @@ export async function loadConfig(env = process.env): Promise<RunnerConfig> {
     extraMounts,
     ...patchCommand,
   };
+}
+
+function loadBuildMetadata(env: NodeJS.ProcessEnv, runtimeImage: string): RunnerBuildMetadata | undefined {
+  const metadata = Object.fromEntries(Object.entries({
+    version: safeMetadataValue(env.A2A_DOCKER_RUNNER_BUILD_VERSION),
+    source: safeMetadataValue(env.A2A_DOCKER_RUNNER_BUILD_SOURCE),
+    revision: safeMetadataValue(env.A2A_DOCKER_RUNNER_BUILD_REVISION),
+    builtAt: safeMetadataValue(env.A2A_DOCKER_RUNNER_BUILD_BUILT_AT),
+    image: safeMetadataValue(env.A2A_DOCKER_RUNNER_BUILD_IMAGE ?? runtimeImage),
+  }).filter(([, value]) => value)) as RunnerBuildMetadata;
+  return Object.values(metadata).some(Boolean) ? metadata : undefined;
+}
+
+const BUILD_METADATA_LIMIT = 200;
+
+function safeMetadataValue(value?: string): string | undefined {
+  if (!value) return undefined;
+  const compact = value.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!compact) return undefined;
+  if (looksSensitiveOrHostSpecific(compact)) return undefined;
+  return compact.length <= BUILD_METADATA_LIMIT ? compact : compact.slice(0, BUILD_METADATA_LIMIT);
+}
+
+function looksSensitiveOrHostSpecific(value: string): boolean {
+  if (/gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{32,}/i.test(value)) return true;
+  if (/(token|password|secret|api[_-]?key)\s*[:=]/i.test(value)) return true;
+  if (/^[a-z][a-z0-9+.-]*:\/\/[^/\s]+@/i.test(value)) return true;
+  if (/^\/(?:home|root|Users|var|opt|srv|tmp)\b/.test(value)) return true;
+  return false;
 }
 
 function loadExtraMounts(env: NodeJS.ProcessEnv): RunnerExtraMount[] | undefined {
