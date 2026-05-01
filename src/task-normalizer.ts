@@ -129,16 +129,29 @@ function buildDefaultPatchCommands(task: RunnerTask, primaryRepo: RunnerRepo): s
     `fi`,
   ].join("\n");
 
+  const startCommentBlock = task.issueUrl ? [
+    `if command -v gh >/dev/null 2>&1; then`,
+    `  cat > /work/artifacts/issue-start-comment.md <<A2A_ISSUE_START_COMMENT_EOF`,
+    `## 🔁 Rerun started`,
+    ``,
+    `A2A task: \`${safeTitle}\``,
+    `Branch: \`$BRANCH\``,
+    ``,
+    `Patch worker has started this rerun and will post PR/Block evidence when finished.`,
+    `A2A_ISSUE_START_COMMENT_EOF`,
+    `  gh issue comment ${issueCommentTarget} --body-file /work/artifacts/issue-start-comment.md 2>&1 | tee /work/artifacts/issue-start-comment-output.txt || true`,
+    `else`,
+    `  printf 'notice=gh_unavailable_start_comment_skipped\\n' | tee -a /work/artifacts/summary.txt`,
+    `fi`,
+  ].join("\n") : "";
+
   const issueCommentBlock = task.issueUrl ? [
-    `  PR_URL="$(grep -Eo 'https://github.com/[^[:space:]]+/pull/[0-9]+' /work/artifacts/pr-output.txt | tail -n 1 || true)"`,
-    `  if [ -n "$PR_URL" ]; then`,
-    `    cat > /work/artifacts/issue-comment.md <<A2A_ISSUE_COMMENT_EOF`,
+    `  cat > /work/artifacts/issue-comment.md <<A2A_ISSUE_COMMENT_EOF`,
     `PR: $PR_URL`,
     ``,
     `A2A task: \`${safeTitle}\``,
     `A2A_ISSUE_COMMENT_EOF`,
-    `    gh issue comment ${issueCommentTarget} --body-file /work/artifacts/issue-comment.md 2>&1 | tee /work/artifacts/issue-comment-output.txt || true`,
-    `  fi`,
+    `  gh issue comment ${issueCommentTarget} --body-file /work/artifacts/issue-comment.md 2>&1 | tee /work/artifacts/issue-comment-output.txt || true`,
   ].join("\n") : "";
 
   const pipeline = [
@@ -149,6 +162,8 @@ function buildDefaultPatchCommands(task: RunnerTask, primaryRepo: RunnerRepo): s
     `BRANCH="a2a-patch-$(date +%Y%m%d-%H%M%S)-${safeTitle}"`,
     `git checkout -b "$BRANCH"`,
     `printf 'branch=%s\\n' "$BRANCH" | tee -a /work/artifacts/summary.txt`,
+    ``,
+    startCommentBlock,
     ``,
     patchCommandBlock,
     ``,
@@ -164,12 +179,16 @@ function buildDefaultPatchCommands(task: RunnerTask, primaryRepo: RunnerRepo): s
     `    --title "Patch: ${safeTitle}" \\`,
     `    --body-file /work/artifacts/pr-body.md \\`,
     `    2>&1 | tee /work/artifacts/pr-output.txt || true`,
-    `  if grep -q 'https://github.com/' /work/artifacts/pr-output.txt 2>/dev/null; then`,
-    `    printf 'pr_created=1\\n' | tee -a /work/artifacts/summary.txt`,
-    issueCommentBlock,
+    `  PR_URL="$(grep -Eo 'https://github.com/[^[:space:]]+/pull/[0-9]+' /work/artifacts/pr-output.txt | tail -n 1 || true)"`,
+    `  if [ -z "$PR_URL" ]; then`,
+    `    printf 'error=pr_create_failed_or_missing_url\\n' | tee -a /work/artifacts/summary.txt`,
+    `    exit 2`,
     `  fi`,
+    `  printf 'pr_created=1\\n' | tee -a /work/artifacts/summary.txt`,
+    issueCommentBlock,
     `else`,
-    `  printf 'status=no_changes\\n' | tee -a /work/artifacts/summary.txt`,
+    `  printf 'error=no_changes_after_patch_command\\n' | tee -a /work/artifacts/summary.txt`,
+    `  exit 2`,
     `fi`,
   ].join("\n");
 
