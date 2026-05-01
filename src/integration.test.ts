@@ -815,6 +815,59 @@ test("buildTerminalEvidenceEvent: emits compact safe PR evidence without raw log
   assert.ok(!serialized.includes("token=secret"));
 });
 
+test("buildTerminalEvidenceEvent: includes short Done reason and issue URL", () => {
+  const result: RawRunnerOutput = {
+    ok: true, taskId: "task-done", status: "completed", workDir: "/tmp/work",
+    stdout: "large log that should not be copied", stderr: "", artifacts: [],
+    resultSummary: {
+      exitCode: 0, signal: null, timedOut: false,
+      stdout: "bounded stdout", stderr: "", stdoutTruncated: false, stderrTruncated: false,
+      artifactCount: 0, manifestPath: "artifacts/manifest.json",
+    },
+    github: { doneCommentUrl: "https://github.com/jinwon-int/repo/issues/83#issuecomment-2" },
+  };
+
+  const event = buildTerminalEvidenceEvent(
+    result,
+    { id: "task-done", payload: { repo: "jinwon-int/repo", issueUrl: "https://github.com/jinwon-int/repo/issues/83" } },
+    "sogyo",
+    "2026-05-01T12:30:00.000Z",
+  );
+
+  assert.equal(event.status, "succeeded");
+  assert.equal(event.evidenceKind, "Done");
+  assert.equal(event.issue, "https://github.com/jinwon-int/repo/issues/83");
+  assert.equal(event.doneUrl, "https://github.com/jinwon-int/repo/issues/83#issuecomment-2");
+  assert.equal(event.reason, "Done evidence was posted because no PR was needed.");
+  assert.ok(!JSON.stringify(event).includes("large log"));
+});
+
+test("buildTerminalEvidenceEvent: failed missing-evidence event keeps reason short and omits raw logs", () => {
+  const longError = "fatal: /private/work/run failed token=secret ".concat("very noisy detail ".repeat(80));
+  const result: RawRunnerOutput = {
+    ok: false, taskId: "task-failed", status: "failed", workDir: "/private/work",
+    stdout: "raw stdout ".repeat(200), stderr: "raw stderr ".repeat(200), artifacts: [],
+    error: longError,
+  };
+
+  const event = buildTerminalEvidenceEvent(
+    result,
+    { id: "task-failed", payload: { repo: "jinwon-int/repo", issue: "84" } },
+    "sogyo",
+    "2026-05-01T12:45:00.000Z",
+  );
+
+  assert.equal(event.status, "failed");
+  assert.equal(event.evidenceKind, "MissingEvidence");
+  assert.equal(event.reason?.startsWith("fatal: <path> failed token=<redacted> very noisy detail"), true);
+  assert.ok((event.reason?.length ?? 0) <= 180);
+  const serialized = JSON.stringify(event);
+  assert.ok(!serialized.includes("raw stdout"));
+  assert.ok(!serialized.includes("raw stderr"));
+  assert.ok(!serialized.includes("/private/work"));
+  assert.ok(!serialized.includes("token=secret"));
+});
+
 test("buildHandlerResult: includes terminal evidence for broker push notifications", () => {
   const result: RawRunnerOutput = {
     ok: false, taskId: "task-block", status: "failed", workDir: "/tmp/work",
@@ -832,6 +885,7 @@ test("buildHandlerResult: includes terminal evidence for broker push notificatio
   assert.equal(handlerResult.terminalEvidence.status, "blocked");
   assert.equal(handlerResult.terminalEvidence.evidenceKind, "Block");
   assert.equal(handlerResult.terminalEvidence.blockUrl, "https://github.com/jinwon-int/repo/issues/79#issuecomment-1");
+  assert.equal(handlerResult.terminalEvidence.reason, "Block evidence was posted for operator follow-up.");
   assert.equal(handlerResult.terminalEvidence.testSummary.exitCode, 1);
 });
 
