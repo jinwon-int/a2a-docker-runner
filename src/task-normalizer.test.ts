@@ -130,6 +130,9 @@ test("generates PR-producing default commands for github-propose-patch mode with
   assert.ok(pipeline.includes("deprecated_eval_path"), "Expected deprecation warning");
   assert.ok(pipeline.includes("/work/artifacts/patch-command.log"), "Expected coding agent log artifact");
   assert.ok(pipeline.includes("/work/artifacts/pr-output.txt"), "Expected PR output artifact");
+  assert.ok(pipeline.includes("a2a-gh-pr-update-branch \"$PR_URL\" \"main\""), "Expected post-create update-branch helper");
+  assert.ok(pipeline.includes("/work/artifacts/pr-update-branch-output.txt"), "Expected update-branch output artifact");
+  assert.ok(pipeline.includes("warning=pr_update_branch_failed"), "Expected non-fatal update-branch fallback marker");
   assert.ok(pipeline.includes("error=pr_create_failed_or_missing_url"), "Expected missing PR URL to fail safely");
   assert.ok(pipeline.includes("error=no_changes_after_patch_command"), "Expected no-changes fallback to fail safely");
 

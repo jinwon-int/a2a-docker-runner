@@ -188,6 +188,7 @@ if [ -n "\${A2A_RUNNER_BUILD_SOURCE:-}" ]; then printf 'runner.source=%s\n' "$A2
 if [ -n "\${A2A_RUNNER_BUILD_BUILT_AT:-}" ]; then printf 'runner.builtAt=%s\n' "$A2A_RUNNER_BUILD_BUILT_AT" | tee -a /work/artifacts/summary.txt; fi
 if [ -n "\${A2A_RUNNER_BUILD_IMAGE:-}" ]; then printf 'runner.image=%s\n' "$A2A_RUNNER_BUILD_IMAGE" | tee -a /work/artifacts/summary.txt; fi
 ${installBaseToolsScript()}
+${installGhUpdateBranchFallbackScript()}
 ${githubAuthScript()}
 ${checkoutReposScript(task)}
 cat /work/task.json > /work/artifacts/task.json
@@ -197,10 +198,80 @@ printf 'status=completed\n' | tee -a /work/artifacts/summary.txt
 }
 
 function installBaseToolsScript(): string {
-  return `if ! command -v git >/dev/null 2>&1 || ! command -v gh >/dev/null 2>&1; then
+  return `if ! command -v git >/dev/null 2>&1; then
+  if ! command -v apt-get >/dev/null 2>&1; then
+    printf 'error=missing_git_and_apt_get_unavailable\n' >&2
+    exit 2
+  fi
+  export DEBIAN_FRONTEND=noninteractive
   apt-get update >/dev/null
-  apt-get install -y git gh ca-certificates >/dev/null
+  apt-get install -y git ca-certificates >/dev/null
 fi
+
+if ! command -v gh >/dev/null 2>&1 || ! gh pr update-branch --help >/dev/null 2>&1; then
+  if ! command -v apt-get >/dev/null 2>&1; then
+    printf 'error=missing_or_unsupported_gh_and_apt_get_unavailable\n' >&2
+    exit 2
+  fi
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update >/dev/null
+  apt-get install -y git ca-certificates curl gnupg >/dev/null
+  mkdir -p -m 755 /etc/apt/keyrings
+  curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg
+  chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+  printf 'deb [arch=%s signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main\n' "$(dpkg --print-architecture)" > /etc/apt/sources.list.d/github-cli.list
+  apt-get update >/dev/null
+  apt-get install -y gh >/dev/null
+fi
+printf 'github_cli=%s\n' "$(gh --version | head -n 1)" | tee -a /work/artifacts/summary.txt
+`;
+}
+
+function installGhUpdateBranchFallbackScript(): string {
+  return `cat > /usr/local/bin/a2a-gh-pr-update-branch <<'A2A_GH_UPDATE_BRANCH_EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+selector="\${1:-}"
+base_override="\${2:-}"
+
+args=()
+if [ -n "$selector" ]; then
+  args+=("$selector")
+fi
+
+if gh pr update-branch "\${args[@]}"; then
+  exit 0
+fi
+
+printf 'warning=gh_pr_update_branch_failed_using_git_fallback\n' >&2
+
+view_args=()
+if [ -n "$selector" ]; then
+  view_args+=("$selector")
+fi
+
+head_ref="$(gh pr view "\${view_args[@]}" --json headRefName --jq .headRefName 2>/dev/null || true)"
+base_ref="$base_override"
+if [ -z "$base_ref" ]; then
+  base_ref="$(gh pr view "\${view_args[@]}" --json baseRefName --jq .baseRefName 2>/dev/null || true)"
+fi
+if [ -z "$head_ref" ]; then
+  head_ref="$(git rev-parse --abbrev-ref HEAD)"
+fi
+if [ -z "$base_ref" ]; then
+  base_ref="main"
+fi
+
+git fetch origin "$base_ref"
+current_ref="$(git rev-parse --abbrev-ref HEAD)"
+if [ "$current_ref" != "$head_ref" ]; then
+  git fetch origin "$head_ref"
+  git checkout -B "$head_ref" "origin/$head_ref"
+fi
+git merge --no-edit "origin/$base_ref"
+git push origin "$head_ref"
+A2A_GH_UPDATE_BRANCH_EOF
+chmod 755 /usr/local/bin/a2a-gh-pr-update-branch
 `;
 }
 
