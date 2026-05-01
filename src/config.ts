@@ -141,6 +141,20 @@ tar -C /run/secrets/openclaw-dir \
   --exclude='./memory-wiki-vault' \
   --exclude='./plugin-runtime-deps' \
   --exclude='./openclaw-hotpatch' \
+  --exclude='./quarantine' \
+  --exclude='./venv' \
+  --exclude='./plugin-runtimes' \
+  --exclude='./browser' \
+  --exclude='./memory' \
+  --exclude='./completions' \
+  --exclude='./wiki-pr-work' \
+  --exclude='./backup' \
+  --exclude='./cleanup-archive' \
+  --exclude='./tasks' \
+  --exclude='./extensions/*/node_modules' \
+  --exclude='./agents/*/sessions' \
+  --exclude='agents/*/sessions' \
+  --exclude='./agents/*/agent/harness-auth' \
   --exclude='./agents/*/sessions' \
   --exclude='./agents/*/sessions.json' \
   -cf - . | tar -C /root/.openclaw -xf -
