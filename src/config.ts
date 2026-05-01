@@ -18,6 +18,8 @@ export async function loadConfig(env = process.env): Promise<RunnerConfig> {
   const extraMounts = loadExtraMounts(env);
   validatePatchExecutorPolicy(patchCommand, extraMounts);
 
+  const profile = normalizePatchCommandProfile(env.A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE);
+
   return {
     rootDir: env.A2A_DOCKER_RUNNER_ROOT || DEFAULT_ROOT,
     engine,
@@ -26,6 +28,7 @@ export async function loadConfig(env = process.env): Promise<RunnerConfig> {
     defaultTimeoutMs: Number(env.A2A_DOCKER_RUNNER_TIMEOUT_MS || 15 * 60 * 1000),
     memory: env.A2A_DOCKER_RUNNER_MEMORY || "2g",
     cpus: env.A2A_DOCKER_RUNNER_CPUS || "2",
+    network: env.A2A_DOCKER_RUNNER_NETWORK || (profile === "openclaw" ? "host" : "bridge"),
     extraMounts,
     ...patchCommand,
   };

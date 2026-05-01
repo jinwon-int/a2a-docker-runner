@@ -108,7 +108,7 @@ export function buildRunArgs(config: RunnerConfig, task: RunnerTask, workDir: st
     "--name",
     containerName,
     "--network",
-    "bridge",
+    config.network ?? "bridge",
     "--label",
     `a2a.task.id=${safeId(task.id)}`,
     "--label",

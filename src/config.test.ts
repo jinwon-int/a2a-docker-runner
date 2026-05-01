@@ -26,6 +26,7 @@ test("loadConfig builds first-class OpenClaw patch profile", async () => {
 
   assert.match(config.commandScript ?? "", /openclaw agent/);
   assert.match(config.commandScript ?? "", /--thinking 'medium'/);
+  assert.equal(config.network, "host");
   assert.match(config.commandScript ?? "", /tar -C \/run\/secrets\/openclaw-dir/);
   assert.match(config.commandScript ?? "", /--exclude='\.\/workspace'/);
   assert.match(config.commandScript ?? "", /--exclude='\.\/agents\/\*\/sessions'/);
@@ -34,6 +35,16 @@ test("loadConfig builds first-class OpenClaw patch profile", async () => {
   assert.deepEqual(config.extraMounts, [
     { source: "/root/.openclaw", target: "/run/secrets/openclaw-dir", readOnly: true },
   ]);
+});
+
+test("loadConfig honors explicit Docker network override", async () => {
+  const config = await loadConfig({
+    ...baseEnv,
+    A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE: "openclaw",
+    A2A_DOCKER_RUNNER_NETWORK: "bridge",
+  });
+
+  assert.equal(config.network, "bridge");
 });
 
 test("loadConfig OpenClaw patch profile honors custom config dir", async () => {
