@@ -27,11 +27,15 @@ test("loadConfig builds first-class OpenClaw patch profile", async () => {
   assert.match(config.commandScript ?? "", /openclaw agent/);
   assert.match(config.commandScript ?? "", /--model 'openai-codex\/gpt-5\.5'/);
   assert.match(config.commandScript ?? "", /--thinking 'medium'/);
+  assert.match(config.commandScript ?? "", /OPENCLAW_DISABLE_BUNDLED_PLUGINS='1'/);
   assert.equal(config.network, "host");
-  assert.match(config.commandScript ?? "", /tar -C \/run\/secrets\/openclaw-dir/);
-  assert.match(config.commandScript ?? "", /--exclude='\.\/workspace'/);
-  assert.match(config.commandScript ?? "", /--exclude='\.\/agents\/\*\/sessions'/);
-  assert.doesNotMatch(config.commandScript ?? "", /cp -a \/run\/secrets\/openclaw-dir/);
+  assert.match(config.commandScript ?? "", /copy_file_if_exists \/run\/secrets\/openclaw-dir\/openclaw\.json/);
+  assert.match(config.commandScript ?? "", /auth-profiles\.json/);
+  assert.match(config.commandScript ?? "", /auth-state\.json/);
+  assert.match(config.commandScript ?? "", /models\.json/);
+  assert.match(config.commandScript ?? "", /openclaw_config_bytes=/);
+  assert.doesNotMatch(config.commandScript ?? "", /tar -C \/run\/secrets\/openclaw-dir/);
+  assert.doesNotMatch(config.commandScript ?? "", /cp -a \/run\/secrets\/openclaw-dir \/root\/\.openclaw/);
   assert.equal(config.commandJson, undefined);
   assert.deepEqual(config.extraMounts, [
     { source: "/root/.openclaw", target: "/run/secrets/openclaw-dir", readOnly: true },
