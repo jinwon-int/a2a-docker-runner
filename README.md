@@ -149,6 +149,25 @@ For integration jobs, pass explicit repos and commands instead:
 
 This keeps `a2a-docker-runner` as the disposable execution sandbox while `openclaw-plugin-a2a` remains the main development repo.
 
+## Operator terminal evidence contract
+
+The worker-facing integration returns a compact `terminalEvidence` object for broker
+push/SSE/webhook delivery. Broker/workers must treat this as notification data
+only; operator Telegram and main-session delivery stay owned by
+seoseo/OpenClaw `plugin-notifier`, not by this runner.
+
+The event is intentionally small and secret-free:
+
+- `status`: `succeeded`, `failed`, `cancelled`, or `blocked`
+- `repo` and `issue`: repository plus canonical issue URL/reference
+- `prUrl`, `doneUrl`, or `blockUrl`: the chosen completion evidence URL
+- `testSummary.label`: one-line runner outcome with exit, timeout, artifact count
+- `reason`: short human-facing Done/Block/failure reason
+
+It must not include raw stdout/stderr, host work directories, secrets, or oversized
+command output. Detailed logs remain in runner artifacts and bounded
+`runnerRaw` debugging fields.
+
 ## Worker operations
 
 `doctor` prints JSON status for worker readiness checks:

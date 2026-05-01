@@ -92,6 +92,8 @@ export interface TerminalEvidenceEvent {
   prUrl?: string;
   doneUrl?: string;
   blockUrl?: string;
+  /** Short human-facing outcome reason; never contains raw runner logs. */
+  reason?: string;
   testSummary: {
     label: string;
     exitCode?: number | null;
@@ -356,6 +358,7 @@ export function buildTerminalEvidenceEvent(
     prUrl: evidence?.prUrl,
     doneUrl: evidence?.doneCommentUrl,
     blockUrl: evidence?.blockCommentUrl,
+    reason: buildTerminalReason(result, evidenceKind),
     testSummary: {
       label: buildTestSummaryLabel(result, evidenceKind),
       exitCode: summary?.exitCode ?? result.exitCode,
@@ -436,6 +439,34 @@ function buildTestSummaryLabel(result: RawRunnerOutput, kind: TerminalEvidenceKi
   const artifacts = result.resultSummary?.artifactCount ?? result.artifacts?.length ?? 0;
   const outcome = kind === "PR" ? "PR evidence" : kind === "Done" ? "Done evidence" : kind === "Block" ? "Block evidence" : "missing terminal evidence";
   return `a2a-docker-runner ${result.status}; ${outcome}; exit=${exit ?? "null"}; timedOut=${timedOut}; artifacts=${artifacts}`;
+}
+
+function buildTerminalReason(result: RawRunnerOutput, kind: TerminalEvidenceKind): string {
+  if (kind === "PR") return "PR evidence is available for operator review.";
+  if (kind === "Done") return "Done evidence was posted because no PR was needed.";
+  if (kind === "Block") return shortSafeReason(result, "Block evidence was posted for operator follow-up.");
+  if (result.status === "timeout") return "Runner timed out before producing PR/Done/Block evidence.";
+  if (!result.ok) return shortSafeReason(result, "Runner failed before producing PR/Done/Block evidence.");
+  return "Runner completed without PR/Done/Block evidence.";
+}
+
+function shortSafeReason(result: RawRunnerOutput, fallback: string): string {
+  const source = result.error ?? result.resultSummary?.stderr ?? result.resultSummary?.stdout;
+  const firstLine = source?.split(/\r?\n/).map((line) => line.trim()).find(Boolean);
+  if (!firstLine) return fallback;
+  return boundReason(firstLine);
+}
+
+function boundReason(value: string): string {
+  const compact = value
+    .replace(/x-access-token:[^@\s]+@github\.com/g, "x-access-token:<redacted>@github.com")
+    .replace(/(token|password|secret|api[_-]?key)=\S+/gi, "$1=<redacted>")
+    .replace(/\b[A-Za-z_][A-Za-z0-9_]*(?:TOKEN|SECRET|PASSWORD)=\S+/g, "<redacted-secret-env>")
+    .replace(/\/[^\s:;,)]+(?:\/[^\s:;,)]+)+/g, "<path>")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (compact.length <= 180) return compact;
+  return `${compact.slice(0, 177)}...`;
 }
 
 function normalizeString(value?: string): string | undefined {
