@@ -774,6 +774,53 @@ test("buildHandlerResult: exposes bounded resultSummary stdout/stderr instead of
   assert.ok(!runnerRaw.stderr.includes("raw-stderr-raw-stderr-"));
 });
 
+test("buildHandlerResult: broker runnerRaw omits heavyweight/private runner internals", () => {
+  const result: RawRunnerOutput = {
+    ok: true, taskId: "t-diet", status: "completed", workDir: "/var/lib/openclaw-a2a/tasks/t-diet/run-1",
+    stdout: "raw stdout", stderr: "raw stderr", artifacts: ["/var/lib/openclaw-a2a/tasks/t-diet/run-1/artifacts/summary.txt"],
+    artifactManifest: {
+      schemaVersion: 1,
+      manifestPath: "artifacts/manifest.json",
+      generatedAt: "1970-01-01T00:00:00.000Z",
+      artifacts: [{ path: "artifacts/summary.txt", name: "summary.txt", sizeBytes: 10 }],
+    },
+    resultSummary: {
+      exitCode: 0, signal: null, timedOut: false,
+      stdout: "bounded stdout", stderr: "bounded stderr",
+      stdoutTruncated: false, stderrTruncated: false, artifactCount: 1, manifestPath: "artifacts/manifest.json",
+    },
+    github: { doneCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-456" },
+  };
+  const handlerResult = buildHandlerResult(result, { id: "t-diet" }, "sogyo");
+  const runnerRaw = handlerResult.runnerRaw as Record<string, unknown>;
+
+  assert.equal(runnerRaw.ok, true);
+  assert.equal(runnerRaw.status, "completed");
+  assert.deepEqual(runnerRaw.artifacts, ["artifacts/summary.txt"]);
+  assert.equal(runnerRaw.manifestPath, "artifacts/manifest.json");
+  assert.equal(runnerRaw.workDir, undefined);
+  assert.equal(runnerRaw.artifactManifest, undefined);
+  assert.equal(runnerRaw.resultSummary, undefined);
+});
+
+test("buildHandlerResult: broker runnerRaw bounds legacy raw streams when resultSummary is absent", () => {
+  const result: RawRunnerOutput = {
+    ok: false, taskId: "t-legacy-large", status: "failed", workDir: "/tmp",
+    stdout: "legacy-stdout-".repeat(500),
+    stderr: "legacy-stderr-".repeat(500),
+    artifacts: [],
+    error: "legacy-error-".repeat(500),
+    github: { blockCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-123" },
+  };
+  const handlerResult = buildHandlerResult(result, { id: "t-legacy-large" }, "sogyo");
+  const runnerRaw = handlerResult.runnerRaw as Record<string, string>;
+
+  assert.ok(runnerRaw.stdout.length < result.stdout.length);
+  assert.ok(runnerRaw.stderr.length < result.stderr.length);
+  assert.ok(runnerRaw.error.length < result.error!.length);
+  assert.match(runnerRaw.stdout, /truncated \d+ chars for broker update/);
+});
+
 test("buildHandlerResult: PR takes precedence over block in evidence (deterministic ordering)", () => {
   const result: RawRunnerOutput = {
     ok: false, taskId: "mixed", status: "failed", workDir: "/tmp",
