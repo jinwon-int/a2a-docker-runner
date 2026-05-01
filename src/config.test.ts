@@ -25,6 +25,7 @@ test("loadConfig builds first-class OpenClaw patch profile", async () => {
   });
 
   assert.match(config.commandScript ?? "", /openclaw agent/);
+  assert.match(config.commandScript ?? "", /--model 'openai-codex\/gpt-5\.5'/);
   assert.match(config.commandScript ?? "", /--thinking 'medium'/);
   assert.equal(config.network, "host");
   assert.match(config.commandScript ?? "", /tar -C \/run\/secrets\/openclaw-dir/);
@@ -35,6 +36,16 @@ test("loadConfig builds first-class OpenClaw patch profile", async () => {
   assert.deepEqual(config.extraMounts, [
     { source: "/root/.openclaw", target: "/run/secrets/openclaw-dir", readOnly: true },
   ]);
+});
+
+test("loadConfig OpenClaw patch profile honors custom model", async () => {
+  const config = await loadConfig({
+    ...baseEnv,
+    A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE: "openclaw",
+    A2A_OPENCLAW_MODEL: "zai/glm-5.1",
+  });
+
+  assert.match(config.commandScript ?? "", /--model 'zai\/glm-5\.1'/);
 });
 
 test("loadConfig honors explicit Docker network override", async () => {
