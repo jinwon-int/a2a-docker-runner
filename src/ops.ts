@@ -345,9 +345,9 @@ export function checkGitHubPatchReadiness(config: RunnerConfig): OpsCheck {
 
   if (config.commandTemplate) {
     return {
-      status: "warn",
-      message: "GitHub patch execution uses legacy commandTemplate eval path; prefer commandScript or commandJson",
-      detail: { env: "A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE", safe: false, eval: true },
+      status: "fail",
+      message: "GitHub patch execution blocks legacy commandTemplate eval path; use OpenClaw or Codex via commandScript or commandJson",
+      detail: { env: "A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE", safe: false, eval: true, allowedExecutors: ["openclaw", "codex"] },
     };
   }
 

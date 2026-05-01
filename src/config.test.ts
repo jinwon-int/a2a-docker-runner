@@ -6,60 +6,53 @@ const baseEnv = {
   A2A_DOCKER_RUNNER_SKIP_ENGINE_DETECT: "1",
 };
 
-test("loadConfig reads safe patch command script env var", async () => {
+test("loadConfig reads OpenClaw patch command script env var", async () => {
   const config = await loadConfig({
     ...baseEnv,
-    A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT: "#!/usr/bin/env bash\necho safe",
+    A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT: "#!/usr/bin/env bash\nopenclaw agent --help",
   });
 
-  assert.equal(config.commandScript, "#!/usr/bin/env bash\necho safe");
+  assert.equal(config.commandScript, "#!/usr/bin/env bash\nopenclaw agent --help");
 });
 
-test("loadConfig reads safe patch command JSON env var", async () => {
+test("loadConfig reads Codex patch command JSON env var", async () => {
   const config = await loadConfig({
     ...baseEnv,
-    A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON: JSON.stringify({ argv: ["echo", "json"] }),
+    A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON: JSON.stringify({ argv: ["codex", "exec", "json"] }),
   });
 
-  assert.equal(config.commandJson, '{"argv":["echo","json"]}');
+  assert.equal(config.commandJson, '{"argv":["codex","exec","json"]}');
 });
 
-test("loadConfig keeps legacy patch command template for compatibility", async () => {
-  const config = await loadConfig({
-    ...baseEnv,
-    A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE: "echo legacy",
-  });
-
-  assert.equal(config.commandTemplate, "echo legacy");
+test("loadConfig rejects legacy patch command template even with allowed executors", async () => {
+  await assert.rejects(
+    () => loadConfig({
+      ...baseEnv,
+      A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE: "openclaw agent --help",
+    }),
+    /PATCH_COMMAND_TEMPLATE is disabled/,
+  );
 });
 
 test("loadConfig patch command precedence is script > json > template", async () => {
   const scriptConfig = await loadConfig({
     ...baseEnv,
-    A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT: "echo script",
-    A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON: JSON.stringify({ argv: ["echo", "json"] }),
-    A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE: "echo legacy",
+    A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT: "codex exec script",
+    A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON: JSON.stringify({ argv: ["codex", "exec", "json"] }),
+    A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE: "openclaw agent --help",
   });
-  assert.equal(scriptConfig.commandScript, "echo script");
+  assert.equal(scriptConfig.commandScript, "codex exec script");
   assert.equal(scriptConfig.commandJson, undefined);
   assert.equal(scriptConfig.commandTemplate, undefined);
 
   const jsonConfig = await loadConfig({
     ...baseEnv,
-    A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON: JSON.stringify({ argv: ["echo", "json"] }),
-    A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE: "echo legacy",
+    A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON: JSON.stringify({ argv: ["codex", "exec", "json"] }),
+    A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE: "openclaw agent --help",
   });
   assert.equal(jsonConfig.commandScript, undefined);
-  assert.equal(jsonConfig.commandJson, '{"argv":["echo","json"]}');
+  assert.equal(jsonConfig.commandJson, '{"argv":["codex","exec","json"]}');
   assert.equal(jsonConfig.commandTemplate, undefined);
-
-  const legacyConfig = await loadConfig({
-    ...baseEnv,
-    A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE: "echo legacy",
-  });
-  assert.equal(legacyConfig.commandScript, undefined);
-  assert.equal(legacyConfig.commandJson, undefined);
-  assert.equal(legacyConfig.commandTemplate, "echo legacy");
 });
 
 test("loadConfig reads extra runner mounts", async () => {
@@ -87,13 +80,13 @@ test("loadConfig rejects malformed extra runner mounts", async () => {
   );
 });
 
-test("loadConfig blocks Claude-in-Docker patch commands by default", async () => {
+test("loadConfig blocks Claude-in-Docker patch commands", async () => {
   await assert.rejects(
     () => loadConfig({
       ...baseEnv,
       A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT: "npm install -g @anthropic-ai/claude-code\nclaude --print hello",
     }),
-    /Claude-in-Docker.*A2A_ALLOW_CLAUDE_IN_DOCKER/,
+    /Claude-in-Docker.*not an allowed Docker patch executor/,
   );
 
   await assert.rejects(
@@ -101,7 +94,7 @@ test("loadConfig blocks Claude-in-Docker patch commands by default", async () =>
       ...baseEnv,
       A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON: JSON.stringify({ argv: ["claude", "--print", "hello"] }),
     }),
-    /Claude-in-Docker.*A2A_ALLOW_CLAUDE_IN_DOCKER/,
+    /Claude-in-Docker.*not an allowed Docker patch executor/,
   );
 
   await assert.rejects(
@@ -109,11 +102,11 @@ test("loadConfig blocks Claude-in-Docker patch commands by default", async () =>
       ...baseEnv,
       A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE: "claude --print hello",
     }),
-    /Claude-in-Docker.*A2A_ALLOW_CLAUDE_IN_DOCKER/,
+    /PATCH_COMMAND_TEMPLATE is disabled/,
   );
 });
 
-test("loadConfig blocks Claude credential mounts by default", async () => {
+test("loadConfig blocks Claude credential mounts", async () => {
   await assert.rejects(
     () => loadConfig({
       ...baseEnv,
@@ -121,22 +114,41 @@ test("loadConfig blocks Claude credential mounts by default", async () => {
         { source: "/root/.claude", target: "/run/secrets/claude-dir" },
       ]),
     }),
-    /Claude credentials.*A2A_ALLOW_CLAUDE_IN_DOCKER/,
+    /Claude credentials.*not allowed in Docker patch execution/,
   );
 });
 
-test("loadConfig allows Claude-in-Docker only with explicit legacy opt-in", async () => {
-  const config = await loadConfig({
-    ...baseEnv,
-    A2A_ALLOW_CLAUDE_IN_DOCKER: "1",
-    A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON: JSON.stringify({ argv: ["claude", "--print", "hello"] }),
-    A2A_DOCKER_RUNNER_EXTRA_MOUNTS_JSON: JSON.stringify([
-      { source: "/root/.claude", target: "/run/secrets/claude-dir" },
-    ]),
-  });
+test("loadConfig rejects Claude-in-Docker even with the legacy opt-in flag", async () => {
+  await assert.rejects(
+    () => loadConfig({
+      ...baseEnv,
+      A2A_ALLOW_CLAUDE_IN_DOCKER: "1",
+      A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON: JSON.stringify({ argv: ["claude", "--print", "hello"] }),
+    }),
+    /not an allowed Docker patch executor|OpenClaw or Codex/,
+  );
+});
 
-  assert.equal(config.commandJson, '{"argv":["claude","--print","hello"]}');
-  assert.deepEqual(config.extraMounts, [
-    { source: "/root/.claude", target: "/run/secrets/claude-dir", readOnly: undefined },
-  ]);
+test("loadConfig rejects patch commands without OpenClaw or Codex", async () => {
+  await assert.rejects(
+    () => loadConfig({
+      ...baseEnv,
+      A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT: "#!/usr/bin/env bash\ngit status",
+    }),
+    /allowed Docker patch executor: OpenClaw or Codex/,
+  );
+});
+
+test("loadConfig allows OpenClaw and Codex Docker patch executors", async () => {
+  const openclawConfig = await loadConfig({
+    ...baseEnv,
+    A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT: "#!/usr/bin/env bash\nnpm install -g openclaw\nopenclaw agent --local --message hi",
+  });
+  assert.match(openclawConfig.commandScript ?? "", /openclaw agent/);
+
+  const codexConfig = await loadConfig({
+    ...baseEnv,
+    A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON: JSON.stringify({ argv: ["bash", "-lc", "npm install -g @openai/codex && codex exec --help"] }),
+  });
+  assert.match(codexConfig.commandJson ?? "", /@openai\/codex/);
 });

@@ -16,7 +16,7 @@ export async function loadConfig(env = process.env): Promise<RunnerConfig> {
 
   const patchCommand = loadPatchCommandConfig(env);
   const extraMounts = loadExtraMounts(env);
-  validateClaudeInDockerPolicy(env, patchCommand, extraMounts);
+  validatePatchExecutorPolicy(patchCommand, extraMounts);
 
   return {
     rootDir: env.A2A_DOCKER_RUNNER_ROOT || DEFAULT_ROOT,
@@ -79,18 +79,28 @@ function loadPatchCommandConfig(env: NodeJS.ProcessEnv): Pick<RunnerConfig, "com
   return { commandTemplate: env.A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE || undefined };
 }
 
-function validateClaudeInDockerPolicy(
-  env: NodeJS.ProcessEnv,
+function validatePatchExecutorPolicy(
   patchCommand: Pick<RunnerConfig, "commandScript" | "commandJson" | "commandTemplate">,
   extraMounts?: RunnerExtraMount[],
 ): void {
-  if (allowsClaudeInDocker(env)) return;
+  if (patchCommand.commandTemplate) {
+    throw new Error(
+      "A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE is disabled for GitHub patch execution; " +
+      "use commandScript or commandJson with an OpenClaw or Codex executor",
+    );
+  }
 
   for (const [key, value] of Object.entries(patchCommand)) {
-    if (value && referencesClaudeExecutor(value)) {
+    if (!value) continue;
+    if (referencesClaudeExecutor(value)) {
       throw new Error(
-        `${key} references Claude-in-Docker but A2A_ALLOW_CLAUDE_IN_DOCKER is not enabled; ` +
-        "use a host-side OpenClaw/Codex commandScript or commandJson, or set A2A_ALLOW_CLAUDE_IN_DOCKER=1 for a temporary legacy opt-in",
+        `${key} references Claude-in-Docker, which is not an allowed Docker patch executor; ` +
+        "use OpenClaw or Codex via commandScript or commandJson",
+      );
+    }
+    if (!referencesAllowedPatchExecutor(value)) {
+      throw new Error(
+        `${key} must invoke an allowed Docker patch executor: OpenClaw or Codex`,
       );
     }
   }
@@ -98,20 +108,13 @@ function validateClaudeInDockerPolicy(
   for (const mount of extraMounts ?? []) {
     if (referencesClaudeMount(mount.source) || referencesClaudeMount(mount.target)) {
       throw new Error(
-        "extraMounts reference Claude credentials but A2A_ALLOW_CLAUDE_IN_DOCKER is not enabled; " +
-        "remove Claude mounts or set A2A_ALLOW_CLAUDE_IN_DOCKER=1 for a temporary legacy opt-in",
+        "extraMounts reference Claude credentials, which are not allowed in Docker patch execution; " +
+        "mount only OpenClaw/Codex-specific credentials or scratch paths",
       );
     }
   }
 }
 
-function allowsClaudeInDocker(env: NodeJS.ProcessEnv): boolean {
-  return isTruthy(env.A2A_ALLOW_CLAUDE_IN_DOCKER) || isTruthy(env.A2A_DOCKER_RUNNER_ALLOW_CLAUDE_IN_DOCKER);
-}
-
-function isTruthy(value?: string): boolean {
-  return /^(1|true|yes|on)$/i.test(String(value ?? "").trim());
-}
 
 function referencesClaudeExecutor(value: string): boolean {
   return [
@@ -124,6 +127,26 @@ function referencesClaudeExecutor(value: string): boolean {
 
 function referencesClaudeMount(value: string): boolean {
   return /(^|\/)\.claude(?:\.json|\/|$)/i.test(value) || /(^|\/)claude(?:\.json|-dir)?$/i.test(value);
+}
+
+function referencesAllowedPatchExecutor(value: string): boolean {
+  return referencesOpenClawExecutor(value) || referencesCodexExecutor(value);
+}
+
+function referencesOpenClawExecutor(value: string): boolean {
+  return [
+    /(^|[\s;|&"'`/])openclaw([\s;|&"'`-]|$)/i,
+    /node_modules\/openclaw\//i,
+    /npm\s+(?:install|i)\s+(?:-g\s+)?openclaw/i,
+  ].some((pattern) => pattern.test(value));
+}
+
+function referencesCodexExecutor(value: string): boolean {
+  return [
+    /(^|[\s;|&"'`/])codex([\s;|&"'`-]|$)/i,
+    /@openai\/codex/i,
+    /openai-codex/i,
+  ].some((pattern) => pattern.test(value));
 }
 
 function normalizeEngine(value?: string): RunnerEngine | undefined {
