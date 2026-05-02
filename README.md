@@ -203,7 +203,7 @@ done
 
 `install` (alias: `setup`) is safe to rerun. It creates the task root with private permissions when missing and validates the optional secret file without touching live services.
 
-`smoke` runs a tiny operator-facing container fixture through the configured Docker/Podman boundary. It exercises stdout, stderr, artifact capture, timeout wiring, and engine-side cleanup (`--rm`) without touching live worker services:
+`smoke` runs a tiny operator-facing container fixture through the configured Docker/Podman boundary. It exercises stdout, stderr, artifact capture, `gh` bootstrap/version evidence, timeout wiring, and engine-side cleanup (`--rm`) without touching live worker services. The default smoke bound is capped at 120s so stock `node:22-bookworm-slim` images have enough room for GitHub CLI apt bootstrap without inheriting the full task timeout:
 
 ```bash
 A2A_DOCKER_RUNNER_ENGINE=docker A2A_DOCKER_RUNNER_IMAGE=node:22-bookworm-slim node dist/cli.js smoke
