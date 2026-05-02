@@ -806,12 +806,18 @@ test("buildTerminalEvidenceEvent: emits compact safe PR evidence without raw log
 
   assert.equal(event.schemaVersion, "a2a.runner.terminal-evidence.v1");
   assert.equal(event.eventId, "a2a-terminal:task-79:succeeded:PR:https://github.com/jinwon-int/repo/pull/79");
+  assert.equal(event.dedupeKey, event.eventId);
   assert.equal(event.status, "succeeded");
   assert.equal(event.evidenceKind, "PR");
   assert.equal(event.worker, "sogyo");
   assert.equal(event.repo, "jinwon-int/repo");
   assert.equal(event.issue, "https://github.com/jinwon-int/repo/issues/79");
   assert.equal(event.prUrl, "https://github.com/jinwon-int/repo/pull/79");
+  assert.deepEqual(event.alert, {
+    title: "A2A PR: jinwon-int/repo",
+    body: "task=task-79 · worker=sogyo · status=succeeded · exit=0 · timeout=false · artifacts=1 · issue=jinwon-int/repo#79 · reason=PR evidence is available for operator review.",
+    url: "https://github.com/jinwon-int/repo/pull/79",
+  });
   assert.equal(event.testSummary.label, "a2a-docker-runner completed; PR evidence; exit=0; timedOut=false; artifacts=1");
   assert.deepEqual(event.runnerBuild, {
     version: "0.1.0",
@@ -852,6 +858,8 @@ test("buildTerminalEvidenceEvent: includes short Done reason and issue URL", () 
   assert.equal(event.evidenceKind, "Done");
   assert.equal(event.issue, "https://github.com/jinwon-int/repo/issues/83");
   assert.equal(event.doneUrl, "https://github.com/jinwon-int/repo/issues/83#issuecomment-2");
+  assert.equal(event.alert.title, "A2A Done: jinwon-int/repo");
+  assert.equal(event.alert.url, "https://github.com/jinwon-int/repo/issues/83#issuecomment-2");
   assert.equal(event.reason, "Done evidence was posted because no PR was needed.");
   assert.ok(!JSON.stringify(event).includes("large log"));
 });
@@ -875,6 +883,9 @@ test("buildTerminalEvidenceEvent: failed missing-evidence event keeps reason sho
   assert.equal(event.evidenceKind, "MissingEvidence");
   assert.equal(event.reason?.startsWith("fatal: <path> failed token=<redacted> very noisy detail"), true);
   assert.ok((event.reason?.length ?? 0) <= 180);
+  assert.equal(event.alert.title, "A2A Needs review: jinwon-int/repo");
+  assert.ok(event.alert.body.includes("status=failed"));
+  assert.ok(event.alert.body.length <= 360);
   const serialized = JSON.stringify(event);
   assert.ok(!serialized.includes("raw stdout"));
   assert.ok(!serialized.includes("raw stderr"));

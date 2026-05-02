@@ -158,16 +158,19 @@ seoseo/OpenClaw `plugin-notifier`, not by this runner.
 
 The event is intentionally small and secret-free:
 
+- `eventId` / `dedupeKey`: stable idempotency keys for broker replay and plugin retry dedupe
 - `status`: `succeeded`, `failed`, `cancelled`, or `blocked`
 - `repo` and `issue`: repository plus canonical issue URL/reference
 - `prUrl`, `doneUrl`, or `blockUrl`: the chosen completion evidence URL
+- `alert.title`, `alert.body`, `alert.url`: compact preformatted notification text for adapters such as OpenClaw plugin-notifier
 - `testSummary.label`: one-line runner outcome with exit, timeout, artifact count
 - `runnerBuild`: optional bounded build metadata (`version`, `source`, `revision`, `builtAt`, `image`)
 - `reason`: short human-facing Done/Block/failure reason
 
 It must not include raw stdout/stderr, host work directories, secrets, or oversized
 command output. Detailed logs remain in runner artifacts and bounded
-`runnerRaw` debugging fields.
+`runnerRaw` debugging fields. Adapters should use `dedupeKey` as the durable
+notification id and may render `alert` directly without re-parsing logs.
 
 ## Worker operations
 
