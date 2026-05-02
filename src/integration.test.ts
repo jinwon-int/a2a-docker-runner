@@ -796,9 +796,37 @@ interface TerminalEvidenceFixture {
   excludeNodes: string[];
 }
 
+interface TerminalEvidenceR2Scenario {
+  name: string;
+  handlerTask: HandlerTask;
+  runnerOutput: RawRunnerOutput;
+  expectedTerminalEvidence: TerminalEvidenceEvent;
+  expectedAckDecision?: {
+    terminalAckAllowed: boolean;
+    reason: string;
+  };
+}
+
+interface TerminalEvidenceR2Fixture {
+  worker: string;
+  emittedAt: string;
+  receiptAckPolicy: {
+    terminalAckRequiresReceipt: boolean;
+    mustNotAckFrom: string[];
+    safe: boolean;
+  };
+  scenarios: TerminalEvidenceR2Scenario[];
+  safeEvidenceMustNotContain: string[];
+}
+
 function loadTerminalEvidenceFixture(): TerminalEvidenceFixture {
   const raw = readFileSync(new URL("../examples/runner-terminal-evidence-fixture.json", import.meta.url), "utf8");
   return JSON.parse(raw) as TerminalEvidenceFixture;
+}
+
+function loadTerminalEvidenceR2Fixture(): TerminalEvidenceR2Fixture {
+  const raw = readFileSync(new URL("../examples/runner-terminal-evidence-r2-nosuk-fixture.json", import.meta.url), "utf8");
+  return JSON.parse(raw) as TerminalEvidenceR2Fixture;
 }
 
 test("runner-to-broker fixture: converts runner output into expected terminal evidence event", () => {
@@ -842,6 +870,54 @@ test("runner-to-broker fixture: terminal alert is Telegram-safe and replay-safe"
     assert.ok(fixture.activeTargets.includes(target), `missing active target ${target}`);
   }
   assert.ok(fixture.excludeNodes.includes("yukson"), "yukson must stay excluded from the fixture runbook");
+});
+
+test("r2 nosuk fixture: covers compact PR/Done/Block terminal evidence", () => {
+  const fixture = loadTerminalEvidenceR2Fixture();
+  const expectedKinds = new Set(["PR", "Done", "Block"]);
+
+  assert.equal(fixture.worker, "nosuk");
+  assert.equal(fixture.receiptAckPolicy.safe, true);
+
+  for (const scenario of fixture.scenarios) {
+    const parsed = parseRunnerOutput(JSON.stringify(scenario.runnerOutput));
+    const event = buildTerminalEvidenceEvent(parsed, scenario.handlerTask, fixture.worker, fixture.emittedAt);
+
+    assert.deepEqual(JSON.parse(JSON.stringify(event)), scenario.expectedTerminalEvidence, scenario.name);
+    expectedKinds.delete(event.evidenceKind);
+    assert.equal(event.dedupeKey, event.eventId, scenario.name);
+    assert.ok(event.alert.body.length <= 360, scenario.name);
+
+    const terminalPayload = JSON.stringify(event);
+    for (const forbidden of fixture.safeEvidenceMustNotContain) {
+      assert.ok(!terminalPayload.includes(forbidden), `${scenario.name} leaked forbidden value: ${forbidden}`);
+    }
+  }
+
+  assert.deepEqual([...expectedKinds], []);
+});
+
+test("r2 nosuk fixture: send success alone remains blocked without receipt evidence", () => {
+  const fixture = loadTerminalEvidenceR2Fixture();
+  const scenario = fixture.scenarios.find((entry) => entry.expectedAckDecision?.terminalAckAllowed === false);
+  assert.ok(scenario, "fixture must include a send-success-only negative ack scenario");
+  assert.equal(fixture.receiptAckPolicy.terminalAckRequiresReceipt, true);
+  assert.ok(fixture.receiptAckPolicy.mustNotAckFrom.some((line) => /send success/i.test(line)));
+
+  const parsed = parseRunnerOutput(JSON.stringify(scenario.runnerOutput));
+  const handlerResult = buildHandlerResult(parsed, scenario.handlerTask, fixture.worker);
+
+  assert.equal(handlerResult.status, "blocked");
+  assert.equal(handlerResult.prUrl, undefined);
+  assert.equal(handlerResult.doneCommentUrl, undefined);
+  assert.equal(handlerResult.blockCommentUrl, undefined);
+  assert.equal(handlerResult.terminalEvidence.status, "blocked");
+  assert.equal(handlerResult.terminalEvidence.evidenceKind, "MissingEvidence");
+  assert.equal(handlerResult.terminalEvidence.prUrl, undefined);
+  assert.equal(handlerResult.terminalEvidence.doneUrl, undefined);
+  assert.equal(handlerResult.terminalEvidence.blockUrl, undefined);
+  assert.equal(scenario.expectedAckDecision?.terminalAckAllowed, false);
+  assert.match(scenario.expectedAckDecision?.reason ?? "", /not receipt evidence/i);
 });
 
 test("buildTerminalEvidenceEvent: emits compact safe PR evidence without raw logs or private paths", () => {
