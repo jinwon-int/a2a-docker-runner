@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { runTask } from "./runner.js";
 import type { RunnerConfig, RunnerResult } from "./types.js";
 
+export const DEFAULT_SMOKE_TIMEOUT_MS = 120_000;
+
 export interface SmokeFixtureResult {
   ok: boolean;
   engine: string;
@@ -12,9 +14,14 @@ export interface SmokeFixtureResult {
   notes: string[];
 }
 
+export function resolveSmokeTimeoutMs(configDefaultTimeoutMs: number): number {
+  if (!Number.isFinite(configDefaultTimeoutMs) || configDefaultTimeoutMs <= 0) return DEFAULT_SMOKE_TIMEOUT_MS;
+  return Math.min(configDefaultTimeoutMs, DEFAULT_SMOKE_TIMEOUT_MS);
+}
+
 export async function runEngineSmokeFixture(config: RunnerConfig): Promise<SmokeFixtureResult> {
   const rootDir = await mkdtemp(join(tmpdir(), "a2a-engine-smoke-"));
-  const smokeConfig = { ...config, rootDir, defaultTimeoutMs: Math.min(config.defaultTimeoutMs, 30_000) };
+  const smokeConfig = { ...config, rootDir, defaultTimeoutMs: resolveSmokeTimeoutMs(config.defaultTimeoutMs) };
   const result = await runTask(smokeConfig, {
     id: "engine-smoke",
     intent: "smoke",
@@ -29,6 +36,7 @@ export async function runEngineSmokeFixture(config: RunnerConfig): Promise<Smoke
   const notes = [
     "stdout/stderr/artifact collection exercised",
     "container is started with --rm for engine-side cleanup",
+    `smoke timeout: ${smokeConfig.defaultTimeoutMs}ms`,
     `host work root: ${rootDir}`,
   ];
 
