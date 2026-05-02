@@ -1,0 +1,124 @@
+{
+  "$schema": "a2a-runner-terminal-evidence-fixture-v1",
+  "description": "CI-safe runner-to-broker terminal evidence integration fixture. It validates the compact terminalEvidence event shape produced by the worker handler from a synthetic a2a-docker-runner result without Docker, live broker, Telegram, or GitHub writes.",
+  "round": "A2A Hardening Round 3",
+  "worker": "sogyo",
+  "activeTargets": [
+    "bangtong",
+    "dungae",
+    "sogyo",
+    "nosuk"
+  ],
+  "excludeNodes": [
+    "yukson"
+  ],
+  "handlerTask": {
+    "id": "round3-terminal-evidence-94",
+    "intent": "propose_patch",
+    "payload": {
+      "mode": "github-propose-patch",
+      "repo": "jinwon-int/a2a-docker-runner",
+      "issue": "94",
+      "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/94",
+      "title": "Add runner-to-broker terminal evidence integration fixture"
+    }
+  },
+  "runnerOutput": {
+    "ok": true,
+    "taskId": "round3-terminal-evidence-94",
+    "status": "completed",
+    "workDir": "/synthetic/workdir/not-forwarded",
+    "exitCode": 0,
+    "signal": null,
+    "stdout": "synthetic stdout intentionally omitted from terminal alert",
+    "stderr": "",
+    "artifacts": [
+      "artifacts/summary.txt",
+      "artifacts/manifest.json"
+    ],
+    "resultSummary": {
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "stdout": "npm run build -- --fixture-only: ok",
+      "stderr": "",
+      "stdoutTruncated": false,
+      "stderrTruncated": false,
+      "artifactCount": 2,
+      "manifestPath": "artifacts/manifest.json",
+      "runnerBuild": {
+        "version": "0.1.0",
+        "source": "https://github.com/jinwon-int/a2a-docker-runner",
+        "revision": "synthetic-round3-fixture",
+        "builtAt": "2026-05-02T00:00:00.000Z",
+        "image": "ghcr.io/jinwon-int/a2a-docker-runner:round3-fixture"
+      }
+    },
+    "github": {
+      "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/94"
+    }
+  },
+  "emittedAt": "2026-05-02T00:00:00.000Z",
+  "expectedTerminalEvidence": {
+    "schemaVersion": "a2a.runner.terminal-evidence.v1",
+    "eventId": "a2a-terminal:round3-terminal-evidence-94:succeeded:PR:https://github.com/jinwon-int/a2a-docker-runner/pull/94",
+    "dedupeKey": "a2a-terminal:round3-terminal-evidence-94:succeeded:PR:https://github.com/jinwon-int/a2a-docker-runner/pull/94",
+    "taskId": "round3-terminal-evidence-94",
+    "status": "succeeded",
+    "evidenceKind": "PR",
+    "worker": "sogyo",
+    "repo": "jinwon-int/a2a-docker-runner",
+    "issue": "https://github.com/jinwon-int/a2a-docker-runner/issues/94",
+    "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/94",
+    "alert": {
+      "title": "A2A PR: jinwon-int/a2a-docker-runner",
+      "body": "task=round3-terminal-evidence-94 · worker=sogyo · status=succeeded · exit=0 · timeout=false · artifacts=2 · issue=jinwon-int/a2a-docker-runner#94 · reason=PR evidence is availab...",
+      "url": "https://github.com/jinwon-int/a2a-docker-runner/pull/94"
+    },
+    "reason": "PR evidence is available for operator review.",
+    "testSummary": {
+      "label": "a2a-docker-runner completed; PR evidence; exit=0; timedOut=false; artifacts=2",
+      "exitCode": 0,
+      "timedOut": false,
+      "artifactCount": 2,
+      "stdoutTruncated": false,
+      "stderrTruncated": false
+    },
+    "runnerBuild": {
+      "version": "0.1.0",
+      "source": "https://github.com/jinwon-int/a2a-docker-runner",
+      "revision": "synthetic-round3-fixture",
+      "builtAt": "2026-05-02T00:00:00.000Z",
+      "image": "ghcr.io/jinwon-int/a2a-docker-runner:round3-fixture"
+    },
+    "timestamps": {
+      "emittedAt": "2026-05-02T00:00:00.000Z"
+    }
+  },
+  "telegramDryRun": {
+    "safe": true,
+    "destination": "dry-run-only",
+    "messageSource": "expectedTerminalEvidence.alert",
+    "mustNotContain": [
+      "stdout",
+      "stderr",
+      "Authorization",
+      "Bearer",
+      "x-access-token",
+      "/root/",
+      "/home/",
+      "/synthetic/workdir"
+    ]
+  },
+  "authAndRateLimitSafety": [
+    "Fixture uses synthetic PR/comment URLs only and performs no GitHub or Telegram writes.",
+    "Terminal alert body is compact and dedupeKey is stable for broker replay/dedupe.",
+    "No token, secret, raw stdout/stderr, or host-specific path is present in the notification payload."
+  ],
+  "operatorRunbook": [
+    "1. Build and run integration tests before enabling broker terminal notifications.",
+    "2. Use this fixture as Telegram-safe dry-run input; do not live deploy without explicit operator approval.",
+    "3. Confirm broker outbox/dedupe keys match expectedTerminalEvidence.dedupeKey before replay.",
+    "4. Validate active targets bangtong, dungae, sogyo, and nosuk only; yukson remains excluded."
+  ]
+}

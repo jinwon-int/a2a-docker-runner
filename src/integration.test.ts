@@ -9,6 +9,7 @@
  */
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   isGithubProposePatchTask,
@@ -20,7 +21,7 @@ import {
   buildHandlerResult,
   buildTerminalEvidenceEvent,
 } from "./integration.js";
-import type { HandlerTask, HandlerEnv, RawRunnerOutput } from "./integration.js";
+import type { HandlerTask, HandlerEnv, RawRunnerOutput, TerminalEvidenceEvent } from "./integration.js";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // isGithubProposePatchTask
@@ -778,6 +779,70 @@ test("buildHandlerResult: exposes bounded resultSummary stdout/stderr instead of
 // ═══════════════════════════════════════════════════════════════════════════
 // Terminal evidence event — compact broker push/SSE/webhook payload
 // ═══════════════════════════════════════════════════════════════════════════
+
+interface TerminalEvidenceFixture {
+  handlerTask: HandlerTask;
+  runnerOutput: RawRunnerOutput;
+  worker: string;
+  emittedAt: string;
+  expectedTerminalEvidence: TerminalEvidenceEvent;
+  telegramDryRun: {
+    safe: boolean;
+    mustNotContain: string[];
+  };
+  authAndRateLimitSafety: string[];
+  operatorRunbook: string[];
+  activeTargets: string[];
+  excludeNodes: string[];
+}
+
+function loadTerminalEvidenceFixture(): TerminalEvidenceFixture {
+  const raw = readFileSync(new URL("../examples/runner-terminal-evidence-fixture.json", import.meta.url), "utf8");
+  return JSON.parse(raw) as TerminalEvidenceFixture;
+}
+
+test("runner-to-broker fixture: converts runner output into expected terminal evidence event", () => {
+  const fixture = loadTerminalEvidenceFixture();
+  const parsed = parseRunnerOutput(JSON.stringify(fixture.runnerOutput));
+
+  const event = buildTerminalEvidenceEvent(
+    parsed,
+    fixture.handlerTask,
+    fixture.worker,
+    fixture.emittedAt,
+  );
+
+  assert.deepEqual(JSON.parse(JSON.stringify(event)), fixture.expectedTerminalEvidence);
+
+  const handlerResult = buildHandlerResult(parsed, fixture.handlerTask, fixture.worker);
+  assert.equal(handlerResult.status, "pr_opened");
+  assert.equal(handlerResult.prUrl, fixture.expectedTerminalEvidence.prUrl);
+  assert.equal(handlerResult.terminalEvidence.eventId, fixture.expectedTerminalEvidence.eventId);
+  assert.equal(handlerResult.terminalEvidence.dedupeKey, fixture.expectedTerminalEvidence.dedupeKey);
+});
+
+test("runner-to-broker fixture: terminal alert is Telegram-safe and replay-safe", () => {
+  const fixture = loadTerminalEvidenceFixture();
+  const alertPayload = JSON.stringify(fixture.expectedTerminalEvidence.alert);
+  const terminalPayload = JSON.stringify(fixture.expectedTerminalEvidence);
+
+  assert.equal(fixture.telegramDryRun.safe, true);
+  assert.equal(fixture.expectedTerminalEvidence.dedupeKey, fixture.expectedTerminalEvidence.eventId);
+  assert.ok(fixture.authAndRateLimitSafety.some((line) => /dedupeKey/.test(line)));
+  assert.ok(fixture.operatorRunbook.some((line) => /do not live deploy/i.test(line)));
+
+  for (const forbidden of fixture.telegramDryRun.mustNotContain) {
+    assert.ok(!alertPayload.includes(forbidden), `alert payload contains forbidden value: ${forbidden}`);
+    if (forbidden !== "stdout" && forbidden !== "stderr") {
+      assert.ok(!terminalPayload.includes(forbidden), `terminal payload contains forbidden value: ${forbidden}`);
+    }
+  }
+
+  for (const target of ["bangtong", "dungae", "sogyo", "nosuk"]) {
+    assert.ok(fixture.activeTargets.includes(target), `missing active target ${target}`);
+  }
+  assert.ok(fixture.excludeNodes.includes("yukson"), "yukson must stay excluded from the fixture runbook");
+});
 
 test("buildTerminalEvidenceEvent: emits compact safe PR evidence without raw logs or private paths", () => {
   const result: RawRunnerOutput = {
