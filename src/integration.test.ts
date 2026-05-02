@@ -20,8 +20,10 @@ import {
   extractGitHubEvidence,
   buildHandlerResult,
   buildTerminalEvidenceEvent,
+  decideTerminalEvidenceAck,
+  buildTerminalAckDecision,
 } from "./integration.js";
-import type { HandlerTask, HandlerEnv, RawRunnerOutput, TerminalEvidenceEvent } from "./integration.js";
+import type { HandlerTask, HandlerEnv, RawRunnerOutput, TerminalAckDecision, TerminalEvidenceEvent } from "./integration.js";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // isGithubProposePatchTask
@@ -796,9 +798,37 @@ interface TerminalEvidenceFixture {
   excludeNodes: string[];
 }
 
+interface TerminalEvidenceR2Scenario {
+  name: string;
+  handlerTask: HandlerTask;
+  runnerOutput: RawRunnerOutput;
+  expectedTerminalEvidence: TerminalEvidenceEvent;
+  expectedAckDecision?: {
+    terminalAckAllowed: boolean;
+    reason: string;
+  };
+}
+
+interface TerminalEvidenceR2Fixture {
+  worker: string;
+  emittedAt: string;
+  receiptAckPolicy: {
+    terminalAckRequiresReceipt: boolean;
+    mustNotAckFrom: string[];
+    safe: boolean;
+  };
+  scenarios: TerminalEvidenceR2Scenario[];
+  safeEvidenceMustNotContain: string[];
+}
+
 function loadTerminalEvidenceFixture(): TerminalEvidenceFixture {
   const raw = readFileSync(new URL("../examples/runner-terminal-evidence-fixture.json", import.meta.url), "utf8");
   return JSON.parse(raw) as TerminalEvidenceFixture;
+}
+
+function loadTerminalEvidenceR2Fixture(): TerminalEvidenceR2Fixture {
+  const raw = readFileSync(new URL("../examples/runner-terminal-evidence-r2-nosuk-fixture.json", import.meta.url), "utf8");
+  return JSON.parse(raw) as TerminalEvidenceR2Fixture;
 }
 
 test("runner-to-broker fixture: converts runner output into expected terminal evidence event", () => {
@@ -842,6 +872,54 @@ test("runner-to-broker fixture: terminal alert is Telegram-safe and replay-safe"
     assert.ok(fixture.activeTargets.includes(target), `missing active target ${target}`);
   }
   assert.ok(fixture.excludeNodes.includes("yukson"), "yukson must stay excluded from the fixture runbook");
+});
+
+test("r2 nosuk fixture: covers compact PR/Done/Block terminal evidence", () => {
+  const fixture = loadTerminalEvidenceR2Fixture();
+  const expectedKinds = new Set(["PR", "Done", "Block"]);
+
+  assert.equal(fixture.worker, "nosuk");
+  assert.equal(fixture.receiptAckPolicy.safe, true);
+
+  for (const scenario of fixture.scenarios) {
+    const parsed = parseRunnerOutput(JSON.stringify(scenario.runnerOutput));
+    const event = buildTerminalEvidenceEvent(parsed, scenario.handlerTask, fixture.worker, fixture.emittedAt);
+
+    assert.deepEqual(JSON.parse(JSON.stringify(event)), scenario.expectedTerminalEvidence, scenario.name);
+    expectedKinds.delete(event.evidenceKind);
+    assert.equal(event.dedupeKey, event.eventId, scenario.name);
+    assert.ok(event.alert.body.length <= 360, scenario.name);
+
+    const terminalPayload = JSON.stringify(event);
+    for (const forbidden of fixture.safeEvidenceMustNotContain) {
+      assert.ok(!terminalPayload.includes(forbidden), `${scenario.name} leaked forbidden value: ${forbidden}`);
+    }
+  }
+
+  assert.deepEqual([...expectedKinds], []);
+});
+
+test("r2 nosuk fixture: send success alone remains blocked without receipt evidence", () => {
+  const fixture = loadTerminalEvidenceR2Fixture();
+  const scenario = fixture.scenarios.find((entry) => entry.expectedAckDecision?.terminalAckAllowed === false);
+  assert.ok(scenario, "fixture must include a send-success-only negative ack scenario");
+  assert.equal(fixture.receiptAckPolicy.terminalAckRequiresReceipt, true);
+  assert.ok(fixture.receiptAckPolicy.mustNotAckFrom.some((line) => /send success/i.test(line)));
+
+  const parsed = parseRunnerOutput(JSON.stringify(scenario.runnerOutput));
+  const handlerResult = buildHandlerResult(parsed, scenario.handlerTask, fixture.worker);
+
+  assert.equal(handlerResult.status, "blocked");
+  assert.equal(handlerResult.prUrl, undefined);
+  assert.equal(handlerResult.doneCommentUrl, undefined);
+  assert.equal(handlerResult.blockCommentUrl, undefined);
+  assert.equal(handlerResult.terminalEvidence.status, "blocked");
+  assert.equal(handlerResult.terminalEvidence.evidenceKind, "MissingEvidence");
+  assert.equal(handlerResult.terminalEvidence.prUrl, undefined);
+  assert.equal(handlerResult.terminalEvidence.doneUrl, undefined);
+  assert.equal(handlerResult.terminalEvidence.blockUrl, undefined);
+  assert.equal(scenario.expectedAckDecision?.terminalAckAllowed, false);
+  assert.match(scenario.expectedAckDecision?.reason ?? "", /not receipt evidence/i);
 });
 
 test("buildTerminalEvidenceEvent: emits compact safe PR evidence without raw logs or private paths", () => {
@@ -956,6 +1034,65 @@ test("buildTerminalEvidenceEvent: failed missing-evidence event keeps reason sho
   assert.ok(!serialized.includes("raw stderr"));
   assert.ok(!serialized.includes("/private/work"));
   assert.ok(!serialized.includes("token=secret"));
+});
+
+interface TerminalAckSmokeFixture {
+  description: string;
+  worker: string;
+  emittedAt: string;
+  cases: Array<{
+    name: string;
+    handlerTask: HandlerTask;
+    runnerOutput: RawRunnerOutput;
+    receipt?: { operatorVisible: boolean; channel?: string; receiptId?: string; url?: string; deliveredAt?: string };
+    providerSendSuccessOnly?: boolean;
+    expectedAck: TerminalAckDecision;
+  }>;
+  safety: { mustNotContain: string[] };
+}
+
+function loadTerminalAckSmokeFixture(): TerminalAckSmokeFixture {
+  const raw = readFileSync(new URL("../examples/runner-terminal-ack-smoke.json", import.meta.url), "utf8");
+  return JSON.parse(raw) as TerminalAckSmokeFixture;
+}
+
+test("terminal ack smoke fixture: PR/Done/Block require operator-visible receipt", () => {
+  const fixture = loadTerminalAckSmokeFixture();
+
+  for (const entry of fixture.cases) {
+    const event = buildTerminalEvidenceEvent(
+      parseRunnerOutput(JSON.stringify(entry.runnerOutput)),
+      entry.handlerTask,
+      fixture.worker,
+      fixture.emittedAt,
+    );
+    const decision = buildTerminalAckDecision(event, entry.receipt);
+
+    assert.deepEqual(JSON.parse(JSON.stringify(decision)), entry.expectedAck, entry.name);
+  }
+});
+
+test("terminal ack smoke fixture: provider send success alone never completes cursor", () => {
+  const fixture = loadTerminalAckSmokeFixture();
+  const noReceiptCase = fixture.cases.find((entry) => entry.providerSendSuccessOnly);
+  assert.ok(noReceiptCase, "fixture must include provider-send-success-only case");
+
+  const event = buildTerminalEvidenceEvent(
+    parseRunnerOutput(JSON.stringify(noReceiptCase.runnerOutput)),
+    noReceiptCase.handlerTask,
+    fixture.worker,
+    fixture.emittedAt,
+  );
+  const decision = buildTerminalAckDecision(event, { operatorVisible: false, channel: "telegram" });
+
+  assert.equal(decision.acknowledged, false);
+  assert.equal(decision.cursorComplete, false);
+  assert.equal(decision.reason, "operator-visible receipt required before terminal ack");
+
+  const serialized = JSON.stringify({ event, decision });
+  for (const forbidden of fixture.safety.mustNotContain) {
+    assert.ok(!serialized.includes(forbidden), `terminal ack smoke leaked forbidden value: ${forbidden}`);
+  }
 });
 
 test("buildHandlerResult: includes terminal evidence for broker push notifications", () => {
@@ -1382,4 +1519,101 @@ test("contract: HandlerResult always has risks array", () => {
   const hr2 = buildHandlerResult(withoutEvidence, { id: "t2" }, "sogyo");
   assert.ok(Array.isArray(hr2.risks));
   assert.ok(hr2.risks.length > 0); // risks when no evidence
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// R1 receipt-confirmed terminal ack smoke fixtures
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface TerminalEvidenceSmokeR1Fixture {
+  worker: string;
+  activeTargets: string[];
+  cases: Array<{
+    name: string;
+    runnerOutput: RawRunnerOutput;
+    expected: {
+      status: TerminalEvidenceEvent["status"];
+      evidenceKind: TerminalEvidenceEvent["evidenceKind"];
+      urlField: "prUrl" | "doneUrl" | "blockUrl";
+    };
+  }>;
+  ackSmoke: {
+    providerSendOnly: {
+      providerSendOk: boolean;
+      operatorVisible: boolean;
+      channel: string;
+    };
+    operatorReceipt: {
+      providerSendOk: boolean;
+      operatorVisible: boolean;
+      channel: string;
+      messageId: string;
+      receivedAt: string;
+    };
+  };
+  mustNotContain: string[];
+}
+
+function loadTerminalEvidenceSmokeR1Fixture(): TerminalEvidenceSmokeR1Fixture {
+  const raw = readFileSync(new URL("../examples/runner-terminal-evidence-smoke-r1.json", import.meta.url), "utf8");
+  return JSON.parse(raw) as TerminalEvidenceSmokeR1Fixture;
+}
+
+test("R1 smoke fixture: PR/Done/Block terminal evidence stays compact and safe", () => {
+  const fixture = loadTerminalEvidenceSmokeR1Fixture();
+  assert.ok(fixture.activeTargets.includes("nosuk"), "R1 smoke must cover nosuk rollout target");
+
+  for (const entry of fixture.cases) {
+    const event = buildTerminalEvidenceEvent(
+      parseRunnerOutput(JSON.stringify(entry.runnerOutput)),
+      {
+        id: entry.runnerOutput.taskId,
+        payload: {
+          repo: "jinwon-int/a2a-docker-runner",
+          issueUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/96",
+        },
+      },
+      fixture.worker,
+      "2026-05-02T02:30:00.000Z",
+    );
+
+    assert.equal(event.status, entry.expected.status, entry.name);
+    assert.equal(event.evidenceKind, entry.expected.evidenceKind, entry.name);
+    assert.equal(typeof event[entry.expected.urlField], "string", entry.name);
+    assert.ok(event.alert.body.length <= 360, `${entry.name} alert must be compact`);
+
+    const serialized = JSON.stringify(event);
+    for (const forbidden of fixture.mustNotContain) {
+      assert.ok(!serialized.includes(forbidden), `${entry.name} leaked forbidden value: ${forbidden}`);
+    }
+  }
+});
+
+test("R1 smoke fixture: terminal ack requires operator-visible receipt, not provider send success", () => {
+  const fixture = loadTerminalEvidenceSmokeR1Fixture();
+  const entry = fixture.cases[0];
+  const event = buildTerminalEvidenceEvent(
+    parseRunnerOutput(JSON.stringify(entry.runnerOutput)),
+    { id: entry.runnerOutput.taskId, payload: { repo: "jinwon-int/a2a-docker-runner", issue: "96" } },
+    fixture.worker,
+    "2026-05-02T02:30:00.000Z",
+  );
+
+  const providerOnly = decideTerminalEvidenceAck(event, {
+    ...fixture.ackSmoke.providerSendOnly,
+    eventId: event.eventId,
+    dedupeKey: event.dedupeKey,
+  });
+  assert.equal(providerOnly.ack, false);
+  assert.equal(providerOnly.cursorComplete, false);
+  assert.match(providerOnly.reason, /operator-visible receipt/);
+
+  const receiptConfirmed = decideTerminalEvidenceAck(event, {
+    ...fixture.ackSmoke.operatorReceipt,
+    eventId: event.eventId,
+    dedupeKey: event.dedupeKey,
+  });
+  assert.equal(receiptConfirmed.ack, true);
+  assert.equal(receiptConfirmed.cursorComplete, true);
+  assert.equal(receiptConfirmed.reason, "operator-visible receipt confirmed");
 });
