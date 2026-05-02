@@ -20,8 +20,9 @@ import {
   extractGitHubEvidence,
   buildHandlerResult,
   buildTerminalEvidenceEvent,
+  buildTerminalAckDecision,
 } from "./integration.js";
-import type { HandlerTask, HandlerEnv, RawRunnerOutput, TerminalEvidenceEvent } from "./integration.js";
+import type { HandlerTask, HandlerEnv, RawRunnerOutput, TerminalAckDecision, TerminalEvidenceEvent } from "./integration.js";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // isGithubProposePatchTask
@@ -956,6 +957,65 @@ test("buildTerminalEvidenceEvent: failed missing-evidence event keeps reason sho
   assert.ok(!serialized.includes("raw stderr"));
   assert.ok(!serialized.includes("/private/work"));
   assert.ok(!serialized.includes("token=secret"));
+});
+
+interface TerminalAckSmokeFixture {
+  description: string;
+  worker: string;
+  emittedAt: string;
+  cases: Array<{
+    name: string;
+    handlerTask: HandlerTask;
+    runnerOutput: RawRunnerOutput;
+    receipt?: { operatorVisible: boolean; channel?: string; receiptId?: string; url?: string; deliveredAt?: string };
+    providerSendSuccessOnly?: boolean;
+    expectedAck: TerminalAckDecision;
+  }>;
+  safety: { mustNotContain: string[] };
+}
+
+function loadTerminalAckSmokeFixture(): TerminalAckSmokeFixture {
+  const raw = readFileSync(new URL("../examples/runner-terminal-ack-smoke.json", import.meta.url), "utf8");
+  return JSON.parse(raw) as TerminalAckSmokeFixture;
+}
+
+test("terminal ack smoke fixture: PR/Done/Block require operator-visible receipt", () => {
+  const fixture = loadTerminalAckSmokeFixture();
+
+  for (const entry of fixture.cases) {
+    const event = buildTerminalEvidenceEvent(
+      parseRunnerOutput(JSON.stringify(entry.runnerOutput)),
+      entry.handlerTask,
+      fixture.worker,
+      fixture.emittedAt,
+    );
+    const decision = buildTerminalAckDecision(event, entry.receipt);
+
+    assert.deepEqual(JSON.parse(JSON.stringify(decision)), entry.expectedAck, entry.name);
+  }
+});
+
+test("terminal ack smoke fixture: provider send success alone never completes cursor", () => {
+  const fixture = loadTerminalAckSmokeFixture();
+  const noReceiptCase = fixture.cases.find((entry) => entry.providerSendSuccessOnly);
+  assert.ok(noReceiptCase, "fixture must include provider-send-success-only case");
+
+  const event = buildTerminalEvidenceEvent(
+    parseRunnerOutput(JSON.stringify(noReceiptCase.runnerOutput)),
+    noReceiptCase.handlerTask,
+    fixture.worker,
+    fixture.emittedAt,
+  );
+  const decision = buildTerminalAckDecision(event, { operatorVisible: false, channel: "telegram" });
+
+  assert.equal(decision.acknowledged, false);
+  assert.equal(decision.cursorComplete, false);
+  assert.equal(decision.reason, "operator-visible receipt required before terminal ack");
+
+  const serialized = JSON.stringify({ event, decision });
+  for (const forbidden of fixture.safety.mustNotContain) {
+    assert.ok(!serialized.includes(forbidden), `terminal ack smoke leaked forbidden value: ${forbidden}`);
+  }
 });
 
 test("buildHandlerResult: includes terminal evidence for broker push notifications", () => {

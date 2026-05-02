@@ -117,6 +117,31 @@ export interface TerminalEvidenceEvent {
   };
 }
 
+export interface TerminalAckReceipt {
+  /** Must represent operator-visible delivery (for example broker SSE/webhook receipt), not only provider send success. */
+  operatorVisible: boolean;
+  channel?: string;
+  receiptId?: string;
+  url?: string;
+  deliveredAt?: string;
+}
+
+export interface TerminalAckDecision {
+  schemaVersion: "a2a.runner.terminal-ack.v1";
+  eventId: string;
+  taskId: string;
+  evidenceKind: TerminalEvidenceKind;
+  acknowledged: boolean;
+  cursorComplete: boolean;
+  reason: string;
+  receipt?: {
+    channel?: string;
+    receiptId?: string;
+    url?: string;
+    deliveredAt?: string;
+  };
+}
+
 // ── Detection helpers ──────────────────────────────────────────────────────
 
 /**
@@ -388,6 +413,43 @@ export function buildTerminalEvidenceEvent(
     runnerBuild: summary?.runnerBuild ?? result.runnerBuild,
     timestamps: { emittedAt },
   };
+}
+
+/**
+ * Decide whether a compact terminal evidence event may advance the broker
+ * terminal ack/cursor. Gateway/provider send success is intentionally not
+ * enough: the caller must pass an operator-visible delivery receipt.
+ */
+export function buildTerminalAckDecision(
+  event: TerminalEvidenceEvent,
+  receipt?: TerminalAckReceipt,
+): TerminalAckDecision {
+  const hasTerminalEvidence = event.evidenceKind === "PR" || event.evidenceKind === "Done" || event.evidenceKind === "Block";
+  const hasOperatorVisibleReceipt = receipt?.operatorVisible === true
+    && Boolean(receipt.receiptId || receipt.url || receipt.deliveredAt);
+  const acknowledged = hasTerminalEvidence && hasOperatorVisibleReceipt;
+  const safeReceipt = hasOperatorVisibleReceipt ? {
+    channel: receipt?.channel,
+    receiptId: receipt?.receiptId,
+    url: receipt?.url,
+    deliveredAt: receipt?.deliveredAt,
+  } : undefined;
+
+  const decision: TerminalAckDecision = {
+    schemaVersion: "a2a.runner.terminal-ack.v1",
+    eventId: event.eventId,
+    taskId: event.taskId,
+    evidenceKind: event.evidenceKind,
+    acknowledged,
+    cursorComplete: acknowledged,
+    reason: acknowledged
+      ? "terminal evidence has operator-visible receipt"
+      : hasTerminalEvidence
+        ? "operator-visible receipt required before terminal ack"
+        : "PR/Done/Block terminal evidence required before terminal ack",
+  };
+  if (safeReceipt) decision.receipt = omitUndefined(safeReceipt) as TerminalAckDecision["receipt"];
+  return decision;
 }
 
 // ── Internal helpers ───────────────────────────────────────────────────────

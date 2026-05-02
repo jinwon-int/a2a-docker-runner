@@ -1,0 +1,235 @@
+{
+  "$schema": "a2a-runner-terminal-ack-smoke-v1",
+  "description": "CI-safe nosuk R3 compact terminal evidence ack smoke. It validates PR/Done/Block terminal ack decisions from synthetic runner output and proves provider send success alone never completes the terminal cursor without an operator-visible receipt.",
+  "worker": "nosuk",
+  "emittedAt": "2026-05-02T03:00:00.000Z",
+  "cases": [
+    {
+      "name": "PR evidence with broker receipt may ack",
+      "handlerTask": {
+        "id": "r3-nosuk-pr-100",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "100",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/100"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "r3-nosuk-pr-100",
+        "status": "completed",
+        "workDir": "/synthetic/not-forwarded/r3-nosuk-pr-100",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "synthetic stdout omitted from terminal ack",
+        "stderr": "",
+        "artifacts": ["artifacts/summary.txt"],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "npm test -- --fixture-only: ok",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 1,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/151"
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-sse",
+        "receiptId": "receipt-nosuk-pr-100",
+        "deliveredAt": "2026-05-02T03:00:01.000Z"
+      },
+      "expectedAck": {
+        "schemaVersion": "a2a.runner.terminal-ack.v1",
+        "eventId": "a2a-terminal:r3-nosuk-pr-100:succeeded:PR:https://github.com/jinwon-int/a2a-docker-runner/pull/151",
+        "taskId": "r3-nosuk-pr-100",
+        "evidenceKind": "PR",
+        "acknowledged": true,
+        "cursorComplete": true,
+        "reason": "terminal evidence has operator-visible receipt",
+        "receipt": {
+          "channel": "broker-sse",
+          "receiptId": "receipt-nosuk-pr-100",
+          "deliveredAt": "2026-05-02T03:00:01.000Z"
+        }
+      }
+    },
+    {
+      "name": "Done evidence with webhook receipt may ack",
+      "handlerTask": {
+        "id": "r3-nosuk-done-100",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/100"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "r3-nosuk-done-100",
+        "status": "completed",
+        "workDir": "/synthetic/not-forwarded/r3-nosuk-done-100",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "synthetic done stdout omitted",
+        "stderr": "",
+        "artifacts": [],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "comment-only done evidence posted",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 0,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "doneCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/100#issuecomment-done"
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-webhook",
+        "receiptId": "receipt-nosuk-done-100",
+        "url": "https://broker.example.invalid/receipts/receipt-nosuk-done-100"
+      },
+      "expectedAck": {
+        "schemaVersion": "a2a.runner.terminal-ack.v1",
+        "eventId": "a2a-terminal:r3-nosuk-done-100:succeeded:Done:https://github.com/jinwon-int/a2a-docker-runner/issues/100#issuecomment-done",
+        "taskId": "r3-nosuk-done-100",
+        "evidenceKind": "Done",
+        "acknowledged": true,
+        "cursorComplete": true,
+        "reason": "terminal evidence has operator-visible receipt",
+        "receipt": {
+          "channel": "broker-webhook",
+          "receiptId": "receipt-nosuk-done-100",
+          "url": "https://broker.example.invalid/receipts/receipt-nosuk-done-100"
+        }
+      }
+    },
+    {
+      "name": "Block evidence with receipt may ack blocked cursor",
+      "handlerTask": {
+        "id": "r3-nosuk-block-100",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/100"
+        }
+      },
+      "runnerOutput": {
+        "ok": false,
+        "taskId": "r3-nosuk-block-100",
+        "status": "failed",
+        "workDir": "/synthetic/not-forwarded/r3-nosuk-block-100",
+        "exitCode": 1,
+        "signal": null,
+        "stdout": "",
+        "stderr": "synthetic blocked stderr omitted",
+        "artifacts": ["artifacts/block.txt"],
+        "resultSummary": {
+          "exitCode": 1,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "",
+          "stderr": "blocked safely for fixture",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 1,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "blockCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/100#issuecomment-block"
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-sse",
+        "receiptId": "receipt-nosuk-block-100"
+      },
+      "expectedAck": {
+        "schemaVersion": "a2a.runner.terminal-ack.v1",
+        "eventId": "a2a-terminal:r3-nosuk-block-100:blocked:Block:https://github.com/jinwon-int/a2a-docker-runner/issues/100#issuecomment-block",
+        "taskId": "r3-nosuk-block-100",
+        "evidenceKind": "Block",
+        "acknowledged": true,
+        "cursorComplete": true,
+        "reason": "terminal evidence has operator-visible receipt",
+        "receipt": {
+          "channel": "broker-sse",
+          "receiptId": "receipt-nosuk-block-100"
+        }
+      }
+    },
+    {
+      "name": "Provider send success without receipt must not ack",
+      "providerSendSuccessOnly": true,
+      "handlerTask": {
+        "id": "r3-nosuk-send-only-100",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "100"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "r3-nosuk-send-only-100",
+        "status": "completed",
+        "workDir": "/synthetic/not-forwarded/r3-nosuk-send-only-100",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "gateway provider send returned ok, but no receipt exists",
+        "stderr": "",
+        "artifacts": [],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "provider send ok only",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 0,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/151"
+        }
+      },
+      "expectedAck": {
+        "schemaVersion": "a2a.runner.terminal-ack.v1",
+        "eventId": "a2a-terminal:r3-nosuk-send-only-100:succeeded:PR:https://github.com/jinwon-int/a2a-docker-runner/pull/151",
+        "taskId": "r3-nosuk-send-only-100",
+        "evidenceKind": "PR",
+        "acknowledged": false,
+        "cursorComplete": false,
+        "reason": "operator-visible receipt required before terminal ack"
+      }
+    }
+  ],
+  "safety": {
+    "mustNotContain": [
+      "Authorization",
+      "Bearer",
+      "x-access-token",
+      "/root/",
+      "/home/",
+      "/synthetic/not-forwarded"
+    ]
+  }
+}
