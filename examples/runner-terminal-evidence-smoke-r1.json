@@ -1,0 +1,105 @@
+{
+  "$schema": "a2a-runner-terminal-evidence-smoke-r1",
+  "description": "R1 nosuk compact smoke fixture for PR/Done/Block terminal evidence and receipt-gated terminal ack. Synthetic only: no live broker, Telegram, Gateway, or GitHub writes.",
+  "round": "A2A receipt-confirmed terminal ack rollout R1",
+  "worker": "nosuk",
+  "activeTargets": ["bangtong", "dungae", "sogyo", "nosuk"],
+  "cases": [
+    {
+      "name": "pr",
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "r1-pr-96",
+        "status": "completed",
+        "workDir": "/synthetic/workdir/not-forwarded",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "raw stdout omitted from terminalEvidence",
+        "stderr": "",
+        "artifacts": ["artifacts/summary.txt"],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "compact PR smoke: ok",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 1,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": { "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/151" }
+      },
+      "expected": { "status": "succeeded", "evidenceKind": "PR", "urlField": "prUrl" }
+    },
+    {
+      "name": "done",
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "r1-done-96",
+        "status": "completed",
+        "workDir": "/synthetic/workdir/not-forwarded",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "raw stdout omitted from terminalEvidence",
+        "stderr": "",
+        "artifacts": [],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "compact Done smoke: no code change needed",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 0,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": { "doneCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/96#issuecomment-r1-done" }
+      },
+      "expected": { "status": "succeeded", "evidenceKind": "Done", "urlField": "doneUrl" }
+    },
+    {
+      "name": "block",
+      "runnerOutput": {
+        "ok": false,
+        "taskId": "r1-block-96",
+        "status": "failed",
+        "workDir": "/synthetic/workdir/not-forwarded",
+        "exitCode": 1,
+        "signal": null,
+        "stdout": "",
+        "stderr": "raw stderr omitted from terminalEvidence",
+        "artifacts": [],
+        "resultSummary": {
+          "exitCode": 1,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "",
+          "stderr": "compact Block smoke: assignment unsafe",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 0,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": { "blockCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/96#issuecomment-r1-block" }
+      },
+      "expected": { "status": "blocked", "evidenceKind": "Block", "urlField": "blockUrl" }
+    }
+  ],
+  "ackSmoke": {
+    "providerSendOnly": {
+      "providerSendOk": true,
+      "operatorVisible": false,
+      "channel": "telegram"
+    },
+    "operatorReceipt": {
+      "providerSendOk": true,
+      "operatorVisible": true,
+      "channel": "telegram",
+      "messageId": "synthetic-nosuk-r1-message-1",
+      "receivedAt": "2026-05-02T02:30:00.000Z"
+    }
+  },
+  "mustNotContain": ["Authorization", "Bearer", "x-access-token", "/root/", "/home/", "/synthetic/workdir", "raw stdout", "raw stderr"]
+}
