@@ -20,6 +20,7 @@ import {
   extractGitHubEvidence,
   buildHandlerResult,
   buildTerminalEvidenceEvent,
+  decideTerminalEvidenceAck,
 } from "./integration.js";
 import type { HandlerTask, HandlerEnv, RawRunnerOutput, TerminalEvidenceEvent } from "./integration.js";
 
@@ -1382,4 +1383,101 @@ test("contract: HandlerResult always has risks array", () => {
   const hr2 = buildHandlerResult(withoutEvidence, { id: "t2" }, "sogyo");
   assert.ok(Array.isArray(hr2.risks));
   assert.ok(hr2.risks.length > 0); // risks when no evidence
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// R1 receipt-confirmed terminal ack smoke fixtures
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface TerminalEvidenceSmokeR1Fixture {
+  worker: string;
+  activeTargets: string[];
+  cases: Array<{
+    name: string;
+    runnerOutput: RawRunnerOutput;
+    expected: {
+      status: TerminalEvidenceEvent["status"];
+      evidenceKind: TerminalEvidenceEvent["evidenceKind"];
+      urlField: "prUrl" | "doneUrl" | "blockUrl";
+    };
+  }>;
+  ackSmoke: {
+    providerSendOnly: {
+      providerSendOk: boolean;
+      operatorVisible: boolean;
+      channel: string;
+    };
+    operatorReceipt: {
+      providerSendOk: boolean;
+      operatorVisible: boolean;
+      channel: string;
+      messageId: string;
+      receivedAt: string;
+    };
+  };
+  mustNotContain: string[];
+}
+
+function loadTerminalEvidenceSmokeR1Fixture(): TerminalEvidenceSmokeR1Fixture {
+  const raw = readFileSync(new URL("../examples/runner-terminal-evidence-smoke-r1.json", import.meta.url), "utf8");
+  return JSON.parse(raw) as TerminalEvidenceSmokeR1Fixture;
+}
+
+test("R1 smoke fixture: PR/Done/Block terminal evidence stays compact and safe", () => {
+  const fixture = loadTerminalEvidenceSmokeR1Fixture();
+  assert.ok(fixture.activeTargets.includes("nosuk"), "R1 smoke must cover nosuk rollout target");
+
+  for (const entry of fixture.cases) {
+    const event = buildTerminalEvidenceEvent(
+      parseRunnerOutput(JSON.stringify(entry.runnerOutput)),
+      {
+        id: entry.runnerOutput.taskId,
+        payload: {
+          repo: "jinwon-int/a2a-docker-runner",
+          issueUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/96",
+        },
+      },
+      fixture.worker,
+      "2026-05-02T02:30:00.000Z",
+    );
+
+    assert.equal(event.status, entry.expected.status, entry.name);
+    assert.equal(event.evidenceKind, entry.expected.evidenceKind, entry.name);
+    assert.equal(typeof event[entry.expected.urlField], "string", entry.name);
+    assert.ok(event.alert.body.length <= 360, `${entry.name} alert must be compact`);
+
+    const serialized = JSON.stringify(event);
+    for (const forbidden of fixture.mustNotContain) {
+      assert.ok(!serialized.includes(forbidden), `${entry.name} leaked forbidden value: ${forbidden}`);
+    }
+  }
+});
+
+test("R1 smoke fixture: terminal ack requires operator-visible receipt, not provider send success", () => {
+  const fixture = loadTerminalEvidenceSmokeR1Fixture();
+  const entry = fixture.cases[0];
+  const event = buildTerminalEvidenceEvent(
+    parseRunnerOutput(JSON.stringify(entry.runnerOutput)),
+    { id: entry.runnerOutput.taskId, payload: { repo: "jinwon-int/a2a-docker-runner", issue: "96" } },
+    fixture.worker,
+    "2026-05-02T02:30:00.000Z",
+  );
+
+  const providerOnly = decideTerminalEvidenceAck(event, {
+    ...fixture.ackSmoke.providerSendOnly,
+    eventId: event.eventId,
+    dedupeKey: event.dedupeKey,
+  });
+  assert.equal(providerOnly.ack, false);
+  assert.equal(providerOnly.cursorComplete, false);
+  assert.match(providerOnly.reason, /operator-visible receipt/);
+
+  const receiptConfirmed = decideTerminalEvidenceAck(event, {
+    ...fixture.ackSmoke.operatorReceipt,
+    eventId: event.eventId,
+    dedupeKey: event.dedupeKey,
+  });
+  assert.equal(receiptConfirmed.ack, true);
+  assert.equal(receiptConfirmed.cursorComplete, true);
+  assert.equal(receiptConfirmed.reason, "operator-visible receipt confirmed");
 });

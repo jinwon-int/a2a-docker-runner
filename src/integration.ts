@@ -117,6 +117,28 @@ export interface TerminalEvidenceEvent {
   };
 }
 
+/** Receipt emitted by the delivery adapter after an operator-visible terminal
+ * notification is actually observable (for example a Telegram message id or
+ * URL). Gateway/provider send success alone is not enough to advance broker
+ * ack/cursor state.
+ */
+export interface TerminalEvidenceReceipt {
+  eventId?: string;
+  dedupeKey?: string;
+  providerSendOk?: boolean;
+  operatorVisible?: boolean;
+  channel?: string;
+  messageId?: string;
+  receiptUrl?: string;
+  receivedAt?: string;
+}
+
+export interface TerminalAckDecision {
+  ack: boolean;
+  cursorComplete: boolean;
+  reason: string;
+}
+
 // ── Detection helpers ──────────────────────────────────────────────────────
 
 /**
@@ -388,6 +410,38 @@ export function buildTerminalEvidenceEvent(
     runnerBuild: summary?.runnerBuild ?? result.runnerBuild,
     timestamps: { emittedAt },
   };
+}
+
+/**
+ * Decide whether a terminal-evidence notification may be acked back to the
+ * broker. This intentionally requires receipt/operator-visible evidence and
+ * rejects provider-send success by itself, preventing false terminal acks.
+ */
+export function decideTerminalEvidenceAck(
+  event: TerminalEvidenceEvent,
+  receipt?: TerminalEvidenceReceipt,
+): TerminalAckDecision {
+  if (!receipt) {
+    return { ack: false, cursorComplete: false, reason: "missing operator-visible receipt" };
+  }
+
+  if (receipt.eventId && receipt.eventId !== event.eventId) {
+    return { ack: false, cursorComplete: false, reason: "receipt eventId mismatch" };
+  }
+
+  if (receipt.dedupeKey && receipt.dedupeKey !== event.dedupeKey) {
+    return { ack: false, cursorComplete: false, reason: "receipt dedupeKey mismatch" };
+  }
+
+  if (receipt.operatorVisible !== true) {
+    return { ack: false, cursorComplete: false, reason: "provider send success without operator-visible receipt" };
+  }
+
+  if (!normalizeString(receipt.messageId) && !normalizeString(receipt.receiptUrl)) {
+    return { ack: false, cursorComplete: false, reason: "operator-visible receipt lacks message id/url" };
+  }
+
+  return { ack: true, cursorComplete: true, reason: "operator-visible receipt confirmed" };
 }
 
 // ── Internal helpers ───────────────────────────────────────────────────────
