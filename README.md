@@ -172,6 +172,18 @@ command output. Detailed logs remain in runner artifacts and bounded
 `runnerRaw` debugging fields. Adapters should use `dedupeKey` as the durable
 notification id and may render `alert` directly without re-parsing logs.
 
+A CI-safe Telegram receipt smoke is available for the terminal notification ACK
+contract:
+
+```bash
+npm run smoke:telegram-terminal-ack
+```
+
+The smoke uses synthetic runner output and synthetic Telegram receipt metadata.
+It first proves provider send success alone leaves the terminal cursor incomplete,
+then confirms ACK only after an operator-visible Telegram receipt is present. It
+performs no live Telegram, broker, or GitHub writes.
+
 ## Worker operations
 
 `doctor` prints JSON status for worker readiness checks:
