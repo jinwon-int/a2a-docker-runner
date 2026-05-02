@@ -81,8 +81,10 @@ export type TerminalEvidenceKind = "PR" | "Done" | "Block" | "MissingEvidence";
 
 export interface TerminalEvidenceEvent {
   schemaVersion: "a2a.runner.terminal-evidence.v1";
-  /** Stable idempotency key for broker replay/deduplication. */
+  /** Stable event identity for broker replay/deduplication. */
   eventId: string;
+  /** Explicit adapter idempotency key; stable across retries/replays of the same terminal outcome. */
+  dedupeKey: string;
   taskId: string;
   status: TerminalEvidenceStatus;
   evidenceKind: TerminalEvidenceKind;
@@ -92,6 +94,12 @@ export interface TerminalEvidenceEvent {
   prUrl?: string;
   doneUrl?: string;
   blockUrl?: string;
+  /** Preformatted compact alert text for terminal notifications; never contains raw runner logs. */
+  alert: {
+    title: string;
+    body: string;
+    url?: string;
+  };
   /** Short human-facing outcome reason; never contains raw runner logs. */
   reason?: string;
   testSummary: {
@@ -345,31 +353,38 @@ export function buildTerminalEvidenceEvent(
         : result.ok
           ? "blocked"
           : "failed";
-  const url = evidence?.prUrl ?? evidence?.doneCommentUrl ?? evidence?.blockCommentUrl ?? "none";
+  const url = evidence?.prUrl ?? evidence?.doneCommentUrl ?? evidence?.blockCommentUrl;
   const taskId = task?.id ?? result.taskId ?? "unknown";
   const summary = result.resultSummary;
+  const worker = normalizeString(nodeId) ?? "unknown";
+  const repo = normalizeString(task?.payload?.repo);
+  const issue = normalizeIssueReference(task);
+  const testSummary = {
+    label: buildTestSummaryLabel(result, evidenceKind),
+    exitCode: summary?.exitCode ?? result.exitCode,
+    timedOut: summary?.timedOut ?? result.status === "timeout",
+    artifactCount: summary?.artifactCount ?? result.artifacts?.length,
+    stdoutTruncated: summary?.stdoutTruncated,
+    stderrTruncated: summary?.stderrTruncated,
+  };
+  const eventId = stableEventId(taskId, status, evidenceKind, url ?? "none");
 
   return {
     schemaVersion: "a2a.runner.terminal-evidence.v1",
-    eventId: stableEventId(taskId, status, evidenceKind, url),
+    eventId,
+    dedupeKey: eventId,
     taskId,
     status,
     evidenceKind,
-    worker: normalizeString(nodeId) ?? "unknown",
-    repo: normalizeString(task?.payload?.repo),
-    issue: normalizeIssueReference(task),
+    worker,
+    repo,
+    issue,
     prUrl: evidence?.prUrl,
     doneUrl: evidence?.doneCommentUrl,
     blockUrl: evidence?.blockCommentUrl,
+    alert: buildTerminalAlert({ taskId, status, evidenceKind, worker, repo, issue, url, result, testSummary }),
     reason: buildTerminalReason(result, evidenceKind),
-    testSummary: {
-      label: buildTestSummaryLabel(result, evidenceKind),
-      exitCode: summary?.exitCode ?? result.exitCode,
-      timedOut: summary?.timedOut ?? result.status === "timeout",
-      artifactCount: summary?.artifactCount ?? result.artifacts?.length,
-      stdoutTruncated: summary?.stdoutTruncated,
-      stderrTruncated: summary?.stderrTruncated,
-    },
+    testSummary,
     runnerBuild: summary?.runnerBuild ?? result.runnerBuild,
     timestamps: { emittedAt },
   };
@@ -444,6 +459,59 @@ function buildTestSummaryLabel(result: RawRunnerOutput, kind: TerminalEvidenceKi
   const artifacts = result.resultSummary?.artifactCount ?? result.artifacts?.length ?? 0;
   const outcome = kind === "PR" ? "PR evidence" : kind === "Done" ? "Done evidence" : kind === "Block" ? "Block evidence" : "missing terminal evidence";
   return `a2a-docker-runner ${result.status}; ${outcome}; exit=${exit ?? "null"}; timedOut=${timedOut}; artifacts=${artifacts}`;
+}
+
+function buildTerminalAlert(input: {
+  taskId: string;
+  status: TerminalEvidenceStatus;
+  evidenceKind: TerminalEvidenceKind;
+  worker: string;
+  repo?: string;
+  issue?: string;
+  url?: string;
+  result: RawRunnerOutput;
+  testSummary: { exitCode?: number | null; timedOut?: boolean; artifactCount?: number };
+}): { title: string; body: string; url?: string } {
+  const icon = input.evidenceKind === "PR"
+    ? "PR"
+    : input.evidenceKind === "Done"
+      ? "Done"
+      : input.evidenceKind === "Block"
+        ? "Block"
+        : input.status === "cancelled"
+          ? "Timeout"
+          : "Needs review";
+  const target = input.repo ?? input.issue ?? input.taskId;
+  const title = boundAlertPart(`A2A ${icon}: ${target}`, 96);
+  const bodyParts = [
+    `task=${input.taskId}`,
+    `worker=${input.worker}`,
+    `status=${input.status}`,
+    `exit=${input.testSummary.exitCode ?? "null"}`,
+    `timeout=${input.testSummary.timedOut === true}`,
+    `artifacts=${input.testSummary.artifactCount ?? 0}`,
+  ];
+  const issueRef = compactIssueRef(input.issue);
+  if (issueRef) bodyParts.push(`issue=${issueRef}`);
+  const reason = buildTerminalReason(input.result, input.evidenceKind);
+  bodyParts.push(`reason=${reason}`);
+  return omitUndefined({
+    title,
+    body: boundAlertPart(bodyParts.join(" · "), 360),
+    url: input.url,
+  }) as { title: string; body: string; url?: string };
+}
+
+function compactIssueRef(issue?: string): string | undefined {
+  if (!issue) return undefined;
+  const match = issue.match(/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)/);
+  if (match) return `${match[1]}#${match[2]}`;
+  return issue.startsWith("http://") || issue.startsWith("https://") ? undefined : issue;
+}
+
+function boundAlertPart(value: string, max: number): string {
+  const compact = boundReason(value);
+  return compact.length <= max ? compact : `${compact.slice(0, Math.max(0, max - 3))}...`;
 }
 
 function buildTerminalReason(result: RawRunnerOutput, kind: TerminalEvidenceKind): string {
