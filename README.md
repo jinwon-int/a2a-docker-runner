@@ -172,6 +172,36 @@ command output. Detailed logs remain in runner artifacts and bounded
 `runnerRaw` debugging fields. Adapters should use `dedupeKey` as the durable
 notification id and may render `alert` directly without re-parsing logs.
 
+A CI-safe Telegram receipt smoke is available for the terminal notification ACK
+contract:
+
+```bash
+npm run smoke:telegram-terminal-ack
+```
+
+The smoke uses synthetic runner output and synthetic Telegram receipt metadata.
+It first proves provider send success alone leaves the terminal cursor incomplete,
+then confirms ACK only after an operator-visible Telegram receipt is present. It
+performs no live Telegram, broker, or GitHub writes.
+
+For all-worker rollout evidence, merge the per-worker receipt-smoke reports into
+a sanitized JSON file and run the fail-closed guard against the merge commit:
+
+```bash
+npm run rollout:receipt-evidence -- \
+  --input artifacts/rollout-receipt-evidence.json \
+  --expected-commit 123df9b19e2c600e826273f5b16117039aa44b6f
+```
+
+The merged evidence must contain exactly the active workers being rolled out
+(`bangtong`, `dungae`, `sogyo`, `nosuk`). For each worker the guard requires the
+runner artifact version and revision, a passing focused test result, an
+operator-visible terminal receipt smoke result, proof that provider-send-only ACK
+would not advance the cursor, and proof that there is no stale terminal-receipt
+backlog. Missing workers, mismatched commits, stale backlog, or provider-send-only
+ACK evidence exit non-zero. Keep the input synthetic/sanitized: no tokens, private
+host paths, raw logs, or live Telegram ACKs.
+
 ## Worker operations
 
 `doctor` prints JSON status for worker readiness checks:

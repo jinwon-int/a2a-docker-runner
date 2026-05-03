@@ -319,9 +319,11 @@ export function extractGitHubEvidence(
   // Runner already produced structured evidence (github property)
   if (result.github) {
     const g = result.github;
-    if (g.prUrl) return { prUrl: g.prUrl };
-    if (g.blockCommentUrl) return { blockCommentUrl: g.blockCommentUrl };
-    if (g.doneCommentUrl) return { doneCommentUrl: g.doneCommentUrl };
+    if (g.prUrl) return { ...g, outcome: "pr", prUrl: g.prUrl, blockUrl: undefined, blockCommentUrl: undefined, doneUrl: undefined, doneCommentUrl: undefined };
+    const blockUrl = g.blockUrl ?? g.blockCommentUrl;
+    if (blockUrl) return { ...g, outcome: "block", blockUrl, blockCommentUrl: blockUrl };
+    const doneUrl = g.doneUrl ?? g.doneCommentUrl;
+    if (doneUrl) return { ...g, outcome: "done", doneUrl, doneCommentUrl: doneUrl };
   }
 
   // Fallback: legacy PR URL from stdout parsing

@@ -11,9 +11,11 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "node --test dist/**/*.test.js",
-    "lint": "node --check dist/cli.js && node --check scripts/chaos-e2e-gate.mjs",
+    "lint": "node --check dist/cli.js && node --check scripts/chaos-e2e-gate.mjs && node --check scripts/telegram-terminal-notification-smoke.mjs && node --check scripts/rollout-receipt-evidence-guard.mjs",
+    "smoke:telegram-terminal-ack": "npm run build && node scripts/telegram-terminal-notification-smoke.mjs",
     "chaos:e2e": "node scripts/chaos-e2e-gate.mjs --mock --output tmp/chaos-e2e-evidence.json",
-    "pretest": "npm run build"
+    "pretest": "npm run build",
+    "rollout:receipt-evidence": "node scripts/rollout-receipt-evidence-guard.mjs"
   },
   "engines": {
     "node": ">=22"

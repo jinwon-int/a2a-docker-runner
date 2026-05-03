@@ -76,6 +76,15 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
     result.github = github;
     // Backward-compatible: promote to top-level prUrl if github.prUrl is set.
     if (github.prUrl && !result.prUrl) result.prUrl = github.prUrl;
+    // Fail closed: GitHub patch tasks must end with PR/Done/Block evidence.
+    if (github.outcome === "missing_evidence") {
+      result.ok = false;
+      result.status = "failed";
+      result.error = "GitHub patch task completed without PR/Done/Block evidence. Treating as failed closed until canonical evidence is available.";
+      if (result.github.validation) {
+        result.github.validation.status = result.status;
+      }
+    }
   }
 
   return result;

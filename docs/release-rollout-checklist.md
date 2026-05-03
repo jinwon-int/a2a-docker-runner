@@ -42,10 +42,19 @@ Excluded legacy target:
 1. Seoseo/operator reviews the merged PR and CI result.
 2. Build/package from the merge commit only; do not publish from an issue branch.
 3. **Pre-deploy canary**: Run CI-safe canary fixture on the merge commit: `node --test dist/canary.test.js`.
-4. Roll out one active target at a time, starting with a non-critical worker when possible.
-5. On each target, run `a2a-docker-runner doctor` and a small non-secret smoke task before sending real GitHub jobs.
-6. Confirm the worker completion payload preserves runner evidence fields when present: `github.prUrl`, `github.doneCommentUrl`, and `github.blockCommentUrl`.
-7. Continue to the next active target only after the previous target reports healthy status and expected evidence output.
+4. Collect no-live receipt-smoke evidence for all active workers (`bangtong`, `dungae`, `sogyo`, `nosuk`) into one sanitized JSON file, then run the merged-evidence guard from the merge commit:
+
+   ```bash
+   npm run rollout:receipt-evidence -- \
+     --input artifacts/rollout-receipt-evidence.json \
+     --expected-commit <merge-commit-sha>
+   ```
+
+   The guard fails closed if any active worker is missing, reports a different runner artifact commit, lacks an artifact version or passing focused test result, lacks operator-visible terminal receipt evidence, allows provider-send-only ACK, or has stale-backlog terminal receipt evidence. Do not include tokens, private host paths, raw session dumps, live Telegram sends, or real terminal-outbox ACKs in the merged input.
+5. Roll out one active target at a time, starting with a non-critical worker when possible.
+6. On each target, run `a2a-docker-runner doctor` and a small non-secret smoke task before sending real GitHub jobs.
+7. Confirm the worker completion payload preserves runner evidence fields when present: `github.prUrl`, `github.doneCommentUrl`, and `github.blockCommentUrl`.
+8. Continue to the next active target only after the previous target reports healthy status and expected evidence output.
 
 ## Chaos E2E release gate
 

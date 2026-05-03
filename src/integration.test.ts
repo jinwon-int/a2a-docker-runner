@@ -9,6 +9,7 @@
  */
 
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
@@ -536,6 +537,28 @@ test("extractGitHubEvidence: extracts blockCommentUrl from github evidence block
   };
   const evidence = extractGitHubEvidence(result);
   assert.ok(evidence);
+  assert.equal(evidence?.outcome, "block");
+  assert.equal(evidence?.blockCommentUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-123");
+});
+
+test("extractGitHubEvidence: accepts canonical blockUrl envelope", () => {
+  const result: RawRunnerOutput = {
+    ok: false, taskId: "t1", status: "failed", workDir: "/tmp",
+    stdout: "", stderr: "error", artifacts: [],
+    github: {
+      schemaVersion: "a2a.runner.github-evidence.v1",
+      repo: "jinwon-int/repo",
+      issue: "jinwon-int/repo#5",
+      taskId: "t1",
+      outcome: "block",
+      blockUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-123",
+      validation: { status: "failed", exitCode: 1, timedOut: false, artifactCount: 1 },
+    },
+  };
+  const evidence = extractGitHubEvidence(result);
+  assert.ok(evidence);
+  assert.equal(evidence?.schemaVersion, "a2a.runner.github-evidence.v1");
+  assert.equal(evidence?.blockUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-123");
   assert.equal(evidence?.blockCommentUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-123");
 });
 
@@ -1051,9 +1074,29 @@ interface TerminalAckSmokeFixture {
   safety: { mustNotContain: string[] };
 }
 
+interface TelegramTerminalNotificationSmokeFixture {
+  description: string;
+  worker: string;
+  emittedAt: string;
+  handlerTask: HandlerTask;
+  runnerOutput: RawRunnerOutput;
+  steps: Array<{
+    name: string;
+    providerSendOk: boolean;
+    receipt?: { operatorVisible: boolean; channel?: string; receiptId?: string; url?: string; deliveredAt?: string };
+    expectedAck: Pick<TerminalAckDecision, "acknowledged" | "cursorComplete" | "reason">;
+  }>;
+  safety: { mustNotContain: string[] };
+}
+
 function loadTerminalAckSmokeFixture(): TerminalAckSmokeFixture {
   const raw = readFileSync(new URL("../examples/runner-terminal-ack-smoke.json", import.meta.url), "utf8");
   return JSON.parse(raw) as TerminalAckSmokeFixture;
+}
+
+function loadTelegramTerminalNotificationSmokeFixture(): TelegramTerminalNotificationSmokeFixture {
+  const raw = readFileSync(new URL("../examples/runner-telegram-terminal-notification-smoke.json", import.meta.url), "utf8");
+  return JSON.parse(raw) as TelegramTerminalNotificationSmokeFixture;
 }
 
 test("terminal ack smoke fixture: PR/Done/Block require operator-visible receipt", () => {
@@ -1093,6 +1136,49 @@ test("terminal ack smoke fixture: provider send success alone never completes cu
   for (const forbidden of fixture.safety.mustNotContain) {
     assert.ok(!serialized.includes(forbidden), `terminal ack smoke leaked forbidden value: ${forbidden}`);
   }
+});
+
+test("Telegram terminal notification smoke: ACK waits for operator-visible receipt", () => {
+  const fixture = loadTelegramTerminalNotificationSmokeFixture();
+  const event = buildTerminalEvidenceEvent(
+    parseRunnerOutput(JSON.stringify(fixture.runnerOutput)),
+    fixture.handlerTask,
+    fixture.worker,
+    fixture.emittedAt,
+  );
+
+  const decisions = fixture.steps.map((step) => ({ step, decision: buildTerminalAckDecision(event, step.receipt) }));
+  assert.ok(decisions.some(({ decision }) => decision.acknowledged === false), "must include blocked pre-receipt step");
+  assert.ok(decisions.some(({ decision }) => decision.acknowledged === true), "must include receipt-confirmed ACK step");
+
+  for (const { step, decision } of decisions) {
+    assert.equal(decision.acknowledged, step.expectedAck.acknowledged, step.name);
+    assert.equal(decision.cursorComplete, step.expectedAck.cursorComplete, step.name);
+    assert.equal(decision.reason, step.expectedAck.reason, step.name);
+
+    if (step.receipt) {
+      assert.equal(step.receipt.channel, "telegram", step.name);
+      assert.ok(step.receipt.receiptId || step.receipt.url || step.receipt.deliveredAt, step.name);
+    } else {
+      assert.equal(step.providerSendOk, true, step.name);
+    }
+  }
+
+  const serialized = JSON.stringify({ event, decisions: decisions.map(({ decision }) => decision) });
+  for (const forbidden of fixture.safety.mustNotContain) {
+    assert.ok(!serialized.includes(forbidden), `Telegram terminal notification smoke leaked forbidden value: ${forbidden}`);
+  }
+});
+
+test("Telegram terminal notification smoke harness script passes without live Telegram", () => {
+  const output = execFileSync(process.execPath, ["scripts/telegram-terminal-notification-smoke.mjs"], {
+    cwd: new URL("..", import.meta.url),
+    encoding: "utf8",
+  });
+  const result = JSON.parse(output) as { ok: boolean; decisions: Array<{ acknowledged: boolean }> };
+  assert.equal(result.ok, true);
+  assert.ok(result.decisions.some((entry) => entry.acknowledged === false));
+  assert.ok(result.decisions.some((entry) => entry.acknowledged === true));
 });
 
 test("buildHandlerResult: includes terminal evidence for broker push notifications", () => {

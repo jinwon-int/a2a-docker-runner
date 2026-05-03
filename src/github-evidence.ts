@@ -17,7 +17,7 @@ export async function collectGitHubEvidence(
 ): Promise<GitHubEvidence | undefined> {
   if (!isGitHubEvidenceMode(task.mode)) return undefined;
 
-  const evidence: GitHubEvidence = {};
+  const evidence: GitHubEvidence = buildBaseEvidence(task, result);
 
   // On success: extract PR URL from stdout (also check artifacts).
   if (result.prUrl) {
@@ -25,13 +25,16 @@ export async function collectGitHubEvidence(
   }
 
   const missingPatchCommand = isMissingPatchCommand(result);
+  const missingExecutableWork = task.commands.length === 0;
 
-  // If blocked (non-ok) or the default GitHub pipeline had no coding-agent
-  // command configured, post a Block comment. A missing patch command is an
-  // operator/runtime readiness failure, not a successful no-op.
-  if ((!result.ok || missingPatchCommand) && task.issueUrl) {
+  // If blocked (non-ok), the default GitHub pipeline had no coding-agent
+  // command configured, or normalization produced no commands at all, post a
+  // Block comment. Missing executable work is an operator/runtime readiness
+  // failure, not a successful no-op.
+  if ((!result.ok || missingPatchCommand || missingExecutableWork) && task.issueUrl) {
     try {
       evidence.blockCommentUrl = await postBlockComment(config, task, result);
+      evidence.blockUrl = evidence.blockCommentUrl;
     } catch (err) {
       evidence.blockCommentUrl = undefined;
       const msg = err instanceof Error ? err.message : String(err);
@@ -40,18 +43,93 @@ export async function collectGitHubEvidence(
   }
 
   // If ok but no PR URL and issueUrl provided: post a Done comment.
-  // Missing patch-command readiness is handled as Block above, so it never
+  // Missing executable work/readiness is handled as Block above, so it never
   // becomes a misleading Done comment.
-  if (result.ok && !evidence.prUrl && !evidence.blockCommentUrl && task.issueUrl) {
+  if (result.ok && !missingExecutableWork && !evidence.prUrl && !evidence.blockCommentUrl && task.issueUrl) {
     try {
       evidence.doneCommentUrl = await postDoneComment(config, task, result);
+      evidence.doneUrl = evidence.doneCommentUrl;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[github-evidence] done-comment failed: ${msg}`);
     }
   }
 
+  evidence.outcome = evidence.prUrl
+    ? "pr"
+    : evidence.blockUrl || evidence.blockCommentUrl
+      ? "block"
+      : evidence.doneUrl || evidence.doneCommentUrl
+        ? "done"
+        : "missing_evidence";
+
   return evidence;
+}
+
+function buildBaseEvidence(task: NormalizedRunnerTask, result: RunnerResult): GitHubEvidence {
+  const validation = result.resultSummary;
+  return {
+    schemaVersion: "a2a.runner.github-evidence.v1",
+    repo: normalizeRepo(task),
+    issue: normalizeIssue(task),
+    taskId: task.id,
+    outcome: "missing_evidence",
+    validation: {
+      status: result.status,
+      exitCode: validation?.exitCode ?? result.exitCode,
+      signal: validation?.signal ?? result.signal,
+      timedOut: validation?.timedOut ?? result.status === "timeout",
+      artifactCount: validation?.artifactCount ?? result.artifacts.length,
+      stdoutTruncated: validation?.stdoutTruncated,
+      stderrTruncated: validation?.stderrTruncated,
+    },
+    branch: extractBranch(result),
+    commit: extractCommit(result),
+  };
+}
+
+function normalizeRepo(task: NormalizedRunnerTask): string | undefined {
+  const repo = task.repo ?? task.repos.find((candidate) => candidate.primary)?.url ?? task.repos[0]?.url;
+  if (!repo) return undefined;
+  const slug = parseGitHubRepoSlug(repo);
+  return slug ?? repo;
+}
+
+function normalizeIssue(task: NormalizedRunnerTask): string | undefined {
+  if (task.issueUrl) {
+    const match = task.issueUrl.match(/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)/);
+    if (match) return `${match[1]}#${match[2]}`;
+    return task.issueUrl;
+  }
+  const raw = task.issue ?? task.issueNumber;
+  if (raw == null) return undefined;
+  const text = String(raw);
+  const match = text.match(/#?(\d+)/);
+  const repo = normalizeRepo(task);
+  return repo && match ? `${repo}#${match[1]}` : text;
+}
+
+function extractBranch(result: RunnerResult): string | undefined {
+  return extractFirstMatch(result, [
+    /(?:^|\n)branch=([^\s]+)/,
+    /Switched to a new branch ['"]([^'"]+)['"]/,
+  ]);
+}
+
+function extractCommit(result: RunnerResult): string | undefined {
+  return extractFirstMatch(result, [
+    /(?:^|\n)(?:commit|sha)=([a-f0-9]{7,40})(?:\s|$)/i,
+    /\[[^\]\n]+\s+([a-f0-9]{7,40})\]/i,
+  ]);
+}
+
+function extractFirstMatch(result: RunnerResult, patterns: RegExp[]): string | undefined {
+  const text = `${result.stdout}\n${result.stderr}`;
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return sanitizeCommentText(match[1]).slice(0, 200);
+  }
+  return undefined;
 }
 
 function isMissingPatchCommand(result: RunnerResult): boolean {
@@ -191,8 +269,8 @@ function parseIssueCommentApiUrl(issueUrl: string | undefined): string | undefin
 export function buildBlockCommentBody(task: NormalizedRunnerTask, result: RunnerResult): string {
   const lang = task.reportLanguage ?? "ko";
   const requestedBy = task.requestedBy ?? "a2a-broker";
-  const reason = buildReason(result);
-  const action = buildAction(result, lang);
+  const reason = buildReason(task, result);
+  const action = buildAction(task, result, lang);
   const artifactLines = buildArtifactSummaryLines(result, lang);
   const buildLines = buildRunnerBuildLines(result, lang);
   const commandLogLines = buildCommandLogLines(result, lang);
@@ -341,7 +419,10 @@ function parseGitHubRepoSlug(repoUrl: string): string | undefined {
   return match?.[1];
 }
 
-function buildReason(result: RunnerResult): string {
+function buildReason(task: NormalizedRunnerTask, result: RunnerResult): string {
+  if (task.commands.length === 0) {
+    return "GitHub patch task normalized to zero executable commands, so no worker actually attempted a patch. This must be treated as Block evidence instead of Done/no-op evidence.";
+  }
   if (isMissingPatchCommand(result)) {
     return "GitHub patch task reached the default pipeline, but no coding-agent patch command was configured. Configure `A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT` or `A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON` and retry.";
   }
@@ -349,13 +430,19 @@ function buildReason(result: RunnerResult): string {
   return `Runner task failed with status \`${result.status}\`.`;
 }
 
-function buildAction(result: RunnerResult, lang: string): string {
+function buildAction(task: NormalizedRunnerTask, result: RunnerResult, lang: string): string {
   if (lang !== "ko") {
+    if (task.commands.length === 0) {
+      return "Provide a repo/default command path or inject patch command configuration, then retry the same task.";
+    }
     if (isMissingPatchCommand(result)) {
       return "Inject patch command configuration, then retry the same task.";
     }
     if (result.status === "timeout") return "Investigate the timeout and retry with adjusted timeout/resources.";
     return "Review command logs and artifacts, fix the failure cause, then retry.";
+  }
+  if (task.commands.length === 0) {
+    return "repo/default command 경로 또는 패치 명령 설정을 제공한 뒤 동일 task를 재시도하세요.";
   }
   if (isMissingPatchCommand(result)) {
     return "패치 명령 설정을 주입한 뒤 동일 task를 재시도하세요.";
