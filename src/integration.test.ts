@@ -537,6 +537,28 @@ test("extractGitHubEvidence: extracts blockCommentUrl from github evidence block
   };
   const evidence = extractGitHubEvidence(result);
   assert.ok(evidence);
+  assert.equal(evidence?.outcome, "block");
+  assert.equal(evidence?.blockCommentUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-123");
+});
+
+test("extractGitHubEvidence: accepts canonical blockUrl envelope", () => {
+  const result: RawRunnerOutput = {
+    ok: false, taskId: "t1", status: "failed", workDir: "/tmp",
+    stdout: "", stderr: "error", artifacts: [],
+    github: {
+      schemaVersion: "a2a.runner.github-evidence.v1",
+      repo: "jinwon-int/repo",
+      issue: "jinwon-int/repo#5",
+      taskId: "t1",
+      outcome: "block",
+      blockUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-123",
+      validation: { status: "failed", exitCode: 1, timedOut: false, artifactCount: 1 },
+    },
+  };
+  const evidence = extractGitHubEvidence(result);
+  assert.ok(evidence);
+  assert.equal(evidence?.schemaVersion, "a2a.runner.github-evidence.v1");
+  assert.equal(evidence?.blockUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-123");
   assert.equal(evidence?.blockCommentUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-123");
 });
 

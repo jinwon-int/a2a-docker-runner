@@ -64,7 +64,13 @@ test("extracts prUrl into evidence on success", async () => {
   };
   const evidence = await collectGitHubEvidence(baseConfig, task, result);
   assert.ok(evidence);
+  assert.equal(evidence?.schemaVersion, "a2a.runner.github-evidence.v1");
+  assert.equal(evidence?.repo, "jinwon-int/test-repo");
+  assert.equal(evidence?.issue, "jinwon-int/test-repo#1");
+  assert.equal(evidence?.taskId, "test-task");
+  assert.equal(evidence?.outcome, "pr");
   assert.equal(evidence?.prUrl, "https://github.com/jinwon-int/test-repo/pull/99");
+  assert.equal(evidence?.validation?.status, "completed");
   assert.equal(evidence?.blockCommentUrl, undefined);
 });
 
@@ -111,6 +117,7 @@ test("zero-command patch task is not treated as Done evidence", async () => {
 
   const evidence = await collectGitHubEvidence({ ...baseConfig, githubTokenFile: undefined }, task, result);
   assert.ok(evidence);
+  assert.equal(evidence?.outcome, "missing_evidence");
   assert.equal(evidence?.prUrl, undefined);
   assert.equal(evidence?.doneCommentUrl, undefined);
   assert.equal(evidence?.blockCommentUrl, undefined);
