@@ -237,7 +237,14 @@ A2A_SANITIZE_OPENCLAW_CONFIG
 fi
 
 chmod -R u+rwX /root/.openclaw
+
+# Point embedded OpenClaw at the checked-out repository without mutating
+# /root/.openclaw/workspace. Host OpenClaw workspaces contain identity,
+# bootstrap, memory, and operator state; runner code must never delete or
+# recreate that path as a sandbox alignment mechanism.
+export OPENCLAW_WORKSPACE_DIR="$PWD"
 printf 'openclaw_config_bytes=%s\n' "$(du -sb /root/.openclaw | awk '{print $1}')" | tee -a /work/artifacts/summary.txt
+printf 'openclaw_workspace=%s\n' "$OPENCLAW_WORKSPACE_DIR" | tee -a /work/artifacts/summary.txt
 
 cat > /work/artifacts/openclaw-prompt.md <<'A2A_OPENCLAW_PROMPT_EOF'
 You are running inside the A2A Docker Runner on a checked-out GitHub repository.
