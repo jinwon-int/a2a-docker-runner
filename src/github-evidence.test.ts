@@ -15,7 +15,7 @@ const baseTask: NormalizedRunnerTask = {
   mode: "github-propose-patch",
   repo: "jinwon-int/test-repo",
   repos: [],
-  commands: [],
+  commands: ["npm test"],
   issueUrl: "https://github.com/jinwon-int/test-repo/issues/1",
   reportLanguage: "ko",
   requestedBy: "seoseo",
@@ -93,6 +93,44 @@ test("parseIssueCommentApiUrl helper (via internal behavior)", async () => {
   const evidence = await collectGitHubEvidence({ ...baseConfig, githubTokenFile: undefined }, task, result);
   assert.ok(evidence);
   assert.equal(evidence?.blockCommentUrl, undefined);
+});
+
+test("zero-command patch task is not treated as Done evidence", async () => {
+  const task: NormalizedRunnerTask = { ...baseTask, commands: [] };
+  const result = {
+    ok: true,
+    taskId: "t1",
+    status: "completed" as const,
+    workDir: "/tmp",
+    exitCode: 0,
+    signal: null,
+    stdout: "",
+    stderr: "",
+    artifacts: [],
+  };
+
+  const evidence = await collectGitHubEvidence({ ...baseConfig, githubTokenFile: undefined }, task, result);
+  assert.ok(evidence);
+  assert.equal(evidence?.prUrl, undefined);
+  assert.equal(evidence?.doneCommentUrl, undefined);
+  assert.equal(evidence?.blockCommentUrl, undefined);
+});
+
+test("zero-command Block comment explains missing executable work", () => {
+  const body = buildBlockCommentBody({ ...baseTask, commands: [], reportLanguage: "en" }, {
+    ok: true,
+    taskId: "t1",
+    status: "completed",
+    workDir: "/tmp/a2a/task/run-1",
+    exitCode: 0,
+    signal: null,
+    stdout: "",
+    stderr: "",
+    artifacts: [],
+  });
+
+  assert.match(body, /zero executable commands/);
+  assert.match(body, /Provide a repo\/default command path/);
 });
 
 test("missing patch command is not treated as Done evidence", async () => {
