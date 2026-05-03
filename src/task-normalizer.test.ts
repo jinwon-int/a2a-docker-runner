@@ -118,7 +118,9 @@ test("generates PR-producing default commands for github-propose-patch mode with
   assert.ok(pipeline.includes("## 🔁 Rerun started"), "Expected Start/Rerun issue comment body");
   assert.ok(pipeline.includes("/work/artifacts/issue-start-comment.md"), "Expected start comment artifact");
   assert.ok(pipeline.indexOf("issue-start-comment.md") < pipeline.indexOf("patch-command.sh"), "Expected start comment before patch execution");
-  assert.ok(pipeline.includes("notice=gh_unavailable_start_comment_skipped"), "Expected non-fatal gh-missing marker");
+  assert.ok(pipeline.includes("error=gh_unavailable_start_comment_required"), "Expected gh-missing start comment to fail closed");
+  assert.ok(pipeline.includes("error=start_comment_failed"), "Expected failed start comment to fail closed");
+  assert.ok(pipeline.includes("start_comment=posted"), "Expected posted start comment evidence marker");
   assert.ok(pipeline.includes("gh issue comment 'https://github.com/jinwon-int/test-repo/issues/5'"), "Expected issue PR comment");
   assert.ok(pipeline.includes("/work/artifacts/issue-comment-output.txt"), "Expected issue comment output artifact");
   assert.ok(pipeline.includes("patch-command.sh"), "Expected script file reference");
