@@ -72,13 +72,38 @@ export interface RunnerRepo {
 }
 
 /** GitHub-mode completion evidence produced by the executor contract. */
+export type GitHubEvidenceOutcome = "pr" | "done" | "block" | "missing_evidence";
+
+export interface GitHubValidationSummary {
+  status: RunnerResult["status"];
+  exitCode?: number | null;
+  signal?: NodeJS.Signals | string | null;
+  timedOut: boolean;
+  artifactCount: number;
+  stdoutTruncated?: boolean;
+  stderrTruncated?: boolean;
+}
+
 export interface GitHubEvidence {
+  /** Canonical structured evidence envelope version for GitHub patch task closeout. */
+  schemaVersion?: "a2a.runner.github-evidence.v1";
+  repo?: string;
+  issue?: string;
+  taskId?: string;
+  outcome?: GitHubEvidenceOutcome;
   /** PR URL when a patch was successfully proposed (e.g. git push + gh pr create). */
   prUrl?: string;
+  /** Canonical Block URL. Backward-compatible alias: blockCommentUrl. */
+  blockUrl?: string;
+  /** Canonical Done URL. Backward-compatible alias: doneCommentUrl. */
+  doneUrl?: string;
   /** Block comment URL posted when the task is impossible or unsafe. */
   blockCommentUrl?: string;
   /** Done comment URL for tasks that complete without a PR. */
   doneCommentUrl?: string;
+  validation?: GitHubValidationSummary;
+  commit?: string;
+  branch?: string;
 }
 
 export interface RunnerTask {
@@ -98,6 +123,8 @@ export interface RunnerTask {
   prompt?: string;
   env?: Record<string, string>;
   timeoutMs?: number;
+  issue?: string | number;
+  issueNumber?: string | number;
   /** GitHub issue URL for evidence-mode Block/Done comment posting. */
   issueUrl?: string;
   /** Existing PR URL for closeout/comment-only evidence tasks. */

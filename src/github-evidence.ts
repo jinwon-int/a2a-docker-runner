@@ -17,7 +17,7 @@ export async function collectGitHubEvidence(
 ): Promise<GitHubEvidence | undefined> {
   if (!isGitHubEvidenceMode(task.mode)) return undefined;
 
-  const evidence: GitHubEvidence = {};
+  const evidence: GitHubEvidence = buildBaseEvidence(task, result);
 
   // On success: extract PR URL from stdout (also check artifacts).
   if (result.prUrl) {
@@ -34,6 +34,7 @@ export async function collectGitHubEvidence(
   if ((!result.ok || missingPatchCommand || missingExecutableWork) && task.issueUrl) {
     try {
       evidence.blockCommentUrl = await postBlockComment(config, task, result);
+      evidence.blockUrl = evidence.blockCommentUrl;
     } catch (err) {
       evidence.blockCommentUrl = undefined;
       const msg = err instanceof Error ? err.message : String(err);
@@ -47,13 +48,88 @@ export async function collectGitHubEvidence(
   if (result.ok && !missingExecutableWork && !evidence.prUrl && !evidence.blockCommentUrl && task.issueUrl) {
     try {
       evidence.doneCommentUrl = await postDoneComment(config, task, result);
+      evidence.doneUrl = evidence.doneCommentUrl;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[github-evidence] done-comment failed: ${msg}`);
     }
   }
 
+  evidence.outcome = evidence.prUrl
+    ? "pr"
+    : evidence.blockUrl || evidence.blockCommentUrl
+      ? "block"
+      : evidence.doneUrl || evidence.doneCommentUrl
+        ? "done"
+        : "missing_evidence";
+
   return evidence;
+}
+
+function buildBaseEvidence(task: NormalizedRunnerTask, result: RunnerResult): GitHubEvidence {
+  const validation = result.resultSummary;
+  return {
+    schemaVersion: "a2a.runner.github-evidence.v1",
+    repo: normalizeRepo(task),
+    issue: normalizeIssue(task),
+    taskId: task.id,
+    outcome: "missing_evidence",
+    validation: {
+      status: result.status,
+      exitCode: validation?.exitCode ?? result.exitCode,
+      signal: validation?.signal ?? result.signal,
+      timedOut: validation?.timedOut ?? result.status === "timeout",
+      artifactCount: validation?.artifactCount ?? result.artifacts.length,
+      stdoutTruncated: validation?.stdoutTruncated,
+      stderrTruncated: validation?.stderrTruncated,
+    },
+    branch: extractBranch(result),
+    commit: extractCommit(result),
+  };
+}
+
+function normalizeRepo(task: NormalizedRunnerTask): string | undefined {
+  const repo = task.repo ?? task.repos.find((candidate) => candidate.primary)?.url ?? task.repos[0]?.url;
+  if (!repo) return undefined;
+  const slug = parseGitHubRepoSlug(repo);
+  return slug ?? repo;
+}
+
+function normalizeIssue(task: NormalizedRunnerTask): string | undefined {
+  if (task.issueUrl) {
+    const match = task.issueUrl.match(/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)/);
+    if (match) return `${match[1]}#${match[2]}`;
+    return task.issueUrl;
+  }
+  const raw = task.issue ?? task.issueNumber;
+  if (raw == null) return undefined;
+  const text = String(raw);
+  const match = text.match(/#?(\d+)/);
+  const repo = normalizeRepo(task);
+  return repo && match ? `${repo}#${match[1]}` : text;
+}
+
+function extractBranch(result: RunnerResult): string | undefined {
+  return extractFirstMatch(result, [
+    /(?:^|\n)branch=([^\s]+)/,
+    /Switched to a new branch ['"]([^'"]+)['"]/,
+  ]);
+}
+
+function extractCommit(result: RunnerResult): string | undefined {
+  return extractFirstMatch(result, [
+    /(?:^|\n)(?:commit|sha)=([a-f0-9]{7,40})(?:\s|$)/i,
+    /\[[^\]\n]+\s+([a-f0-9]{7,40})\]/i,
+  ]);
+}
+
+function extractFirstMatch(result: RunnerResult, patterns: RegExp[]): string | undefined {
+  const text = `${result.stdout}\n${result.stderr}`;
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return sanitizeCommentText(match[1]).slice(0, 200);
+  }
+  return undefined;
 }
 
 function isMissingPatchCommand(result: RunnerResult): boolean {
