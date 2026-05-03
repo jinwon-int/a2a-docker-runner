@@ -25,11 +25,13 @@ export async function collectGitHubEvidence(
   }
 
   const missingPatchCommand = isMissingPatchCommand(result);
+  const missingExecutableWork = task.commands.length === 0;
 
-  // If blocked (non-ok) or the default GitHub pipeline had no coding-agent
-  // command configured, post a Block comment. A missing patch command is an
-  // operator/runtime readiness failure, not a successful no-op.
-  if ((!result.ok || missingPatchCommand) && task.issueUrl) {
+  // If blocked (non-ok), the default GitHub pipeline had no coding-agent
+  // command configured, or normalization produced no commands at all, post a
+  // Block comment. Missing executable work is an operator/runtime readiness
+  // failure, not a successful no-op.
+  if ((!result.ok || missingPatchCommand || missingExecutableWork) && task.issueUrl) {
     try {
       evidence.blockCommentUrl = await postBlockComment(config, task, result);
     } catch (err) {
@@ -40,9 +42,9 @@ export async function collectGitHubEvidence(
   }
 
   // If ok but no PR URL and issueUrl provided: post a Done comment.
-  // Missing patch-command readiness is handled as Block above, so it never
+  // Missing executable work/readiness is handled as Block above, so it never
   // becomes a misleading Done comment.
-  if (result.ok && !evidence.prUrl && !evidence.blockCommentUrl && task.issueUrl) {
+  if (result.ok && !missingExecutableWork && !evidence.prUrl && !evidence.blockCommentUrl && task.issueUrl) {
     try {
       evidence.doneCommentUrl = await postDoneComment(config, task, result);
     } catch (err) {
@@ -191,8 +193,8 @@ function parseIssueCommentApiUrl(issueUrl: string | undefined): string | undefin
 export function buildBlockCommentBody(task: NormalizedRunnerTask, result: RunnerResult): string {
   const lang = task.reportLanguage ?? "ko";
   const requestedBy = task.requestedBy ?? "a2a-broker";
-  const reason = buildReason(result);
-  const action = buildAction(result, lang);
+  const reason = buildReason(task, result);
+  const action = buildAction(task, result, lang);
   const artifactLines = buildArtifactSummaryLines(result, lang);
   const buildLines = buildRunnerBuildLines(result, lang);
   const commandLogLines = buildCommandLogLines(result, lang);
@@ -341,7 +343,10 @@ function parseGitHubRepoSlug(repoUrl: string): string | undefined {
   return match?.[1];
 }
 
-function buildReason(result: RunnerResult): string {
+function buildReason(task: NormalizedRunnerTask, result: RunnerResult): string {
+  if (task.commands.length === 0) {
+    return "GitHub patch task normalized to zero executable commands, so no worker actually attempted a patch. This must be treated as Block evidence instead of Done/no-op evidence.";
+  }
   if (isMissingPatchCommand(result)) {
     return "GitHub patch task reached the default pipeline, but no coding-agent patch command was configured. Configure `A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT` or `A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON` and retry.";
   }
@@ -349,13 +354,19 @@ function buildReason(result: RunnerResult): string {
   return `Runner task failed with status \`${result.status}\`.`;
 }
 
-function buildAction(result: RunnerResult, lang: string): string {
+function buildAction(task: NormalizedRunnerTask, result: RunnerResult, lang: string): string {
   if (lang !== "ko") {
+    if (task.commands.length === 0) {
+      return "Provide a repo/default command path or inject patch command configuration, then retry the same task.";
+    }
     if (isMissingPatchCommand(result)) {
       return "Inject patch command configuration, then retry the same task.";
     }
     if (result.status === "timeout") return "Investigate the timeout and retry with adjusted timeout/resources.";
     return "Review command logs and artifacts, fix the failure cause, then retry.";
+  }
+  if (task.commands.length === 0) {
+    return "repo/default command 경로 또는 패치 명령 설정을 제공한 뒤 동일 task를 재시도하세요.";
   }
   if (isMissingPatchCommand(result)) {
     return "패치 명령 설정을 주입한 뒤 동일 task를 재시도하세요.";
