@@ -76,6 +76,9 @@ function buildBaseEvidence(task: NormalizedRunnerTask, result: RunnerResult): Gi
     repo: normalizeRepo(task),
     issue: normalizeIssue(task),
     taskId: task.id,
+    worker: safeOptionalText(task.requestedBy, 80),
+    issueTitle: safeOptionalText(task.issueTitle, 160),
+    taskBrief: safeOptionalText(task.taskBrief ?? task.prompt, 240),
     outcome: "missing_evidence",
     validation: {
       status: result.status,
@@ -502,6 +505,13 @@ function buildCommandLogLines(result: RunnerResult, lang: string): string[] {
   if (stderr.trim()) lines.push("- stderr:\n```text\n" + truncate(stderr, 1200) + "\n```");
   if (!stdout.trim() && !stderr.trim()) lines.push(lang === "ko" ? "- stdout/stderr 요약 없음" : "- No stdout/stderr summary");
   return lines;
+}
+
+function safeOptionalText(value: string | undefined, maxLen: number): string | undefined {
+  if (!value) return undefined;
+  const sanitized = sanitizeCommentText(value).replace(/\s+/g, " ").trim();
+  if (!sanitized) return undefined;
+  return truncate(sanitized, maxLen);
 }
 
 function sanitizeArtifactPath(path: string): string {

@@ -48,6 +48,8 @@ export interface HandlerTaskPayload {
   prompt?: string;
   timeoutMs?: number;
   runnerPreset?: string;
+  requestedBy?: string;
+  worker?: string;
 }
 
 /** Minimal broker-task shape needed by the integration helpers. */
@@ -93,6 +95,8 @@ export interface TerminalEvidenceEvent {
   worker: string;
   repo?: string;
   issue?: string;
+  issueTitle?: string;
+  taskBrief?: string;
   prUrl?: string;
   doneUrl?: string;
   blockUrl?: string;
@@ -230,8 +234,10 @@ export function buildRunnerTaskFromHandlerPayload(
     mode: "github-propose-patch",
     prompt: normalizeString(task?.message ?? task?.payload?.prompt) ?? "",
     issueUrl: normalizeString(task?.payload?.issueUrl) ?? undefined,
+    issueTitle: safeEvidenceText(task?.payload?.title, 160),
+    taskBrief: safeEvidenceText(task?.payload?.focus ?? task?.message ?? task?.payload?.prompt, 240),
     reportLanguage: "ko",
-    requestedBy: undefined,
+    requestedBy: safeEvidenceText(task?.payload?.requestedBy ?? task?.payload?.worker, 80),
     existingPrUrl: normalizeExistingPrUrl(task, repo),
     existingPrNumber: task?.payload?.existingPrNumber ?? task?.payload?.prNumber,
     forbidNewPr: Boolean(task?.payload?.forbidNewPr ?? task?.payload?.noNewPr),
@@ -424,6 +430,8 @@ export function buildTerminalEvidenceEvent(
   const worker = normalizeString(nodeId) ?? "unknown";
   const repo = normalizeString(task?.payload?.repo);
   const issue = normalizeIssueReference(task);
+  const issueTitle = safeEvidenceText(task?.payload?.title ?? evidence?.issueTitle, 160);
+  const taskBrief = safeEvidenceText(task?.payload?.focus ?? task?.message ?? task?.payload?.prompt ?? evidence?.taskBrief, 240);
   const testSummary = {
     label: buildTestSummaryLabel(result, evidenceKind),
     exitCode: summary?.exitCode ?? result.exitCode,
@@ -444,10 +452,12 @@ export function buildTerminalEvidenceEvent(
     worker,
     repo,
     issue,
+    issueTitle,
+    taskBrief,
     prUrl: evidence?.prUrl,
     doneUrl: evidence?.doneCommentUrl,
     blockUrl: evidence?.blockCommentUrl,
-    alert: buildTerminalAlert({ taskId, status, evidenceKind, worker, repo, issue, url, result, testSummary }),
+    alert: buildTerminalAlert({ taskId, status, evidenceKind, worker, repo, issue, issueTitle, taskBrief, url, result, testSummary }),
     reason: buildTerminalReason(result, evidenceKind),
     testSummary,
     runnerBuild: summary?.runnerBuild ?? result.runnerBuild,
@@ -642,6 +652,8 @@ function buildTerminalAlert(input: {
   worker: string;
   repo?: string;
   issue?: string;
+  issueTitle?: string;
+  taskBrief?: string;
   url?: string;
   result: RawRunnerOutput;
   testSummary: { exitCode?: number | null; timedOut?: boolean; artifactCount?: number };
@@ -669,6 +681,8 @@ function buildTerminalAlert(input: {
   ];
   const issueRef = compactIssueRef(input.issue);
   if (issueRef) bodyParts.push(`issue=${issueRef}`);
+  if (input.issueTitle) bodyParts.push(`title=${input.issueTitle}`);
+  if (input.taskBrief) bodyParts.push(`brief=${input.taskBrief}`);
   const reason = buildTerminalReason(input.result, input.evidenceKind);
   bodyParts.push(`reason=${reason}`);
   return omitUndefined({
@@ -717,6 +731,13 @@ function boundReason(value: string): string {
     .trim();
   if (compact.length <= 180) return compact;
   return `${compact.slice(0, 177)}...`;
+}
+
+function safeEvidenceText(value: string | undefined, maxLen: number): string | undefined {
+  const normalized = normalizeString(value);
+  if (!normalized) return undefined;
+  const safe = boundReason(normalized);
+  return safe.length <= maxLen ? safe : `${safe.slice(0, Math.max(0, maxLen - 3))}...`;
 }
 
 function normalizeString(value?: string): string | undefined {

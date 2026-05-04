@@ -69,10 +69,11 @@
         "worker": "nosuk",
         "repo": "jinwon-int/a2a-docker-runner",
         "issue": "https://github.com/jinwon-int/a2a-docker-runner/issues/98",
+        "issueTitle": "R2 compact PR terminal evidence smoke",
         "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/151",
         "alert": {
           "title": "A2A PR: jinwon-int/a2a-docker-runner",
-          "body": "task=r2-nosuk-pr-98 · worker=nosuk · status=succeeded · exit=0 · timeout=false · artifacts=1 · issue=jinwon-int/a2a-docker-runner#98 · reason=PR evidence is available for operat...",
+          "body": "task=r2-nosuk-pr-98 · worker=nosuk · status=succeeded · exit=0 · timeout=false · artifacts=1 · issue=jinwon-int/a2a-docker-runner#98 · title=R2 compact PR terminal evidence smok...",
           "url": "https://github.com/jinwon-int/a2a-docker-runner/pull/151"
         },
         "reason": "PR evidence is available for operator review.",
