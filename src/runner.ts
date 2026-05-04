@@ -3,7 +3,7 @@ import { basename, join, relative, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { normalizeTask } from "./task-normalizer.js";
 import { collectGitHubEvidence } from "./github-evidence.js";
-import type { ArtifactEvidencePart, ArtifactManifest, ArtifactManifestEntry, ArtifactManifestStatus, NormalizedRunnerTask, ResultSummary, RunnerConfig, RunnerResult, RunnerTask } from "./types.js";
+import type { ArtifactEvidencePart, ArtifactManifest, ArtifactManifestEntry, ArtifactManifestStatus, NormalizedRunnerTask, ResultSummary, RunnerBudgetEvidence, RunnerConfig, RunnerContinuationEvidence, RunnerResult, RunnerTask } from "./types.js";
 
 export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<RunnerResult> {
   validateTask(task);
@@ -44,12 +44,14 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
   const stdout = redactAndBound(completed.stdout);
   const stderr = redactAndBound(completed.stderr);
   const prUrl = extractPrUrl(completed.stdout);
+  const budgetStop = inferBudgetStopEvidence(stdout, stderr);
   const manifest = await buildArtifactManifest(workDir, artifacts, {
     task: normalizedTask,
-    status: completed.timedOut ? "failed" : completed.code === 0 ? "done" : "failed",
+    status: budgetStop ? "budget_limited" : completed.timedOut ? "failed" : completed.code === 0 ? "done" : "failed",
     stdout,
     stderr,
     prUrl,
+    ...(budgetStop ? budgetStop : {}),
   });
   await writeArtifactManifest(workDir, manifest);
   const resultSummary = buildResultSummary(completed, stdout, stderr, artifacts, manifest, config.buildMetadata);
@@ -442,6 +444,9 @@ export function buildResultSummary(
     stderrTruncated: stderr.includes("\n<truncated "),
     artifactCount: artifacts.length,
     manifestPath: manifest.manifestPath,
+    status: manifest.status,
+    ...(manifest.budget ? { budget: manifest.budget } : {}),
+    ...(manifest.continuation ? { continuation: manifest.continuation } : {}),
     ...(runnerBuild ? { runnerBuild } : {}),
   };
 }
@@ -452,6 +457,8 @@ export interface ArtifactManifestContext {
   stdout?: string;
   stderr?: string;
   prUrl?: string;
+  budget?: RunnerBudgetEvidence;
+  continuation?: RunnerContinuationEvidence;
 }
 
 export async function buildArtifactManifest(workDir: string, artifacts: string[], context: ArtifactManifestContext = {}): Promise<ArtifactManifest> {
@@ -483,7 +490,60 @@ export async function buildArtifactManifest(workDir: string, artifacts: string[]
     summary,
     evidence,
     artifacts: entries,
+    ...(context.budget ? { budget: context.budget } : {}),
+    ...(context.continuation ? { continuation: context.continuation } : {}),
   };
+}
+
+function inferBudgetStopEvidence(stdout: string, stderr: string): Pick<ArtifactManifestContext, "budget" | "continuation"> | undefined {
+  const text = `${stdout}\n${stderr}`;
+  if (!/(?:^|\n)(?:status=budget_limited|budget_limited\b)/i.test(text)) return undefined;
+
+  const limitKind = extractBudgetField(text, "limitKind");
+  const limit = safeBudgetText(extractBudgetField(text, "limit"));
+  const used = safeBudgetText(extractBudgetField(text, "used"));
+  const reason = safeBudgetText(extractBudgetField(text, "reason"));
+  const budget: RunnerBudgetEvidence = {
+    limitKind: isRunnerBudgetLimitKind(limitKind) ? limitKind : "time",
+    ...(limit ? { limit } : {}),
+    ...(used ? { used } : {}),
+    ...(reason ? { reason } : {}),
+  };
+  const nextPrompt = safeBudgetText(extractBudgetField(text, "nextPrompt"), 300);
+  return {
+    budget,
+    continuation: {
+      recommended: true,
+      requiresApproval: true,
+      ...(nextPrompt ? { nextPrompt } : {}),
+    },
+  };
+}
+
+function extractBudgetField(text: string, field: "limitKind" | "limit" | "used" | "reason" | "nextPrompt"): string | undefined {
+  const aliases: Record<typeof field, string[]> = {
+    limitKind: ["budget.limitKind", "budget_limit_kind"],
+    limit: ["budget.limit", "budget_limit"],
+    used: ["budget.used", "budget_used"],
+    reason: ["budget.reason", "budget_reason"],
+    nextPrompt: ["continuation.nextPrompt", "continuation_next_prompt"],
+  };
+  for (const alias of aliases[field]) {
+    const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = text.match(new RegExp(`(?:^|\\n)${escaped}=([^\\r\\n]+)`, "i"));
+    if (match?.[1]) return match[1].trim();
+  }
+  return undefined;
+}
+
+function isRunnerBudgetLimitKind(value: string | undefined): value is RunnerBudgetEvidence["limitKind"] {
+  return value === "time" || value === "token" || value === "attempt" || value === "command" || value === "safety";
+}
+
+function safeBudgetText(value: string | undefined, limit = 160): string | undefined {
+  if (!value) return undefined;
+  const safe = redactAndBound(value.replace(/[\r\n]+/g, " ").trim(), limit);
+  return safe || undefined;
 }
 
 async function buildArtifactEvidenceParts(

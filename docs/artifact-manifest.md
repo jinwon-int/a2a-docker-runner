@@ -11,7 +11,7 @@ Sample: [`examples/artifact-manifest.dummy-task.json`](../examples/artifact-mani
 - `schemaVersion`: backward-compatible alias for older runner consumers. Current value: `1`.
 - `manifestPath`: always `artifacts/manifest.json`.
 - `generatedAt`: deterministic generation timestamp; current runner uses `1970-01-01T00:00:00.000Z` so identical artifacts produce stable manifests.
-- `status`: one of `done`, `blocked`, or `failed`.
+- `status`: one of `done`, `blocked`, `failed`, or `budget_limited`. `budget_limited` is not Done; it means bounded execution stopped and any continuation must be separately approved.
 - `summary`: non-empty operator-friendly text for broker/plugin cards.
 - `evidence`: array of A2A Part-like evidence entries.
 - `artifacts`: file inventory backing the manifest.
@@ -19,6 +19,8 @@ Sample: [`examples/artifact-manifest.dummy-task.json`](../examples/artifact-mani
 ## Optional task fields
 
 - `taskId`, `repo`, `branch`, `prUrl`, `issueUrl`.
+- `budget`: bounded, redacted budget-stop metadata (`limitKind`, optional `limit`/`used`/`reason`) when `status=budget_limited`.
+- `continuation`: optional approval-gated follow-up recommendation; `requiresApproval` must be `true`.
 
 ## Evidence parts
 

@@ -15,7 +15,7 @@
     "branch": { "type": "string", "minLength": 1 },
     "prUrl": { "type": "string", "format": "uri" },
     "issueUrl": { "type": "string", "format": "uri" },
-    "status": { "enum": ["done", "blocked", "failed"] },
+    "status": { "enum": ["done", "blocked", "failed", "budget_limited"] },
     "summary": { "type": "string", "minLength": 1, "maxLength": 1000 },
     "evidence": {
       "type": "array",
@@ -43,6 +43,27 @@
           "name": { "type": "string", "minLength": 1 },
           "sizeBytes": { "type": "integer", "minimum": 0 }
         }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["limitKind"],
+      "properties": {
+        "limitKind": { "enum": ["time", "token", "attempt", "command", "safety"] },
+        "limit": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "used": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+      }
+    },
+    "continuation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recommended", "requiresApproval"],
+      "properties": {
+        "recommended": { "type": "boolean" },
+        "nextPrompt": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "requiresApproval": { "const": true }
       }
     }
   }
