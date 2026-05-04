@@ -125,6 +125,38 @@ test("fails closed when terminal evidence URL is unsafe", async () => {
   assert.deepEqual(evidence?.validationErrors, ["missing_or_unsafe_terminal_url"]);
 });
 
+test("keeps long multiline github-verify prompt safe for release-gate metadata", async () => {
+  const task: NormalizedRunnerTask = {
+    ...baseTask,
+    intent: "verify",
+    mode: "github-verify",
+    issueTitle: undefined,
+    prompt: [
+      "A2A GitHub-mode issue assignment",
+      "",
+      "Worker: yukson",
+      "Issue: jinwon-int/a2a-broker#330",
+      "Title: A2A no-live integration: verifier matrix",
+      "URL: https://github.com/jinwon-int/a2a-broker/issues/330",
+      "Run: a2a-no-live-integration-20260504035026-yukson-rerun-1777875644881",
+      "",
+      "This prompt is intentionally long ".repeat(20),
+    ].join("\n"),
+  };
+  const result = {
+    ok: true, taskId: "t1", status: "completed" as const, workDir: "/tmp",
+    exitCode: 0, signal: null, stdout: "npm test passed", stderr: "", artifacts: [],
+    prUrl: "https://github.com/jinwon-int/test-repo/pull/99",
+  };
+
+  const evidence = await collectGitHubEvidence(baseConfig, task, result);
+  assert.equal(evidence?.outcome, "pr");
+  assert.ok(evidence?.taskBrief);
+  assert.ok(evidence.taskBrief.length <= 240);
+  assert.doesNotMatch(evidence.taskBrief, /[\r\n]/);
+  assert.equal(evidence.validationErrors, undefined);
+});
+
 test("skips block comment when no issueUrl on failure", async () => {
   const task: NormalizedRunnerTask = { ...baseTask, issueUrl: undefined };
   const result = {

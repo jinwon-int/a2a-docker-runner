@@ -564,7 +564,10 @@ function safeOptionalText(value: string | undefined, maxLen: number): string | u
   if (!value) return undefined;
   const sanitized = sanitizeCommentText(value).replace(/\s+/g, " ").trim();
   if (!sanitized) return undefined;
-  return truncate(sanitized, maxLen);
+  if (sanitized.length <= maxLen) return sanitized;
+  const suffix = " ... truncated";
+  const headLen = Math.max(1, maxLen - suffix.length);
+  return `${sanitized.slice(0, headLen).trimEnd()}${suffix}`;
 }
 
 function sanitizeArtifactPath(path: string): string {
