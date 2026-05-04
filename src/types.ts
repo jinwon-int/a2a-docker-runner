@@ -72,7 +72,7 @@ export interface RunnerRepo {
 }
 
 /** GitHub-mode completion evidence produced by the executor contract. */
-export type GitHubEvidenceOutcome = "pr" | "done" | "block" | "missing_evidence";
+export type GitHubEvidenceOutcome = "pr" | "done" | "block" | "budget_limited" | "timed_out" | "missing_evidence";
 
 export interface GitHubValidationSummary {
   status: RunnerResult["status"];

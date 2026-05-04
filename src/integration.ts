@@ -79,7 +79,7 @@ export interface HandlerResult {
 }
 
 export type TerminalEvidenceStatus = "succeeded" | "failed" | "cancelled" | "blocked";
-export type TerminalEvidenceKind = "PR" | "Done" | "Block" | "MissingEvidence";
+export type TerminalEvidenceKind = "PR" | "Done" | "Block" | "BudgetLimited" | "TimedOut" | "MissingEvidence";
 
 export interface TerminalEvidenceEvent {
   schemaVersion: "a2a.runner.terminal-evidence.v1";
@@ -397,18 +397,23 @@ export function buildTerminalEvidenceEvent(
 ): TerminalEvidenceEvent {
   const evidence = extractGitHubEvidence(result);
   const budgetLimited = isBudgetLimitedResult(result);
+  const timedOut = result.resultSummary?.timedOut === true || result.status === "timeout";
   const evidenceKind: TerminalEvidenceKind = evidence?.prUrl
     ? "PR"
     : evidence?.doneCommentUrl && !budgetLimited
       ? "Done"
       : evidence?.blockCommentUrl
         ? "Block"
-        : "MissingEvidence";
+        : budgetLimited
+          ? "BudgetLimited"
+          : timedOut
+            ? "TimedOut"
+            : "MissingEvidence";
   const status: TerminalEvidenceStatus = evidenceKind === "PR" || evidenceKind === "Done"
     ? "succeeded"
-    : evidenceKind === "Block"
+    : evidenceKind === "Block" || evidenceKind === "BudgetLimited"
       ? "blocked"
-      : result.status === "timeout"
+      : evidenceKind === "TimedOut"
         ? "cancelled"
         : result.ok
           ? "blocked"
@@ -647,9 +652,11 @@ function buildTerminalAlert(input: {
       ? "Done"
       : input.evidenceKind === "Block"
         ? "Block"
-        : input.status === "cancelled"
-          ? "Timeout"
-          : "Needs review";
+        : input.evidenceKind === "BudgetLimited"
+          ? "Budget limited"
+          : input.evidenceKind === "TimedOut"
+            ? "Timeout"
+            : "Needs review";
   const target = input.repo ?? input.issue ?? input.taskId;
   const title = boundAlertPart(`A2A ${icon}: ${target}`, 96);
   const bodyParts = [
@@ -687,8 +694,8 @@ function buildTerminalReason(result: RawRunnerOutput, kind: TerminalEvidenceKind
   if (kind === "PR") return "PR evidence is available for operator review.";
   if (kind === "Done") return "Done evidence was posted because no PR was needed.";
   if (kind === "Block") return shortSafeReason(result, "Block evidence was posted for operator follow-up.");
-  if (isBudgetLimitedResult(result)) return safeContinuationRecommendation(result);
-  if (result.status === "timeout") return "Runner timed out before producing PR/Done/Block evidence.";
+  if (kind === "BudgetLimited" || isBudgetLimitedResult(result)) return safeContinuationRecommendation(result);
+  if (kind === "TimedOut" || result.status === "timeout") return "Runner timed out before producing PR/Done/Block evidence.";
   if (!result.ok) return shortSafeReason(result, "Runner failed before producing PR/Done/Block evidence.");
   return "Runner completed without PR/Done/Block evidence.";
 }

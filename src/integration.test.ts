@@ -930,7 +930,7 @@ test("budget-limited fixture: validates continuation contract and does not map D
 
   const event = buildTerminalEvidenceEvent(parsed, fixture.handlerTask, fixture.worker, fixture.emittedAt);
   assert.equal(event.status, "blocked");
-  assert.equal(event.evidenceKind, "MissingEvidence");
+  assert.equal(event.evidenceKind, "BudgetLimited");
   assert.equal(event.doneUrl, undefined);
   assert.match(event.testSummary.label, /budget-limited continuation evidence/);
   assert.match(event.reason ?? "", /approve one bounded continuation task/i);
@@ -1083,6 +1083,33 @@ test("buildTerminalEvidenceEvent: includes short Done reason and issue URL", () 
   assert.equal(event.alert.url, "https://github.com/jinwon-int/repo/issues/83#issuecomment-2");
   assert.equal(event.reason, "Done evidence was posted because no PR was needed.");
   assert.ok(!JSON.stringify(event).includes("large log"));
+});
+
+test("buildTerminalEvidenceEvent: timeout missing-evidence event is distinguished from generic missing evidence", () => {
+  const result: RawRunnerOutput = {
+    ok: false, taskId: "task-timeout", status: "timeout", workDir: "/tmp/work",
+    stdout: "raw stdout", stderr: "raw stderr", artifacts: [],
+    resultSummary: {
+      exitCode: null, signal: "SIGTERM", timedOut: true,
+      stdout: "bounded stdout", stderr: "bounded stderr",
+      stdoutTruncated: false, stderrTruncated: false, artifactCount: 0, manifestPath: "artifacts/manifest.json",
+    },
+  };
+
+  const event = buildTerminalEvidenceEvent(
+    result,
+    { id: "task-timeout", payload: { repo: "jinwon-int/repo", issue: "85" } },
+    "sogyo",
+    "2026-05-01T13:00:00.000Z",
+  );
+
+  assert.equal(event.status, "cancelled");
+  assert.equal(event.evidenceKind, "TimedOut");
+  assert.equal(event.reason, "Runner timed out before producing PR/Done/Block evidence.");
+  assert.match(event.testSummary.label, /missing terminal evidence/);
+  assert.equal(event.alert.title, "A2A Timeout: jinwon-int/repo");
+  assert.ok(!JSON.stringify(event).includes("raw stdout"));
+  assert.ok(!JSON.stringify(event).includes("raw stderr"));
 });
 
 test("buildTerminalEvidenceEvent: failed missing-evidence event keeps reason short and omits raw logs", () => {
