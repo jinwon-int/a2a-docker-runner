@@ -1,0 +1,32 @@
+{
+  "artifactVersion": 1,
+  "schemaVersion": 1,
+  "manifestPath": "artifacts/manifest.json",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "taskId": "dummy-public-demo-001",
+  "repo": "jinwon-int/example-repo",
+  "branch": "fix/demo-artifact-contract",
+  "prUrl": "https://github.com/jinwon-int/example-repo/pull/1",
+  "issueUrl": "https://github.com/jinwon-int/example-repo/issues/1",
+  "status": "done",
+  "summary": "Runner produced PR evidence: https://github.com/jinwon-int/example-repo/pull/1",
+  "evidence": [
+    {
+      "kind": "test",
+      "label": "check.log",
+      "status": "passed",
+      "path": "artifacts/check.log",
+      "excerpt": "npm test passed"
+    },
+    {
+      "kind": "diff",
+      "label": "changes.diff",
+      "status": "unknown",
+      "path": "artifacts/changes.diff"
+    }
+  ],
+  "artifacts": [
+    { "path": "artifacts/check.log", "name": "check.log", "sizeBytes": 16 },
+    { "path": "artifacts/changes.diff", "name": "changes.diff", "sizeBytes": 128 }
+  ]
+}
