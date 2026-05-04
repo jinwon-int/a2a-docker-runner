@@ -155,6 +155,28 @@ export interface ArtifactManifestEntry {
   sizeBytes: number;
 }
 
+export type RunnerArtifactContractStatus = "done" | "blocked" | "failed" | "budget_limited";
+export type RunnerBudgetLimitKind = "time" | "token" | "attempt" | "command" | "safety";
+
+export interface RunnerBudgetEvidence {
+  limitKind: RunnerBudgetLimitKind;
+  /** Sanitized operator-facing budget limit, e.g. "45m" or "max_attempts=3". */
+  limit?: string;
+  /** Sanitized operator-facing usage, e.g. "44m" or "attempts=3". */
+  used?: string;
+  /** Short, secret-free reason for the limit stop. */
+  reason?: string;
+}
+
+export interface RunnerContinuationEvidence {
+  /** True when another bounded, explicitly-approved task is the safe next step. */
+  recommended: boolean;
+  /** Sanitized next prompt for a follow-up task; never auto-executed by the runner. */
+  nextPrompt?: string;
+  /** Continuation must require operator/broker approval; no unbounded auto-continuation. */
+  requiresApproval: true;
+}
+
 export interface ArtifactManifest {
   schemaVersion: 1;
   /** Path to the emitted manifest.json relative to the task workDir. */
@@ -162,6 +184,12 @@ export interface ArtifactManifest {
   /** Fixed timestamp keeps manifest content deterministic for identical artifacts. */
   generatedAt: string;
   artifacts: ArtifactManifestEntry[];
+  /** Optional task outcome surfaced by artifact producers; budget_limited is not Done. */
+  status?: RunnerArtifactContractStatus;
+  /** Optional sanitized evidence describing which budget stopped the task. */
+  budget?: RunnerBudgetEvidence;
+  /** Optional sanitized recommendation for a bounded, approval-gated continuation. */
+  continuation?: RunnerContinuationEvidence;
 }
 
 export interface ResultSummary {
@@ -176,6 +204,10 @@ export interface ResultSummary {
   manifestPath: string;
   /** Bounded, secret-free runner build metadata suitable for broker/operator evidence. */
   runnerBuild?: RunnerBuildMetadata;
+  /** Optional artifact-contract outcome; budget_limited is handled as blocked/needs continuation. */
+  status?: RunnerArtifactContractStatus;
+  budget?: RunnerBudgetEvidence;
+  continuation?: RunnerContinuationEvidence;
 }
 
 export interface RunnerResult {

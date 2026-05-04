@@ -166,11 +166,52 @@ The event is intentionally small and secret-free:
 - `testSummary.label`: one-line runner outcome with exit, timeout, artifact count
 - `runnerBuild`: optional bounded build metadata (`version`, `source`, `revision`, `builtAt`, `image`)
 - `reason`: short human-facing Done/Block/failure reason
+- Budget-limited runs are never reported as Done. If `artifactManifest.status` or
+  `resultSummary.status` is `budget_limited`, broker/plugin summaries must show a
+  blocked/needs-continuation outcome and include a safe next action instead of
+  auto-continuing.
 
 It must not include raw stdout/stderr, host work directories, secrets, or oversized
 command output. Detailed logs remain in runner artifacts and bounded
 `runnerRaw` debugging fields. Adapters should use `dedupeKey` as the durable
 notification id and may render `alert` directly without re-parsing logs.
+
+### Artifact budget/continuation contract
+
+Modern artifacts may include sanitized budget and continuation evidence in
+`artifacts/manifest.json` and the bounded `resultSummary` copy:
+
+```json
+{
+  "status": "done|blocked|failed|budget_limited",
+  "budget": {
+    "limitKind": "time|token|attempt|command|safety",
+    "limit": "45m task timeout budget",
+    "used": "45m",
+    "reason": "Stopped before completing validation within the bounded task budget."
+  },
+  "continuation": {
+    "recommended": true,
+    "nextPrompt": "Continue from artifacts/summary.txt; finish validation after approval.",
+    "requiresApproval": true
+  }
+}
+```
+
+Rules:
+
+- `budget_limited` means constrained/unfinished, not success. It must not be
+  mapped to Done even if older output also contains a `doneCommentUrl`.
+- `continuation.requiresApproval` must be `true`; the runner and broker must not
+  start unbounded or automatic continuation loops.
+- `nextPrompt` is a recommendation only. Keep it bounded, artifact-referenced,
+  and secret-free; never include tokens, private env values, raw host paths, or
+  oversized logs.
+- A safe next action is: review the artifacts and budget reason, then approve one
+  bounded follow-up task if continuation is still appropriate.
+
+A synthetic CI fixture for this shape lives at
+[`examples/runner-budget-limited-fixture.json`](examples/runner-budget-limited-fixture.json).
 
 A CI-safe Telegram receipt smoke is available for the terminal notification ACK
 contract:

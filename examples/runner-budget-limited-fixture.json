@@ -1,0 +1,79 @@
+{
+  "$schema": "a2a-runner-budget-limited-fixture-v1",
+  "description": "Synthetic, secret-free runner output showing budget_limited artifact-contract fields and an approval-gated continuation recommendation.",
+  "worker": "sogyo",
+  "emittedAt": "2026-05-04T00:00:00.000Z",
+  "handlerTask": {
+    "id": "issue-114-budget-limited",
+    "intent": "propose_patch",
+    "payload": {
+      "mode": "github-propose-patch",
+      "repo": "jinwon-int/a2a-docker-runner",
+      "issue": "114",
+      "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/114"
+    }
+  },
+  "runnerOutput": {
+    "ok": true,
+    "taskId": "issue-114-budget-limited",
+    "status": "completed",
+    "workDir": "/synthetic/workdir/not-forwarded",
+    "exitCode": 0,
+    "signal": null,
+    "stdout": "synthetic stdout omitted from broker summary",
+    "stderr": "",
+    "artifacts": [
+      "artifacts/summary.txt",
+      "artifacts/manifest.json",
+      "artifacts/patch-command.log"
+    ],
+    "artifactManifest": {
+      "schemaVersion": 1,
+      "manifestPath": "artifacts/manifest.json",
+      "generatedAt": "1970-01-01T00:00:00.000Z",
+      "artifacts": [
+        { "path": "artifacts/summary.txt", "name": "summary.txt", "sizeBytes": 128 },
+        { "path": "artifacts/manifest.json", "name": "manifest.json", "sizeBytes": 512 },
+        { "path": "artifacts/patch-command.log", "name": "patch-command.log", "sizeBytes": 1024 }
+      ],
+      "status": "budget_limited",
+      "budget": {
+        "limitKind": "time",
+        "limit": "45m task timeout budget",
+        "used": "45m",
+        "reason": "Coding agent stopped before completing validation within the bounded task budget."
+      },
+      "continuation": {
+        "recommended": true,
+        "nextPrompt": "Continue from artifacts/summary.txt and artifacts/patch-command.log; finish validation and report PR/Block evidence only after approval.",
+        "requiresApproval": true
+      }
+    },
+    "resultSummary": {
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "stdout": "budget limit reached after partial progress",
+      "stderr": "",
+      "stdoutTruncated": false,
+      "stderrTruncated": false,
+      "artifactCount": 3,
+      "manifestPath": "artifacts/manifest.json",
+      "status": "budget_limited",
+      "budget": {
+        "limitKind": "time",
+        "limit": "45m task timeout budget",
+        "used": "45m",
+        "reason": "Coding agent stopped before completing validation within the bounded task budget."
+      },
+      "continuation": {
+        "recommended": true,
+        "nextPrompt": "Continue from artifacts/summary.txt and artifacts/patch-command.log; finish validation and report PR/Block evidence only after approval.",
+        "requiresApproval": true
+      }
+    },
+    "github": {
+      "doneCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/114#issuecomment-budget-limited"
+    }
+  }
+}

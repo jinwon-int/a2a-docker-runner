@@ -844,6 +844,13 @@ interface TerminalEvidenceR2Fixture {
   safeEvidenceMustNotContain: string[];
 }
 
+interface BudgetLimitedFixture {
+  worker: string;
+  emittedAt: string;
+  handlerTask: HandlerTask;
+  runnerOutput: RawRunnerOutput;
+}
+
 function loadTerminalEvidenceFixture(): TerminalEvidenceFixture {
   const raw = readFileSync(new URL("../examples/runner-terminal-evidence-fixture.json", import.meta.url), "utf8");
   return JSON.parse(raw) as TerminalEvidenceFixture;
@@ -852,6 +859,11 @@ function loadTerminalEvidenceFixture(): TerminalEvidenceFixture {
 function loadTerminalEvidenceR2Fixture(): TerminalEvidenceR2Fixture {
   const raw = readFileSync(new URL("../examples/runner-terminal-evidence-r2-nosuk-fixture.json", import.meta.url), "utf8");
   return JSON.parse(raw) as TerminalEvidenceR2Fixture;
+}
+
+function loadBudgetLimitedFixture(): BudgetLimitedFixture {
+  const raw = readFileSync(new URL("../examples/runner-budget-limited-fixture.json", import.meta.url), "utf8");
+  return JSON.parse(raw) as BudgetLimitedFixture;
 }
 
 test("runner-to-broker fixture: converts runner output into expected terminal evidence event", () => {
@@ -895,6 +907,45 @@ test("runner-to-broker fixture: terminal alert is Telegram-safe and replay-safe"
     assert.ok(fixture.activeTargets.includes(target), `missing active target ${target}`);
   }
   assert.ok(fixture.excludeNodes.includes("yukson"), "yukson must stay excluded from the fixture runbook");
+});
+
+test("budget-limited fixture: validates continuation contract and does not map Done evidence to done", () => {
+  const fixture = loadBudgetLimitedFixture();
+  const parsed = parseRunnerOutput(JSON.stringify(fixture.runnerOutput));
+
+  assert.equal(parsed.artifactManifest?.status, "budget_limited");
+  assert.equal(parsed.resultSummary?.budget?.limitKind, "time");
+  assert.equal(parsed.resultSummary?.continuation?.requiresApproval, true);
+
+  const handlerResult = buildHandlerResult(parsed, fixture.handlerTask, fixture.worker);
+  assert.equal(handlerResult.status, "blocked");
+  assert.equal(handlerResult.doneCommentUrl, undefined);
+  assert.match(handlerResult.summary, /budget limit/i);
+  assert.match(handlerResult.nextAction ?? "", /approve one bounded continuation task/i);
+  assert.ok(handlerResult.risks.some((risk) => /bounded budget was exhausted/i.test(risk)));
+
+  const event = buildTerminalEvidenceEvent(parsed, fixture.handlerTask, fixture.worker, fixture.emittedAt);
+  assert.equal(event.status, "blocked");
+  assert.equal(event.evidenceKind, "MissingEvidence");
+  assert.equal(event.doneUrl, undefined);
+  assert.match(event.testSummary.label, /budget-limited continuation evidence/);
+  assert.match(event.reason ?? "", /approve one bounded continuation task/i);
+});
+
+test("parseRunnerOutput: rejects unsafe continuation without approval", () => {
+  const fixture = loadBudgetLimitedFixture();
+  const unsafe = structuredClone(fixture.runnerOutput);
+  assert.ok(unsafe.resultSummary);
+  unsafe.resultSummary = {
+    ...unsafe.resultSummary,
+    continuation: {
+      recommended: true,
+      nextPrompt: "continue",
+      requiresApproval: false as true,
+    },
+  };
+
+  assert.throws(() => parseRunnerOutput(JSON.stringify(unsafe)), /must require approval/);
 });
 
 test("r2 nosuk fixture: covers compact PR/Done/Block terminal evidence", () => {

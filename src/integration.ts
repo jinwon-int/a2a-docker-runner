@@ -74,6 +74,8 @@ export interface HandlerResult {
   terminalEvidence: TerminalEvidenceEvent;
   /** Raw runner stdout JSON (for debugging). */
   runnerRaw?: Record<string, unknown>;
+  /** Safe operator recommendation when the runner stopped at a budget limit. */
+  nextAction?: string;
 }
 
 export type TerminalEvidenceStatus = "succeeded" | "failed" | "cancelled" | "blocked";
@@ -303,6 +305,7 @@ export function parseRunnerOutput(raw: string): RawRunnerOutput {
   if (typeof parsed !== "object" || parsed === null || typeof parsed.ok !== "boolean") {
     throw new Error("a2a-docker-runner output missing required fields (ok, taskId, status)");
   }
+  validateBudgetContinuationContract(parsed as RawRunnerOutput);
   return parsed as RawRunnerOutput;
 }
 
@@ -316,6 +319,7 @@ export function parseRunnerOutput(raw: string): RawRunnerOutput {
 export function extractGitHubEvidence(
   result: RawRunnerOutput,
 ): GitHubEvidence | null {
+  const budgetLimited = isBudgetLimitedResult(result);
   // Runner already produced structured evidence (github property)
   if (result.github) {
     const g = result.github;
@@ -323,7 +327,7 @@ export function extractGitHubEvidence(
     const blockUrl = g.blockUrl ?? g.blockCommentUrl;
     if (blockUrl) return { ...g, outcome: "block", blockUrl, blockCommentUrl: blockUrl };
     const doneUrl = g.doneUrl ?? g.doneCommentUrl;
-    if (doneUrl) return { ...g, outcome: "done", doneUrl, doneCommentUrl: doneUrl };
+    if (doneUrl && !budgetLimited) return { ...g, outcome: "done", doneUrl, doneCommentUrl: doneUrl };
   }
 
   // Fallback: legacy PR URL from stdout parsing
@@ -348,12 +352,18 @@ export function buildHandlerResult(
   const evidence = extractGitHubEvidence(result);
 
   if (!evidence) {
+    const budgetLimited = isBudgetLimitedResult(result);
     return {
       status: "blocked",
-      summary: `Docker runner completed without PR/Done/Block evidence — task ${task?.id ?? "unknown"}`,
+      summary: budgetLimited
+        ? `Docker runner stopped at a budget limit; continuation approval needed — task ${task?.id ?? "unknown"}`
+        : `Docker runner completed without PR/Done/Block evidence — task ${task?.id ?? "unknown"}`,
       tests: [],
       filesChanged: resultFilesChanged(result),
-      risks: ["runner completed without structured GitHub evidence"],
+      risks: budgetLimited
+        ? ["runner stopped because a bounded budget was exhausted", safeContinuationRecommendation(result)]
+        : ["runner completed without structured GitHub evidence"],
+      nextAction: budgetLimited ? safeContinuationRecommendation(result) : undefined,
       terminalEvidence: buildTerminalEvidenceEvent(result, task, nodeId),
       runnerRaw: brokerFacingRunnerRaw(result),
     };
@@ -386,9 +396,10 @@ export function buildTerminalEvidenceEvent(
   emittedAt = new Date().toISOString(),
 ): TerminalEvidenceEvent {
   const evidence = extractGitHubEvidence(result);
+  const budgetLimited = isBudgetLimitedResult(result);
   const evidenceKind: TerminalEvidenceKind = evidence?.prUrl
     ? "PR"
-    : evidence?.doneCommentUrl
+    : evidence?.doneCommentUrl && !budgetLimited
       ? "Done"
       : evidence?.blockCommentUrl
         ? "Block"
@@ -537,10 +548,48 @@ function brokerFacingRunnerRaw(result: RawRunnerOutput): Record<string, unknown>
     artifacts: resultFilesChanged(result),
     manifestPath: result.resultSummary?.manifestPath ?? result.artifactManifest?.manifestPath,
     runnerBuild: result.resultSummary?.runnerBuild ?? result.runnerBuild,
+    budget: result.resultSummary?.budget ?? result.artifactManifest?.budget,
+    continuation: result.resultSummary?.continuation ?? result.artifactManifest?.continuation,
     prUrl: result.prUrl,
     github: result.github,
     error,
   });
+}
+
+function validateBudgetContinuationContract(result: RawRunnerOutput): void {
+  const manifestStatus = result.artifactManifest?.status;
+  const summaryStatus = result.resultSummary?.status;
+  const budgetLimited = manifestStatus === "budget_limited" || summaryStatus === "budget_limited";
+  const budget = result.resultSummary?.budget ?? result.artifactManifest?.budget;
+  const continuation = result.resultSummary?.continuation ?? result.artifactManifest?.continuation;
+
+  if (!budgetLimited && !budget && !continuation) return;
+  if (budgetLimited && !budget) throw new Error("budget_limited runner output missing budget evidence");
+  if (budget && !["time", "token", "attempt", "command", "safety"].includes(budget.limitKind)) {
+    throw new Error("runner budget evidence has invalid limitKind");
+  }
+  if (continuation) {
+    if (typeof continuation.recommended !== "boolean") throw new Error("runner continuation evidence missing recommended boolean");
+    if (continuation.requiresApproval !== true) throw new Error("runner continuation evidence must require approval");
+    if (continuation.nextPrompt && /(?:token|password|secret|api[_-]?key)\s*=/i.test(continuation.nextPrompt)) {
+      throw new Error("runner continuation nextPrompt appears to contain a secret assignment");
+    }
+  }
+}
+
+function isBudgetLimitedResult(result: RawRunnerOutput): boolean {
+  return result.artifactManifest?.status === "budget_limited" || result.resultSummary?.status === "budget_limited";
+}
+
+function safeContinuationRecommendation(result: RawRunnerOutput): string {
+  const continuation = result.resultSummary?.continuation ?? result.artifactManifest?.continuation;
+  const budget = result.resultSummary?.budget ?? result.artifactManifest?.budget;
+  const reason = budget?.reason ? ` (${boundReason(budget.reason)})` : "";
+  if (continuation?.recommended === true) {
+    const prompt = continuation.nextPrompt ? ` Suggested prompt: ${boundReason(continuation.nextPrompt)}` : "";
+    return `Review artifacts, then approve one bounded continuation task before resuming${reason}.${prompt}`.trim();
+  }
+  return `Review artifacts and budget evidence before deciding whether to start a new bounded task${reason}.`;
 }
 
 const BROKER_RUNNER_STREAM_LIMIT = 2_000;
@@ -575,7 +624,9 @@ function buildTestSummaryLabel(result: RawRunnerOutput, kind: TerminalEvidenceKi
   const exit = result.resultSummary?.exitCode ?? result.exitCode;
   const timedOut = result.resultSummary?.timedOut ?? result.status === "timeout";
   const artifacts = result.resultSummary?.artifactCount ?? result.artifacts?.length ?? 0;
-  const outcome = kind === "PR" ? "PR evidence" : kind === "Done" ? "Done evidence" : kind === "Block" ? "Block evidence" : "missing terminal evidence";
+  const outcome = isBudgetLimitedResult(result)
+    ? "budget-limited continuation evidence"
+    : kind === "PR" ? "PR evidence" : kind === "Done" ? "Done evidence" : kind === "Block" ? "Block evidence" : "missing terminal evidence";
   return `a2a-docker-runner ${result.status}; ${outcome}; exit=${exit ?? "null"}; timedOut=${timedOut}; artifacts=${artifacts}`;
 }
 
@@ -636,6 +687,7 @@ function buildTerminalReason(result: RawRunnerOutput, kind: TerminalEvidenceKind
   if (kind === "PR") return "PR evidence is available for operator review.";
   if (kind === "Done") return "Done evidence was posted because no PR was needed.";
   if (kind === "Block") return shortSafeReason(result, "Block evidence was posted for operator follow-up.");
+  if (isBudgetLimitedResult(result)) return safeContinuationRecommendation(result);
   if (result.status === "timeout") return "Runner timed out before producing PR/Done/Block evidence.";
   if (!result.ok) return shortSafeReason(result, "Runner failed before producing PR/Done/Block evidence.");
   return "Runner completed without PR/Done/Block evidence.";
