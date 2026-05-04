@@ -20,6 +20,7 @@ Sample: [`examples/artifact-manifest.dummy-task.json`](../examples/artifact-mani
 
 - `taskId`, `repo`, `branch`, `prUrl`, `issueUrl`.
 - `budget`: bounded, redacted budget-stop metadata (`limitKind`, optional `limit`/`used`/`reason`) when `status=budget_limited`.
+- `receiptTrace`: optional bounded notification/receipt correlation metadata for broker/plugin receipt-gap reports. It may carry safe identifiers such as `outboxId`, `notificationId`, `dedupeKey`, `channel`, `status`, `evidence`, `receiptId`, `attemptCount`, `staleAfterMs`, and bounded `reason`; it must not contain raw prompts, raw command output, message bodies, tokens, or private host paths.
 - `continuation`: optional approval-gated follow-up recommendation; `requiresApproval` must be `true`.
 
 ## Evidence parts
@@ -31,5 +32,11 @@ Each `evidence[]` entry has:
 - `status`: optional `passed`, `failed`, `blocked`, or `unknown`.
 - `path`: optional artifact path relative to the task work directory.
 - `excerpt`: optional bounded, redacted preview. Consumers should render `summary` first, then evidence labels/excerpts; they should not need to read raw logs to avoid empty-success regressions.
+
+## Receipt trace compatibility
+
+`receiptTrace` is additive and backward-compatible. Older consumers can ignore it; newer broker/plugin closeout reports can use it to correlate runner artifacts with terminal-outbox receipt states when receipts are pending, stale, failed, or confirmed. The status vocabulary intentionally distinguishes provider/send progress (`accepted`, `started`, `produced`, `provider_sent`) from operator-visible or acknowledged receipt evidence (`operator_visible`, `operator_confirmed`, `provider_delivery_receipt`, `receipt_confirmed`). Provider send success alone must not be rendered as a completed receipt.
+
+The runner only copies explicitly supplied receipt trace metadata from `task.receiptTrace` or JSON in `task.env.A2A_RUNNER_RECEIPT_TRACE` / `A2A_RECEIPT_TRACE`, and it bounds/redacts string fields before writing `manifest.json` or `resultSummary`.
 
 GitHub evidence remains fail-closed: `github-propose-patch` tasks still fail when no PR/Done/Block URL is produced. The artifact manifest is additive evidence for rendering and public demos, not a replacement for canonical GitHub closeout evidence.

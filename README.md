@@ -179,7 +179,7 @@ notification id and may render `alert` directly without re-parsing logs.
 
 ### Artifact budget/continuation contract
 
-Modern artifacts may include sanitized budget and continuation evidence in
+Modern artifacts may include sanitized budget, receipt trace, and continuation evidence in
 `artifacts/manifest.json` and the bounded `resultSummary` copy:
 
 ```json
@@ -190,6 +190,15 @@ Modern artifacts may include sanitized budget and continuation evidence in
     "limit": "45m task timeout budget",
     "used": "45m",
     "reason": "Stopped before completing validation within the bounded task budget."
+  },
+  "receiptTrace": {
+    "schemaVersion": "a2a.runner.receipt-trace.v1",
+    "outboxId": "terminal-outbox-133",
+    "dedupeKey": "task-133:succeeded",
+    "channel": "telegram",
+    "status": "stale",
+    "attemptCount": 2,
+    "reason": "terminal notification pending operator-visible receipt"
   },
   "continuation": {
     "recommended": true,
@@ -208,6 +217,14 @@ Rules:
 - `nextPrompt` is a recommendation only. Keep it bounded, artifact-referenced,
   and secret-free; never include tokens, private env values, raw host paths, or
   oversized logs.
+- `receiptTrace` is additive and bounded. It may preserve safe correlation IDs,
+  receipt status/evidence vocabulary, attempts, and a short redacted reason for
+  pending/stale/failed/confirmed receipt-gap reports; it must never include raw
+  prompts, raw command output, notifier message bodies, tokens, or private paths.
+- Provider/send states such as `accepted` or `provider_sent` are not receipt
+  confirmation. Broker/plugin closeout should only treat `operator_visible`,
+  `operator_confirmed`, `provider_delivery_receipt`, or `receipt_confirmed` as
+  confirmed receipt evidence.
 - A safe next action is: review the artifacts and budget reason, then approve one
   bounded follow-up task if continuation is still appropriate.
 

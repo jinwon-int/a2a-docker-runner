@@ -56,6 +56,26 @@
         "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
       }
     },
+    "receiptTrace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion"],
+      "properties": {
+        "schemaVersion": { "const": "a2a.runner.receipt-trace.v1" },
+        "outboxId": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "notificationId": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "dedupeKey": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "channel": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "status": { "enum": ["pending", "accepted", "started", "produced", "provider_sent", "operator_visible", "operator_confirmed", "provider_delivery_receipt", "timed_out", "stale", "failed", "receipt_confirmed"] },
+        "evidence": { "enum": ["operator_visible", "operator_confirmed", "provider_delivery_receipt"] },
+        "receiptId": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "acknowledgedAt": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "updatedAt": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "attemptCount": { "type": "integer", "minimum": 0 },
+        "staleAfterMs": { "type": "integer", "minimum": 0 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 300 }
+      }
+    },
     "continuation": {
       "type": "object",
       "additionalProperties": false,

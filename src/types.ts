@@ -153,6 +153,8 @@ export interface RunnerTask {
   runId?: string;
   /** Safe distributed trace identifier to carry into release-gate evidence when present. */
   traceId?: string;
+  /** Optional bounded notification/receipt trace metadata supplied by broker/plugin surfaces. */
+  receiptTrace?: RunnerReceiptTrace;
   /** Language hint for comment formatting (e.g. "ko"). */
   reportLanguage?: string;
   /** A2A broker node that requested the task. */
@@ -178,6 +180,20 @@ export type RunnerArtifactContractStatus = ArtifactManifestStatus;
 export type RunnerBudgetLimitKind = "time" | "token" | "attempt" | "command" | "safety";
 export type ArtifactEvidenceKind = "log" | "test" | "diff" | "file";
 export type ArtifactEvidenceStatus = "passed" | "failed" | "blocked" | "unknown";
+export type RunnerReceiptTraceStatus =
+  | "pending"
+  | "accepted"
+  | "started"
+  | "produced"
+  | "provider_sent"
+  | "operator_visible"
+  | "operator_confirmed"
+  | "provider_delivery_receipt"
+  | "timed_out"
+  | "stale"
+  | "failed"
+  | "receipt_confirmed";
+export type RunnerReceiptEvidence = "operator_visible" | "operator_confirmed" | "provider_delivery_receipt";
 
 export interface RunnerBudgetEvidence {
   limitKind: RunnerBudgetLimitKind;
@@ -186,6 +202,31 @@ export interface RunnerBudgetEvidence {
   /** Sanitized operator-facing usage, e.g. "44m" or "attempts=3". */
   used?: string;
   /** Short, secret-free reason for the limit stop. */
+  reason?: string;
+}
+
+export interface RunnerReceiptTrace {
+  /** Stable bounded receipt trace envelope for broker/plugin receipt-gap reporting. */
+  schemaVersion?: "a2a.runner.receipt-trace.v1";
+  /** Broker task.terminal outbox/event identifier, if known. */
+  outboxId?: string;
+  /** Stable notifier event id, if known. */
+  notificationId?: string;
+  /** Safe notifier dedupe key used to correlate retries without raw payloads. */
+  dedupeKey?: string;
+  /** Delivery channel label such as "telegram" or "openclaw". */
+  channel?: string;
+  /** Small receipt state vocabulary; send/provider success is not receipt confirmation. */
+  status?: RunnerReceiptTraceStatus;
+  /** Valid ACK evidence class when a receipt is actually confirmed. */
+  evidence?: RunnerReceiptEvidence;
+  /** Provider/operator receipt identifier; never a raw message body. */
+  receiptId?: string;
+  acknowledgedAt?: string;
+  updatedAt?: string;
+  attemptCount?: number;
+  staleAfterMs?: number;
+  /** Bounded, redacted reason for pending/stale/failed reports. */
   reason?: string;
 }
 
@@ -234,6 +275,8 @@ export interface ArtifactManifest {
   artifacts: ArtifactManifestEntry[];
   /** Optional sanitized evidence describing which budget stopped the task. */
   budget?: RunnerBudgetEvidence;
+  /** Optional sanitized notification/receipt correlation metadata for receipt-gap reports. */
+  receiptTrace?: RunnerReceiptTrace;
   /** Optional sanitized recommendation for a bounded, approval-gated continuation. */
   continuation?: RunnerContinuationEvidence;
 }
@@ -253,6 +296,7 @@ export interface ResultSummary {
   /** Optional artifact-contract outcome; budget_limited is handled as blocked/needs continuation. */
   status?: RunnerArtifactContractStatus;
   budget?: RunnerBudgetEvidence;
+  receiptTrace?: RunnerReceiptTrace;
   continuation?: RunnerContinuationEvidence;
 }
 
