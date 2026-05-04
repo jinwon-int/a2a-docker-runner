@@ -55,6 +55,19 @@ test("recognizes propose_patch mode as evidence mode", async () => {
   assert.equal(evidence?.prUrl, "https://github.com/jinwon-int/test-repo/pull/42");
 });
 
+test("recognizes github-verify mode as evidence mode", async () => {
+  const task: NormalizedRunnerTask = { ...baseTask, intent: "verify", mode: "github-verify" };
+  const result = {
+    ok: true, taskId: "t1", status: "completed" as const, workDir: "/tmp",
+    exitCode: 0, signal: null, stdout: "npm test passed", stderr: "", artifacts: [],
+  };
+  const evidence = await collectGitHubEvidence({ ...baseConfig, githubTokenFile: undefined }, task, result);
+  assert.ok(evidence);
+  assert.equal(evidence?.outcome, "missing_evidence");
+  assert.equal(evidence?.doneCommentUrl, undefined);
+  assert.equal(evidence?.blockCommentUrl, undefined);
+});
+
 test("extracts prUrl into release-gate evidence on success", async () => {
   const task = { ...baseTask, runId: "a2a-release-gate-1", traceId: "trace-abc123" };
   const result = {

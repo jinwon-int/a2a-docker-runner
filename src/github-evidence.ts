@@ -8,6 +8,7 @@ import type { GitHubEvidence, NormalizedRunnerTask, RunnerConfig, RunnerResult }
  * Modes:
  * - "github-propose-patch": inspect stdout for PR URLs;
  *   on failure/blockage, post a Block comment to the linked GitHub issue.
+ * - "github-verify": post Done/Block evidence for test-only verification runs.
  * - Other / absent: no-op (returns undefined evidence).
  */
 export async function collectGitHubEvidence(
@@ -197,7 +198,7 @@ function isMissingPatchCommand(result: RunnerResult): boolean {
 }
 
 function isGitHubEvidenceMode(mode?: string): boolean {
-  return mode === "github-propose-patch" || mode === "propose_patch";
+  return mode === "github-propose-patch" || mode === "propose_patch" || mode === "github-verify";
 }
 
 /**
