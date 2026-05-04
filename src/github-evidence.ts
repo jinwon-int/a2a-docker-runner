@@ -56,6 +56,13 @@ export async function collectGitHubEvidence(
   }
 
   evidence.outcome = classifyGitHubEvidenceOutcome(result, evidence);
+  const validationErrors = validateReleaseGateEvidence(evidence);
+  if (validationErrors.length > 0) {
+    evidence.validationErrors = validationErrors;
+    if (evidence.outcome === "pr" || evidence.outcome === "done" || evidence.outcome === "block") {
+      evidence.outcome = "missing_evidence";
+    }
+  }
 
   return evidence;
 }
@@ -67,6 +74,49 @@ function classifyGitHubEvidenceOutcome(result: RunnerResult, evidence: GitHubEvi
   if (result.resultSummary?.status === "budget_limited" || result.artifactManifest?.status === "budget_limited") return "budget_limited";
   if (result.resultSummary?.timedOut === true || result.status === "timeout") return "timed_out";
   return "missing_evidence";
+}
+
+function validateReleaseGateEvidence(evidence: GitHubEvidence): string[] {
+  if (evidence.outcome !== "pr" && evidence.outcome !== "done" && evidence.outcome !== "block") return [];
+
+  const errors: string[] = [];
+  const requiredText: Array<[keyof GitHubEvidence, string | undefined]> = [
+    ["taskId", evidence.taskId],
+    ["worker", evidence.worker],
+    ["repo", evidence.repo],
+    ["issue", evidence.issue],
+  ];
+  for (const [field, value] of requiredText) {
+    if (!isSafeStructuredText(value)) errors.push(`missing_or_unsafe_${String(field)}`);
+  }
+  if (!isSafeStructuredText(evidence.issueTitle) && !isSafeStructuredText(evidence.taskBrief)) {
+    errors.push("missing_or_unsafe_issue_title_or_task_brief");
+  }
+  if (!evidence.validation) errors.push("missing_validation_summary");
+  if (evidence.runId && !isSafeStructuredText(evidence.runId)) errors.push("unsafe_runId");
+  if (evidence.traceId && !isSafeStructuredText(evidence.traceId)) errors.push("unsafe_traceId");
+
+  const url = evidence.prUrl ?? evidence.doneUrl ?? evidence.doneCommentUrl ?? evidence.blockUrl ?? evidence.blockCommentUrl;
+  if (!isSafeGitHubEvidenceUrl(url)) errors.push("missing_or_unsafe_terminal_url");
+  return errors;
+}
+
+function isSafeStructuredText(value: string | undefined): boolean {
+  return Boolean(value && value.trim() && value.length <= 300 && !/[\r\n]/.test(value) && !hasUnsafeEvidenceContent(value));
+}
+
+function isSafeGitHubEvidenceUrl(value: string | undefined): boolean {
+  if (!value || hasUnsafeEvidenceContent(value)) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === "github.com" && /^\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/(?:pull|issues)\/\d+/.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function hasUnsafeEvidenceContent(value: string): boolean {
+  return /(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|Authorization:\s*(?:Bearer|token)|\/root\/|\/home\/|\/tmp\/|\/var\/folders\/|token=|password=|secret=|api[_-]?key=)/i.test(value);
 }
 
 function buildBaseEvidence(task: NormalizedRunnerTask, result: RunnerResult): GitHubEvidence {
@@ -89,6 +139,8 @@ function buildBaseEvidence(task: NormalizedRunnerTask, result: RunnerResult): Gi
       stdoutTruncated: validation?.stdoutTruncated,
       stderrTruncated: validation?.stderrTruncated,
     },
+    runId: safeOptionalText(task.runId ?? task.env?.A2A_RUN_ID ?? task.env?.RUN_ID, 120),
+    traceId: safeOptionalText(task.traceId ?? task.env?.A2A_TRACE_ID ?? task.env?.TRACE_ID, 120),
     branch: extractBranch(result),
     commit: extractCommit(result),
   };

@@ -55,8 +55,8 @@ test("recognizes propose_patch mode as evidence mode", async () => {
   assert.equal(evidence?.prUrl, "https://github.com/jinwon-int/test-repo/pull/42");
 });
 
-test("extracts prUrl into evidence on success", async () => {
-  const task = { ...baseTask };
+test("extracts prUrl into release-gate evidence on success", async () => {
+  const task = { ...baseTask, runId: "a2a-release-gate-1", traceId: "trace-abc123" };
   const result = {
     ok: true, taskId: "t1", status: "completed" as const, workDir: "/tmp",
     exitCode: 0, signal: null,
@@ -73,10 +73,43 @@ test("extracts prUrl into evidence on success", async () => {
   assert.equal(evidence?.worker, "seoseo");
   assert.equal(evidence?.issueTitle, "Evidence contract proof");
   assert.equal(evidence?.taskBrief, "Produce compact terminal notice evidence without leaking raw logs.");
+  assert.equal(evidence?.runId, "a2a-release-gate-1");
+  assert.equal(evidence?.traceId, "trace-abc123");
   assert.equal(evidence?.outcome, "pr");
   assert.equal(evidence?.prUrl, "https://github.com/jinwon-int/test-repo/pull/99");
   assert.equal(evidence?.validation?.status, "completed");
+  assert.equal(evidence?.validationErrors, undefined);
   assert.equal(evidence?.blockCommentUrl, undefined);
+});
+
+test("fails closed when terminal evidence lacks required release-gate fields", async () => {
+  const task: NormalizedRunnerTask = { ...baseTask, requestedBy: undefined };
+  const result = {
+    ok: true, taskId: "t1", status: "completed" as const, workDir: "/tmp",
+    exitCode: 0, signal: null,
+    stdout: "PR created: https://github.com/jinwon-int/test-repo/pull/99", stderr: "",
+    artifacts: [],
+    prUrl: "https://github.com/jinwon-int/test-repo/pull/99",
+  };
+
+  const evidence = await collectGitHubEvidence(baseConfig, task, result);
+  assert.equal(evidence?.outcome, "missing_evidence");
+  assert.deepEqual(evidence?.validationErrors, ["missing_or_unsafe_worker"]);
+});
+
+test("fails closed when terminal evidence URL is unsafe", async () => {
+  const task = { ...baseTask };
+  const result = {
+    ok: true, taskId: "t1", status: "completed" as const, workDir: "/tmp",
+    exitCode: 0, signal: null,
+    stdout: "PR created: http://example.test/pull/99", stderr: "",
+    artifacts: [],
+    prUrl: "http://example.test/pull/99",
+  };
+
+  const evidence = await collectGitHubEvidence(baseConfig, task, result);
+  assert.equal(evidence?.outcome, "missing_evidence");
+  assert.deepEqual(evidence?.validationErrors, ["missing_or_unsafe_terminal_url"]);
 });
 
 test("skips block comment when no issueUrl on failure", async () => {

@@ -106,6 +106,12 @@ export interface GitHubEvidence {
   /** Done comment URL for tasks that complete without a PR. */
   doneCommentUrl?: string;
   validation?: GitHubValidationSummary;
+  /** Safe broker/run identifier, included when supplied by the task payload/env. */
+  runId?: string;
+  /** Safe distributed trace identifier, included when supplied by the task payload/env. */
+  traceId?: string;
+  /** Release-gate validation errors; any entry means the evidence must fail closed. */
+  validationErrors?: string[];
   commit?: string;
   branch?: string;
 }
@@ -143,6 +149,10 @@ export interface RunnerTask {
   forbidNewPr?: boolean;
   /** When true, skip patch execution and finish with Done/Block comment-only evidence. */
   commentOnly?: boolean;
+  /** Safe broker/run identifier to carry into release-gate evidence when present. */
+  runId?: string;
+  /** Safe distributed trace identifier to carry into release-gate evidence when present. */
+  traceId?: string;
   /** Language hint for comment formatting (e.g. "ko"). */
   reportLanguage?: string;
   /** A2A broker node that requested the task. */
