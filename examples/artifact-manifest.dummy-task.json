@@ -28,5 +28,17 @@
   "artifacts": [
     { "path": "artifacts/check.log", "name": "check.log", "sizeBytes": 16 },
     { "path": "artifacts/changes.diff", "name": "changes.diff", "sizeBytes": 128 }
-  ]
+  ],
+  "receiptTrace": {
+    "schemaVersion": "a2a.runner.receipt-trace.v1",
+    "outboxId": "terminal-outbox-demo-001",
+    "notificationId": "notify-demo-001",
+    "dedupeKey": "dummy-public-demo-001:succeeded",
+    "channel": "telegram",
+    "status": "operator_visible",
+    "evidence": "operator_visible",
+    "receiptId": "telegram-message-demo-001",
+    "attemptCount": 1,
+    "reason": "synthetic receipt trace only; no raw message body"
+  }
 }

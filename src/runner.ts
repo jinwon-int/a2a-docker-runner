@@ -3,7 +3,7 @@ import { basename, join, relative, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { normalizeTask } from "./task-normalizer.js";
 import { collectGitHubEvidence } from "./github-evidence.js";
-import type { ArtifactEvidencePart, ArtifactManifest, ArtifactManifestEntry, ArtifactManifestStatus, NormalizedRunnerTask, ResultSummary, RunnerBudgetEvidence, RunnerConfig, RunnerContinuationEvidence, RunnerResult, RunnerTask } from "./types.js";
+import type { ArtifactEvidencePart, ArtifactManifest, ArtifactManifestEntry, ArtifactManifestStatus, NormalizedRunnerTask, ResultSummary, RunnerBudgetEvidence, RunnerConfig, RunnerContinuationEvidence, RunnerReceiptTrace, RunnerResult, RunnerTask } from "./types.js";
 
 export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<RunnerResult> {
   validateTask(task);
@@ -45,12 +45,14 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
   const stderr = redactAndBound(completed.stderr);
   const prUrl = extractPrUrl(completed.stdout);
   const budgetStop = inferBudgetStopEvidence(stdout, stderr);
+  const receiptTrace = sanitizeReceiptTrace(normalizedTask.receiptTrace ?? parseReceiptTraceEnv(normalizedTask.env));
   const manifest = await buildArtifactManifest(workDir, artifacts, {
     task: normalizedTask,
     status: budgetStop ? "budget_limited" : completed.timedOut ? "failed" : completed.code === 0 ? "done" : "failed",
     stdout,
     stderr,
     prUrl,
+    receiptTrace,
     ...(budgetStop ? budgetStop : {}),
   });
   await writeArtifactManifest(workDir, manifest);
@@ -446,6 +448,7 @@ export function buildResultSummary(
     manifestPath: manifest.manifestPath,
     status: manifest.status,
     ...(manifest.budget ? { budget: manifest.budget } : {}),
+    ...(manifest.receiptTrace ? { receiptTrace: manifest.receiptTrace } : {}),
     ...(manifest.continuation ? { continuation: manifest.continuation } : {}),
     ...(runnerBuild ? { runnerBuild } : {}),
   };
@@ -458,6 +461,7 @@ export interface ArtifactManifestContext {
   stderr?: string;
   prUrl?: string;
   budget?: RunnerBudgetEvidence;
+  receiptTrace?: RunnerReceiptTrace;
   continuation?: RunnerContinuationEvidence;
 }
 
@@ -491,6 +495,7 @@ export async function buildArtifactManifest(workDir: string, artifacts: string[]
     evidence,
     artifacts: entries,
     ...(context.budget ? { budget: context.budget } : {}),
+    ...(context.receiptTrace ? { receiptTrace: context.receiptTrace } : {}),
     ...(context.continuation ? { continuation: context.continuation } : {}),
   };
 }
@@ -518,6 +523,65 @@ function inferBudgetStopEvidence(stdout: string, stderr: string): Pick<ArtifactM
       ...(nextPrompt ? { nextPrompt } : {}),
     },
   };
+}
+
+function parseReceiptTraceEnv(env: Record<string, string> | undefined): unknown {
+  const raw = env?.A2A_RUNNER_RECEIPT_TRACE ?? env?.A2A_RECEIPT_TRACE;
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return { status: "failed", reason: "invalid receipt trace metadata" };
+  }
+}
+
+export function sanitizeReceiptTrace(input: unknown): RunnerReceiptTrace | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const value = input as Record<string, unknown>;
+  const trace: RunnerReceiptTrace = { schemaVersion: "a2a.runner.receipt-trace.v1" };
+  copyReceiptText(trace, value, "outboxId", 160);
+  copyReceiptText(trace, value, "notificationId", 160);
+  copyReceiptText(trace, value, "dedupeKey", 240);
+  copyReceiptText(trace, value, "channel", 60);
+  copyReceiptText(trace, value, "receiptId", 160);
+  copyReceiptText(trace, value, "acknowledgedAt", 80);
+  copyReceiptText(trace, value, "updatedAt", 80);
+  copyReceiptText(trace, value, "reason", 300);
+
+  const status = typeof value.status === "string" ? value.status : undefined;
+  if (isReceiptTraceStatus(status)) trace.status = status;
+  const evidence = typeof value.evidence === "string" ? value.evidence : undefined;
+  if (isReceiptEvidence(evidence)) trace.evidence = evidence;
+  if (typeof value.attemptCount === "number" && Number.isInteger(value.attemptCount) && value.attemptCount >= 0) trace.attemptCount = value.attemptCount;
+  if (typeof value.staleAfterMs === "number" && Number.isFinite(value.staleAfterMs) && value.staleAfterMs >= 0) trace.staleAfterMs = Math.floor(value.staleAfterMs);
+
+  return Object.keys(trace).length > 1 ? trace : undefined;
+}
+
+function copyReceiptText(target: RunnerReceiptTrace, source: Record<string, unknown>, key: keyof RunnerReceiptTrace, limit: number): void {
+  const value = source[key];
+  if (typeof value !== "string") return;
+  const safe = safeBudgetText(value, limit);
+  if (safe) Object.assign(target, { [key]: safe });
+}
+
+function isReceiptTraceStatus(value: string | undefined): value is NonNullable<RunnerReceiptTrace["status"]> {
+  return value === "pending"
+    || value === "accepted"
+    || value === "started"
+    || value === "produced"
+    || value === "provider_sent"
+    || value === "operator_visible"
+    || value === "operator_confirmed"
+    || value === "provider_delivery_receipt"
+    || value === "timed_out"
+    || value === "stale"
+    || value === "failed"
+    || value === "receipt_confirmed";
+}
+
+function isReceiptEvidence(value: string | undefined): value is NonNullable<RunnerReceiptTrace["evidence"]> {
+  return value === "operator_visible" || value === "operator_confirmed" || value === "provider_delivery_receipt";
 }
 
 function extractBudgetField(text: string, field: "limitKind" | "limit" | "used" | "reason" | "nextPrompt"): string | undefined {

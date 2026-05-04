@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { buildArtifactManifest, buildResultSummary, redactAndBound, RESULT_STREAM_LIMIT } from "./runner.js";
+import { buildArtifactManifest, buildResultSummary, redactAndBound, RESULT_STREAM_LIMIT, sanitizeReceiptTrace } from "./runner.js";
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -127,6 +127,47 @@ test("buildArtifactManifest and resultSummary preserve budget-limited continuati
 });
 
 
+test("buildArtifactManifest and resultSummary preserve bounded receipt trace metadata", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "a2a-receipt-trace-"));
+  try {
+    await mkdir(join(dir, "artifacts"), { recursive: true });
+    const artifact = join(dir, "artifacts", "summary.txt");
+    await writeFile(artifact, "runner complete; raw notification body intentionally absent");
+    const receiptTrace = sanitizeReceiptTrace({
+      outboxId: "terminal-outbox-133",
+      notificationId: "notify-133",
+      dedupeKey: "task-133:succeeded",
+      channel: "telegram",
+      status: "stale",
+      receiptId: "receipt-133",
+      attemptCount: 2,
+      staleAfterMs: 300000,
+      reason: `pending receipt token=${"A".repeat(40)}`,
+      rawOutput: "must not be copied",
+    });
+    assert.ok(receiptTrace);
+
+    const manifest = await buildArtifactManifest(dir, [artifact], { receiptTrace });
+    const summary = buildResultSummary(
+      { code: 0, signal: null, stdout: "ok", stderr: "", timedOut: false },
+      "ok",
+      "",
+      [artifact],
+      manifest,
+    );
+
+    assert.equal(manifest.receiptTrace?.schemaVersion, "a2a.runner.receipt-trace.v1");
+    assert.equal(manifest.receiptTrace?.status, "stale");
+    assert.equal(manifest.receiptTrace?.attemptCount, 2);
+    assert.equal(summary.receiptTrace?.outboxId, "terminal-outbox-133");
+    assert.ok(!JSON.stringify(summary.receiptTrace).includes("rawOutput"));
+    assert.ok(!JSON.stringify(summary.receiptTrace).includes("A".repeat(40)));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+
 test("artifact manifest schema and dummy sample stay aligned", async () => {
   const schema = JSON.parse(await readFile(join(repoRoot, "docs", "artifact-manifest.schema.json"), "utf8"));
   const sample = JSON.parse(await readFile(join(repoRoot, "examples", "artifact-manifest.dummy-task.json"), "utf8"));
@@ -144,4 +185,6 @@ test("artifact manifest schema and dummy sample stay aligned", async () => {
     assert.match(part.kind, /^(log|test|diff|file)$/);
     assert.ok(part.label.length > 0);
   }
+  assert.equal(sample.receiptTrace.schemaVersion, "a2a.runner.receipt-trace.v1");
+  assert.match(sample.receiptTrace.status, /^(pending|accepted|started|produced|provider_sent|operator_visible|operator_confirmed|provider_delivery_receipt|timed_out|stale|failed|receipt_confirmed)$/);
 });
