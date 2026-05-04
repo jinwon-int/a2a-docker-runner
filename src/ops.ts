@@ -254,8 +254,8 @@ export async function checkDeployedRevision(cwd = process.cwd(), upstreamRef = "
     };
   }
 
-  const localSha = git(cwd, ["rev-parse", "--short=12", "HEAD"]).stdout.trim() || undefined;
-  const fullLocalSha = git(cwd, ["rev-parse", "HEAD"]).stdout.trim() || undefined;
+  const fullLocalSha = normalizeSha(git(cwd, ["rev-parse", "HEAD"]).stdout.trim());
+  const localSha = fullLocalSha?.slice(0, 12);
   const branch = git(cwd, ["branch", "--show-current"]).stdout.trim() || "detached";
   const dirty = git(cwd, ["status", "--porcelain"]).stdout.trim().length > 0;
   const upstreamSha = await resolveUpstreamMainSha(cwd, upstreamRef);
@@ -278,7 +278,9 @@ export async function checkDeployedRevision(cwd = process.cwd(), upstreamRef = "
     detail: compactRevisionDetail({
       version,
       localSha,
+      localFullSha: fullLocalSha,
       upstreamMainSha: upstreamSha?.short,
+      upstreamMainFullSha: upstreamSha?.full,
       branch,
       dirty,
       summaryStatus,
@@ -447,7 +449,9 @@ function normalizeSha(value: string): string | undefined {
 function compactRevisionDetail(input: {
   version?: string;
   localSha?: string;
+  localFullSha?: string;
   upstreamMainSha?: string;
+  upstreamMainFullSha?: string;
   branch?: string;
   dirty?: boolean;
   summaryStatus: "PASS" | "WARN" | "FAIL";
@@ -467,7 +471,9 @@ function compactRevisionDetail(input: {
   return {
     version: input.version,
     localSha: input.localSha,
+    localFullSha: input.localFullSha,
     upstreamMainSha: input.upstreamMainSha,
+    upstreamMainFullSha: input.upstreamMainFullSha,
     branch,
     dirty,
     summary,

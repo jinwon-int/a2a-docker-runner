@@ -40,7 +40,9 @@ test("deployed revision doctor passes for clean main matching upstream", async (
 
   assert.equal(report.status, "ok");
   assert.equal(report.detail?.localSha, head.slice(0, 12));
+  assert.equal(report.detail?.localFullSha, head);
   assert.equal(report.detail?.upstreamMainSha, head.slice(0, 12));
+  assert.equal(report.detail?.upstreamMainFullSha, head);
   assert.match(String(report.detail?.summary), /^PASS /);
 });
 
@@ -57,6 +59,8 @@ test("deployed revision doctor warns for stale, dirty, non-main checkouts", asyn
 
   assert.equal(report.status, "warn");
   assert.equal(report.detail?.upstreamMainSha, head.slice(0, 12));
+  assert.equal(report.detail?.upstreamMainFullSha, head);
+  assert.match(String(report.detail?.localFullSha), /^[0-9a-f]{40}$/);
   assert.equal(report.detail?.branch, "feature/drift");
   assert.equal(report.detail?.dirty, true);
   assert.match(String(report.detail?.reason), /dirty worktree/);
