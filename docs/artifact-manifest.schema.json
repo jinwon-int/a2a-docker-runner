@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jinwon-int/a2a-docker-runner/docs/artifact-manifest.schema.json",
+  "title": "A2A Docker Runner Artifact Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifactVersion", "schemaVersion", "manifestPath", "generatedAt", "status", "summary", "evidence", "artifacts"],
+  "properties": {
+    "artifactVersion": { "const": 1 },
+    "schemaVersion": { "const": 1, "description": "Backward-compatible alias for older runner consumers." },
+    "manifestPath": { "type": "string", "const": "artifacts/manifest.json" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "taskId": { "type": "string", "minLength": 1 },
+    "repo": { "type": "string", "minLength": 1 },
+    "branch": { "type": "string", "minLength": 1 },
+    "prUrl": { "type": "string", "format": "uri" },
+    "issueUrl": { "type": "string", "format": "uri" },
+    "status": { "enum": ["done", "blocked", "failed"] },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 1000 },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "label"],
+        "properties": {
+          "kind": { "enum": ["log", "test", "diff", "file"] },
+          "label": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["passed", "failed", "blocked", "unknown"] },
+          "path": { "type": "string", "minLength": 1 },
+          "excerpt": { "type": "string", "maxLength": 1200 }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "name", "sizeBytes"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "sizeBytes": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}
