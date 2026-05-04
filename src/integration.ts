@@ -50,6 +50,8 @@ export interface HandlerTaskPayload {
   runnerPreset?: string;
   requestedBy?: string;
   worker?: string;
+  runId?: string;
+  traceId?: string;
 }
 
 /** Minimal broker-task shape needed by the integration helpers. */
@@ -238,6 +240,8 @@ export function buildRunnerTaskFromHandlerPayload(
     taskBrief: safeEvidenceText(task?.payload?.focus ?? task?.message ?? task?.payload?.prompt, 240),
     reportLanguage: "ko",
     requestedBy: safeEvidenceText(task?.payload?.requestedBy ?? task?.payload?.worker, 80),
+    runId: safeEvidenceText(task?.payload?.runId, 120),
+    traceId: safeEvidenceText(task?.payload?.traceId, 120),
     existingPrUrl: normalizeExistingPrUrl(task, repo),
     existingPrNumber: task?.payload?.existingPrNumber ?? task?.payload?.prNumber,
     forbidNewPr: Boolean(task?.payload?.forbidNewPr ?? task?.payload?.noNewPr),
