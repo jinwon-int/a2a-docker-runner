@@ -160,6 +160,7 @@ The event is intentionally small and secret-free:
 
 - `eventId` / `dedupeKey`: stable idempotency keys for broker replay and plugin retry dedupe
 - `status`: `succeeded`, `failed`, `cancelled`, or `blocked`
+- `evidenceKind`: canonical receipt vocabulary: `PR`, `Done`, `Block`, `BudgetLimited`, `TimedOut`, or `MissingEvidence`
 - `repo` and `issue`: repository plus canonical issue URL/reference
 - `prUrl`, `doneUrl`, or `blockUrl`: the chosen completion evidence URL
 - `alert.title`, `alert.body`, `alert.url`: compact preformatted notification text for adapters such as OpenClaw plugin-notifier

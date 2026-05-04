@@ -123,6 +123,72 @@ test("zero-command patch task is not treated as Done evidence", async () => {
   assert.equal(evidence?.blockCommentUrl, undefined);
 });
 
+test("classifies no-url timeout evidence with canonical timed_out outcome", async () => {
+  const result = {
+    ok: false,
+    taskId: "t-timeout",
+    status: "timeout" as const,
+    workDir: "/tmp",
+    exitCode: null,
+    signal: null,
+    stdout: "",
+    stderr: "",
+    artifacts: [],
+    resultSummary: {
+      exitCode: null,
+      signal: null,
+      timedOut: true,
+      stdout: "",
+      stderr: "",
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      artifactCount: 0,
+      manifestPath: "artifacts/manifest.json",
+    },
+  };
+
+  const evidence = await collectGitHubEvidence({ ...baseConfig, githubTokenFile: undefined }, baseTask, result);
+  assert.equal(evidence?.outcome, "timed_out");
+  assert.equal(evidence?.validation?.timedOut, true);
+  assert.equal(evidence?.prUrl, undefined);
+  assert.equal(evidence?.doneCommentUrl, undefined);
+  assert.equal(evidence?.blockCommentUrl, undefined);
+});
+
+test("classifies no-url budget stop with canonical budget_limited outcome", async () => {
+  const result = {
+    ok: true,
+    taskId: "t-budget",
+    status: "completed" as const,
+    workDir: "/tmp",
+    exitCode: 0,
+    signal: null,
+    stdout: "",
+    stderr: "",
+    artifacts: [],
+    resultSummary: {
+      exitCode: 0,
+      signal: null,
+      timedOut: false,
+      stdout: "",
+      stderr: "",
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      artifactCount: 0,
+      manifestPath: "artifacts/manifest.json",
+      status: "budget_limited" as const,
+      budget: { limitKind: "time" as const, limit: "45m", used: "45m", reason: "time budget exhausted" },
+      continuation: { recommended: true, requiresApproval: true as const, nextPrompt: "continue with focused validation" },
+    },
+  };
+
+  const evidence = await collectGitHubEvidence({ ...baseConfig, githubTokenFile: undefined }, baseTask, result);
+  assert.equal(evidence?.outcome, "budget_limited");
+  assert.equal(evidence?.prUrl, undefined);
+  assert.equal(evidence?.doneCommentUrl, undefined);
+  assert.equal(evidence?.blockCommentUrl, undefined);
+});
+
 test("zero-command Block comment explains missing executable work", () => {
   const body = buildBlockCommentBody({ ...baseTask, commands: [], reportLanguage: "en" }, {
     ok: true,

@@ -55,15 +55,18 @@ export async function collectGitHubEvidence(
     }
   }
 
-  evidence.outcome = evidence.prUrl
-    ? "pr"
-    : evidence.blockUrl || evidence.blockCommentUrl
-      ? "block"
-      : evidence.doneUrl || evidence.doneCommentUrl
-        ? "done"
-        : "missing_evidence";
+  evidence.outcome = classifyGitHubEvidenceOutcome(result, evidence);
 
   return evidence;
+}
+
+function classifyGitHubEvidenceOutcome(result: RunnerResult, evidence: GitHubEvidence): GitHubEvidence["outcome"] {
+  if (evidence.prUrl) return "pr";
+  if (evidence.blockUrl || evidence.blockCommentUrl) return "block";
+  if (evidence.doneUrl || evidence.doneCommentUrl) return "done";
+  if (result.resultSummary?.status === "budget_limited" || result.artifactManifest?.status === "budget_limited") return "budget_limited";
+  if (result.resultSummary?.timedOut === true || result.status === "timeout") return "timed_out";
+  return "missing_evidence";
 }
 
 function buildBaseEvidence(task: NormalizedRunnerTask, result: RunnerResult): GitHubEvidence {
