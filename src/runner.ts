@@ -1,9 +1,9 @@
-import { mkdir, writeFile, readdir, stat } from "node:fs/promises";
+import { mkdir, writeFile, readdir, readFile, stat } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { normalizeTask } from "./task-normalizer.js";
 import { collectGitHubEvidence } from "./github-evidence.js";
-import type { ArtifactManifest, ArtifactManifestEntry, NormalizedRunnerTask, ResultSummary, RunnerConfig, RunnerResult, RunnerTask } from "./types.js";
+import type { ArtifactEvidencePart, ArtifactManifest, ArtifactManifestEntry, ArtifactManifestStatus, NormalizedRunnerTask, ResultSummary, RunnerConfig, RunnerResult, RunnerTask } from "./types.js";
 
 export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<RunnerResult> {
   validateTask(task);
@@ -41,10 +41,17 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
   const engine = config.engine ?? "docker";
   const completed = await spawnWithTimeout(engine, args, timeoutMs);
   const artifacts = await listArtifacts(workDir);
-  const manifest = await buildArtifactManifest(workDir, artifacts);
-  await writeArtifactManifest(workDir, manifest);
   const stdout = redactAndBound(completed.stdout);
   const stderr = redactAndBound(completed.stderr);
+  const prUrl = extractPrUrl(completed.stdout);
+  const manifest = await buildArtifactManifest(workDir, artifacts, {
+    task: normalizedTask,
+    status: completed.timedOut ? "failed" : completed.code === 0 ? "done" : "failed",
+    stdout,
+    stderr,
+    prUrl,
+  });
+  await writeArtifactManifest(workDir, manifest);
   const resultSummary = buildResultSummary(completed, stdout, stderr, artifacts, manifest, config.buildMetadata);
 
   const result: RunnerResult = {
@@ -60,7 +67,7 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
     artifactManifest: manifest,
     resultSummary,
     runnerBuild: config.buildMetadata,
-    prUrl: extractPrUrl(completed.stdout),
+    prUrl,
     error: completed.code === 0 && !completed.timedOut ? undefined : buildActionableError(engine, config.image, completed),
   };
 
@@ -439,7 +446,15 @@ export function buildResultSummary(
   };
 }
 
-export async function buildArtifactManifest(workDir: string, artifacts: string[]): Promise<ArtifactManifest> {
+export interface ArtifactManifestContext {
+  task?: NormalizedRunnerTask;
+  status?: ArtifactManifestStatus;
+  stdout?: string;
+  stderr?: string;
+  prUrl?: string;
+}
+
+export async function buildArtifactManifest(workDir: string, artifacts: string[], context: ArtifactManifestContext = {}): Promise<ArtifactManifest> {
   const entries: ArtifactManifestEntry[] = [];
   for (const artifact of artifacts) {
     const info = await stat(artifact);
@@ -450,12 +465,74 @@ export async function buildArtifactManifest(workDir: string, artifacts: string[]
     });
   }
   entries.sort((a, b) => a.path.localeCompare(b.path));
+  const evidence = await buildArtifactEvidenceParts(workDir, entries, context.status);
+  const task = context.task;
+  const primaryRepo = task?.repos.find((repo) => repo.primary) ?? task?.repos[0];
+  const summary = buildArtifactManifestSummary(context, evidence.length);
   return {
+    artifactVersion: 1,
     schemaVersion: 1,
     manifestPath: "artifacts/manifest.json",
     generatedAt: "1970-01-01T00:00:00.000Z",
+    ...(task?.id ? { taskId: task.id } : {}),
+    ...(primaryRepo?.url ? { repo: primaryRepo.url } : task?.repo ? { repo: task.repo } : {}),
+    ...(primaryRepo?.branch ?? task?.baseBranch ? { branch: primaryRepo?.branch ?? task?.baseBranch } : {}),
+    ...(context.prUrl ? { prUrl: context.prUrl } : task?.existingPrUrl ? { prUrl: task.existingPrUrl } : {}),
+    ...(task?.issueUrl ? { issueUrl: task.issueUrl } : {}),
+    status: context.status ?? "done",
+    summary,
+    evidence,
     artifacts: entries,
   };
+}
+
+async function buildArtifactEvidenceParts(
+  workDir: string,
+  entries: ArtifactManifestEntry[],
+  runStatus: ArtifactManifestStatus = "done",
+): Promise<ArtifactEvidencePart[]> {
+  const parts: ArtifactEvidencePart[] = [];
+  for (const entry of entries) {
+    const lower = entry.path.toLowerCase();
+    const kind = lower.endsWith(".diff") || lower.endsWith(".patch")
+      ? "diff"
+      : lower.includes("test") || lower.includes("check")
+        ? "test"
+        : lower.endsWith(".log") || lower.endsWith(".txt") || lower.endsWith(".md")
+          ? "log"
+          : "file";
+    parts.push({
+      kind,
+      label: entry.name,
+      status: kind === "test" ? (runStatus === "done" ? "passed" : "failed") : runStatus === "blocked" ? "blocked" : "unknown",
+      path: entry.path,
+      ...(await readArtifactExcerpt(workDir, entry.path)),
+    });
+  }
+  return parts;
+}
+
+async function readArtifactExcerpt(workDir: string, relativePath: string): Promise<Pick<ArtifactEvidencePart, "excerpt">> {
+  try {
+    const content = await readFile(join(workDir, relativePath), "utf8");
+    const excerpt = redactAndBound(content.trim(), 600);
+    return excerpt ? { excerpt } : {};
+  } catch {
+    return {};
+  }
+}
+
+function buildArtifactManifestSummary(context: ArtifactManifestContext, evidenceCount: number): string {
+  if (context.prUrl) return `Runner produced PR evidence: ${context.prUrl}`;
+  const status = context.status ?? "done";
+  const stream = [context.stdout, context.stderr]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join("\n")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
+  if (stream) return stream.slice(0, 240);
+  return `Runner ${status} with ${evidenceCount} evidence part${evidenceCount === 1 ? "" : "s"}.`;
 }
 
 async function writeArtifactManifest(workDir: string, manifest: ArtifactManifest): Promise<void> {

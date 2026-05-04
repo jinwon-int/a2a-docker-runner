@@ -155,12 +155,42 @@ export interface ArtifactManifestEntry {
   sizeBytes: number;
 }
 
+export type ArtifactManifestStatus = "done" | "blocked" | "failed";
+export type ArtifactEvidenceKind = "log" | "test" | "diff" | "file";
+export type ArtifactEvidenceStatus = "passed" | "failed" | "blocked" | "unknown";
+
+export interface ArtifactEvidencePart {
+  /** Protocol-friendly Part kind for rendering summaries without reading raw logs. */
+  kind: ArtifactEvidenceKind;
+  /** Short operator label such as "summary.txt" or "npm test". */
+  label: string;
+  status?: ArtifactEvidenceStatus;
+  /** Artifact path relative to the task workDir when the evidence comes from a file. */
+  path?: string;
+  /** Bounded, redacted preview suitable for public demos and broker/plugin cards. */
+  excerpt?: string;
+}
+
 export interface ArtifactManifest {
+  /** Stable public artifact manifest contract version. */
+  artifactVersion: 1;
+  /** Backward-compatible alias retained for older runner consumers. */
   schemaVersion: 1;
   /** Path to the emitted manifest.json relative to the task workDir. */
   manifestPath: string;
   /** Fixed timestamp keeps manifest content deterministic for identical artifacts. */
   generatedAt: string;
+  taskId?: string;
+  repo?: string;
+  branch?: string;
+  prUrl?: string;
+  issueUrl?: string;
+  status: ArtifactManifestStatus;
+  /** Non-empty, bounded summary for broker/plugin/demo surfaces. */
+  summary: string;
+  /** A2A Artifact.parts projection of runner evidence. */
+  evidence: ArtifactEvidencePart[];
+  /** File inventory backing the evidence parts. */
   artifacts: ArtifactManifestEntry[];
 }
 

@@ -763,9 +763,13 @@ test("buildHandlerResult: prefers artifactManifest paths for modern runner resul
     ok: true, taskId: "t-modern", status: "completed", workDir: "/tmp/work",
     stdout: "", stderr: "", artifacts: ["/tmp/work/artifacts/summary.txt"],
     artifactManifest: {
+      artifactVersion: 1,
       schemaVersion: 1,
       manifestPath: "artifacts/manifest.json",
       generatedAt: "1970-01-01T00:00:00.000Z",
+      status: "done",
+      summary: "Runner done with evidence.",
+      evidence: [],
       artifacts: [{ path: "artifacts/summary.txt", name: "summary.txt", sizeBytes: 10 }],
     },
     resultSummary: {
@@ -1209,9 +1213,13 @@ test("buildHandlerResult: broker runnerRaw trims non-broker fields while preserv
     stdout: "raw stdout ".repeat(5000), stderr: "raw stderr ".repeat(5000),
     artifacts: ["/tmp/runner/private-workdir/artifacts/summary.txt"],
     artifactManifest: {
+      artifactVersion: 1,
       schemaVersion: 1,
       manifestPath: "artifacts/manifest.json",
       generatedAt: "1970-01-01T00:00:00.000Z",
+      status: "done",
+      summary: "Runner done with evidence.",
+      evidence: [],
       artifacts: [
         { path: "artifacts/summary.txt", name: "summary.txt", sizeBytes: 10 },
         { path: "artifacts/patch.diff", name: "patch.diff", sizeBytes: 1000 },

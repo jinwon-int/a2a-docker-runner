@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { buildArtifactManifest, buildResultSummary, redactAndBound, RESULT_STREAM_LIMIT } from "./runner.js";
+
+const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
 test("buildArtifactManifest returns deterministic schema sorted by relative path", async () => {
   const dir = await mkdtemp(join(tmpdir(), "a2a-manifest-"));
@@ -17,11 +20,17 @@ test("buildArtifactManifest returns deterministic schema sorted by relative path
 
     const manifest = await buildArtifactManifest(dir, [b, a]);
 
+    assert.equal(manifest.artifactVersion, 1);
     assert.equal(manifest.schemaVersion, 1);
     assert.equal(manifest.generatedAt, "1970-01-01T00:00:00.000Z");
     assert.equal(manifest.manifestPath, "artifacts/manifest.json");
+    assert.equal(manifest.status, "done");
+    assert.ok(manifest.summary.length > 0);
     assert.deepEqual(manifest.artifacts.map((entry) => entry.path), ["artifacts/a.txt", "artifacts/b.log"]);
     assert.deepEqual(manifest.artifacts.map((entry) => entry.sizeBytes), [2, 4]);
+    assert.deepEqual(manifest.evidence.map((entry) => entry.label), ["a.txt", "b.log"]);
+    assert.equal(manifest.evidence[0].kind, "log");
+    assert.equal(manifest.evidence[0].excerpt, "aa");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -31,7 +40,10 @@ test("buildArtifactManifest supports executions with no task artifacts", async (
   const dir = await mkdtemp(join(tmpdir(), "a2a-no-artifacts-"));
   try {
     const manifest = await buildArtifactManifest(dir, []);
+    assert.equal(manifest.artifactVersion, 1);
     assert.equal(manifest.schemaVersion, 1);
+    assert.equal(manifest.summary, "Runner done with 0 evidence parts.");
+    assert.deepEqual(manifest.evidence, []);
     assert.deepEqual(manifest.artifacts, []);
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -77,5 +89,25 @@ test("buildResultSummary is bounded payload-compatible while RunnerResult fields
     assert.equal(summary.stderr, "secret=<redacted>");
   } finally {
     await rm(dir, { recursive: true, force: true });
+  }
+});
+
+
+test("artifact manifest schema and dummy sample stay aligned", async () => {
+  const schema = JSON.parse(await readFile(join(repoRoot, "docs", "artifact-manifest.schema.json"), "utf8"));
+  const sample = JSON.parse(await readFile(join(repoRoot, "examples", "artifact-manifest.dummy-task.json"), "utf8"));
+
+  for (const field of schema.required) {
+    assert.ok(Object.hasOwn(sample, field), `sample includes required field ${field}`);
+  }
+  assert.equal(sample.artifactVersion, 1);
+  assert.equal(sample.schemaVersion, 1);
+  assert.equal(sample.manifestPath, "artifacts/manifest.json");
+  assert.match(sample.status, /^(done|blocked|failed)$/);
+  assert.ok(sample.summary.length > 0);
+  assert.ok(sample.evidence.length > 0);
+  for (const part of sample.evidence) {
+    assert.match(part.kind, /^(log|test|diff|file)$/);
+    assert.ok(part.label.length > 0);
   }
 });

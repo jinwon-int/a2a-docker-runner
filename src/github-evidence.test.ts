@@ -177,9 +177,13 @@ test("block comment includes artifact manifest, command logs, reason and next ac
     stderr: "Authorization: Bearer ghp_abcdefghijklmnopqrstuvwxyz1234567890",
     artifacts: ["/tmp/a2a/private/run.log"],
     artifactManifest: {
+      artifactVersion: 1,
       schemaVersion: 1,
       manifestPath: "artifacts/manifest.json",
       generatedAt: "1970-01-01T00:00:00.000Z",
+      status: "done",
+      summary: "Runner done with evidence.",
+      evidence: [],
       artifacts: [{ path: "artifacts/run.log", name: "run.log", sizeBytes: 42 }],
     },
     resultSummary: {
@@ -245,9 +249,13 @@ test("done comment includes manifest summary and bounded command log summary", (
     stderr: "",
     artifacts: ["artifacts/result.json"],
     artifactManifest: {
+      artifactVersion: 1,
       schemaVersion: 1,
       manifestPath: "artifacts/manifest.json",
       generatedAt: "1970-01-01T00:00:00.000Z",
+      status: "done",
+      summary: "Runner done with evidence.",
+      evidence: [],
       artifacts: [{ path: "artifacts/result.json", name: "result.json", sizeBytes: 12 }],
     },
     resultSummary: {
