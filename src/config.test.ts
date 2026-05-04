@@ -72,6 +72,9 @@ test("loadConfig builds first-class OpenClaw patch profile", async () => {
   assert.match(config.commandScript ?? "", /delete entry\.agentRuntime\.fallback/);
   assert.match(config.commandScript ?? "", /openai-codex/);
   assert.match(config.commandScript ?? "", /openclaw_config_bytes=/);
+  assert.match(config.commandScript ?? "", /A2A_GUARD_OPENCLAW_SESSION_STORE/);
+  assert.match(config.commandScript ?? "", /openclaw_session_store_guard/);
+  assert.match(config.commandScript ?? "", /empty sessions registry/);
   assert.doesNotMatch(config.commandScript ?? "", /tar -C \/run\/secrets\/openclaw-dir/);
   assert.doesNotMatch(config.commandScript ?? "", /cp -a \/run\/secrets\/openclaw-dir \/root\/\.openclaw/);
   assert.equal(config.commandJson, undefined);
@@ -185,6 +188,28 @@ test("loadConfig rejects malformed extra runner mounts", async () => {
       A2A_DOCKER_RUNNER_EXTRA_MOUNTS_JSON: JSON.stringify([{ source: "relative", target: "/x" }]),
     }),
     /source must be an absolute path/,
+  );
+});
+
+test("loadConfig rejects writable OpenClaw runtime/session mounts", async () => {
+  await assert.rejects(
+    () => loadConfig({
+      ...baseEnv,
+      A2A_DOCKER_RUNNER_EXTRA_MOUNTS_JSON: JSON.stringify([
+        { source: "/root/.openclaw/workspace/sessions", target: "/host-sessions", readOnly: false },
+      ]),
+    }),
+    /writable OpenClaw runtime\/session paths are forbidden/,
+  );
+
+  await assert.rejects(
+    () => loadConfig({
+      ...baseEnv,
+      A2A_DOCKER_RUNNER_EXTRA_MOUNTS_JSON: JSON.stringify([
+        { source: "/var/tmp/a2a", target: "/run/secrets/openclaw-dir/agents/main/agent", readOnly: false },
+      ]),
+    }),
+    /writable OpenClaw runtime\/session paths are forbidden/,
   );
 });
 
