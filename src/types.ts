@@ -90,6 +90,10 @@ export interface GitHubEvidence {
   repo?: string;
   issue?: string;
   taskId?: string;
+  /** Worker/requesting node that produced or requested this evidence. */
+  worker?: string;
+  issueTitle?: string;
+  taskBrief?: string;
   outcome?: GitHubEvidenceOutcome;
   /** PR URL when a patch was successfully proposed (e.g. git push + gh pr create). */
   prUrl?: string;
@@ -127,6 +131,10 @@ export interface RunnerTask {
   issueNumber?: string | number;
   /** GitHub issue URL for evidence-mode Block/Done comment posting. */
   issueUrl?: string;
+  /** Safe issue title supplied by the broker for terminal/operator evidence. */
+  issueTitle?: string;
+  /** Safe one-line task brief supplied by the broker for terminal/operator evidence. */
+  taskBrief?: string;
   /** Existing PR URL for closeout/comment-only evidence tasks. */
   existingPrUrl?: string;
   /** Existing PR number; used with repo to derive existingPrUrl when provided by broker payloads. */

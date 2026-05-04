@@ -19,6 +19,8 @@ const baseTask: NormalizedRunnerTask = {
   issueUrl: "https://github.com/jinwon-int/test-repo/issues/1",
   reportLanguage: "ko",
   requestedBy: "seoseo",
+  issueTitle: "Evidence contract proof",
+  taskBrief: "Produce compact terminal notice evidence without leaking raw logs.",
 };
 
 test("returns undefined when mode is not github-evidence mode", async () => {
@@ -68,6 +70,9 @@ test("extracts prUrl into evidence on success", async () => {
   assert.equal(evidence?.repo, "jinwon-int/test-repo");
   assert.equal(evidence?.issue, "jinwon-int/test-repo#1");
   assert.equal(evidence?.taskId, "test-task");
+  assert.equal(evidence?.worker, "seoseo");
+  assert.equal(evidence?.issueTitle, "Evidence contract proof");
+  assert.equal(evidence?.taskBrief, "Produce compact terminal notice evidence without leaking raw logs.");
   assert.equal(evidence?.outcome, "pr");
   assert.equal(evidence?.prUrl, "https://github.com/jinwon-int/test-repo/pull/99");
   assert.equal(evidence?.validation?.status, "completed");

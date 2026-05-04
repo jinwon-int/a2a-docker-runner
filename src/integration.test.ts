@@ -276,7 +276,16 @@ test("buildRunnerTaskFromHandlerPayload: env extra args JSON passthrough (A2A_DO
 test("buildRunnerTaskFromHandlerPayload: explicit repo path with all fields", () => {
   const task: HandlerTask = {
     id: "task-def",
-    payload: { mode: "github-propose-patch", repo: "jinwon-int/seoyoon-family-wiki", baseBranch: "master", issue: "42", issueUrl: "https://github.com/jinwon-int/seoyoon-family-wiki/issues/42" },
+    payload: {
+      mode: "github-propose-patch",
+      repo: "jinwon-int/seoyoon-family-wiki",
+      baseBranch: "master",
+      issue: "42",
+      issueUrl: "https://github.com/jinwon-int/seoyoon-family-wiki/issues/42",
+      title: "Evidence contract proof",
+      focus: "Include safe terminal notice context.",
+      worker: "bangtong",
+    },
   };
   const result = buildRunnerTaskFromHandlerPayload(task, baseEnv);
 
@@ -284,6 +293,9 @@ test("buildRunnerTaskFromHandlerPayload: explicit repo path with all fields", ()
   assert.equal(result.repo, "jinwon-int/seoyoon-family-wiki");
   assert.equal(result.baseBranch, "master");
   assert.equal(result.issueUrl, "https://github.com/jinwon-int/seoyoon-family-wiki/issues/42");
+  assert.equal(result.issueTitle, "Evidence contract proof");
+  assert.equal(result.taskBrief, "Include safe terminal notice context.");
+  assert.equal(result.requestedBy, "bangtong");
 });
 
 test("buildRunnerTaskFromHandlerPayload: constructs issueUrl from repo + issue number", () => {
@@ -1054,6 +1066,59 @@ test("buildTerminalEvidenceEvent: emits compact safe PR evidence without raw log
   assert.ok(!serialized.includes("raw stderr"));
   assert.ok(!serialized.includes("/private/runner"));
   assert.ok(!serialized.includes("token=secret"));
+});
+
+test("buildTerminalEvidenceEvent: includes safe task context required for terminal notices", () => {
+  const result: RawRunnerOutput = {
+    ok: true, taskId: "task-120", status: "completed", workDir: "/private/runner/task-120",
+    exitCode: 0, signal: null,
+    stdout: "raw logs omitted", stderr: "", artifacts: ["artifacts/summary.txt"],
+    resultSummary: {
+      exitCode: 0, signal: null, timedOut: false,
+      stdout: "validation passed", stderr: "", stdoutTruncated: false, stderrTruncated: false,
+      artifactCount: 1, manifestPath: "artifacts/manifest.json",
+    },
+    github: {
+      schemaVersion: "a2a.runner.github-evidence.v1",
+      taskId: "task-120",
+      repo: "jinwon-int/a2a-docker-runner",
+      issue: "jinwon-int/a2a-docker-runner#120",
+      outcome: "done",
+      doneUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/120#issuecomment-done",
+      doneCommentUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/120#issuecomment-done",
+      validation: { status: "completed", exitCode: 0, timedOut: false, artifactCount: 1 },
+      issueTitle: "A2A release dry-run: runner evidence contract proof",
+      taskBrief: "Prove terminal evidence has enough structured context and fails closed.",
+    },
+  };
+
+  const event = buildTerminalEvidenceEvent(
+    result,
+    {
+      id: "task-120",
+      payload: {
+        repo: "jinwon-int/a2a-docker-runner",
+        issue: "120",
+        title: "A2A release dry-run: runner evidence contract proof",
+        focus: "Prove terminal evidence has enough structured context and fails closed.",
+      },
+    },
+    "bangtong",
+    "2026-05-04T02:25:11.000Z",
+  );
+
+  assert.equal(event.taskId, "task-120");
+  assert.equal(event.worker, "bangtong");
+  assert.equal(event.repo, "jinwon-int/a2a-docker-runner");
+  assert.equal(event.issue, "https://github.com/jinwon-int/a2a-docker-runner/issues/120");
+  assert.equal(event.issueTitle, "A2A release dry-run: runner evidence contract proof");
+  assert.equal(event.taskBrief, "Prove terminal evidence has enough structured context and fails closed.");
+  assert.equal(event.doneUrl, "https://github.com/jinwon-int/a2a-docker-runner/issues/120#issuecomment-done");
+  assert.equal(event.testSummary.exitCode, 0);
+  assert.equal(event.testSummary.artifactCount, 1);
+  assert.match(event.alert.body, /title=A2A release dry-run/);
+  assert.ok(!JSON.stringify(event).includes("raw logs omitted"));
+  assert.ok(!JSON.stringify(event).includes("/private/runner"));
 });
 
 test("buildTerminalEvidenceEvent: includes short Done reason and issue URL", () => {
