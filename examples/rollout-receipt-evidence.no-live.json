@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "a2a.runner.no-live-proof-bundle.v1",
+  "runId": "a2a-no-live-integration-20260504035026",
+  "mode": "release-dryrun/no-live",
+  "safety": {
+    "productionDeploy": false,
+    "gatewayRestart": false,
+    "liveTelegramSend": false,
+    "dbMutation": false,
+    "realTerminalOutboxAck": false
+  },
+  "workers": [
+    {
+      "worker": "bangtong",
+      "runnerBuild": {
+        "version": "0.1.0",
+        "revision": "0d7c00a22f3756a0b7ccac025e5708d08f3fb6a6"
+      },
+      "focusedTest": {
+        "name": "npm run smoke:telegram-terminal-ack",
+        "status": "passed"
+      },
+      "terminalReceiptSmoke": {
+        "operatorVisible": true,
+        "receiptId": "synthetic-bangtong-receipt",
+        "providerSendOnly": {
+          "acknowledged": false,
+          "cursorComplete": false
+        }
+      },
+      "staleBacklog": {
+        "count": 0
+      }
+    },
+    {
+      "worker": "dungae",
+      "runnerBuild": {
+        "version": "0.1.0",
+        "revision": "0d7c00a22f3756a0b7ccac025e5708d08f3fb6a6"
+      },
+      "focusedTest": {
+        "name": "npm run smoke:telegram-terminal-ack",
+        "status": "passed"
+      },
+      "terminalReceiptSmoke": {
+        "operatorVisible": true,
+        "receiptId": "synthetic-dungae-receipt",
+        "providerSendOnly": {
+          "acknowledged": false,
+          "cursorComplete": false
+        }
+      },
+      "staleBacklog": {
+        "count": 0
+      }
+    },
+    {
+      "worker": "sogyo",
+      "runnerBuild": {
+        "version": "0.1.0",
+        "revision": "0d7c00a22f3756a0b7ccac025e5708d08f3fb6a6"
+      },
+      "focusedTest": {
+        "name": "npm run smoke:telegram-terminal-ack",
+        "status": "passed"
+      },
+      "terminalReceiptSmoke": {
+        "operatorVisible": true,
+        "receiptId": "synthetic-sogyo-receipt",
+        "providerSendOnly": {
+          "acknowledged": false,
+          "cursorComplete": false
+        }
+      },
+      "staleBacklog": {
+        "count": 0
+      }
+    },
+    {
+      "worker": "nosuk",
+      "runnerBuild": {
+        "version": "0.1.0",
+        "revision": "0d7c00a22f3756a0b7ccac025e5708d08f3fb6a6"
+      },
+      "focusedTest": {
+        "name": "npm run smoke:telegram-terminal-ack",
+        "status": "passed"
+      },
+      "terminalReceiptSmoke": {
+        "operatorVisible": true,
+        "receiptId": "synthetic-nosuk-receipt",
+        "providerSendOnly": {
+          "acknowledged": false,
+          "cursorComplete": false
+        }
+      },
+      "staleBacklog": {
+        "count": 0
+      }
+    }
+  ]
+}

@@ -244,6 +244,11 @@ backlog. Missing workers, mismatched commits, stale backlog, or provider-send-on
 ACK evidence exit non-zero. Keep the input synthetic/sanitized: no tokens, private
 host paths, raw logs, or live Telegram ACKs.
 
+A compact no-live proof bundle fixture is available at
+[`examples/rollout-receipt-evidence.no-live.json`](examples/rollout-receipt-evidence.no-live.json).
+It is intentionally synthetic and exercises the guard without production deploys,
+Gateway restarts, live Telegram sends, DB mutations, or real terminal-outbox ACKs.
+
 ## Worker operations
 
 `doctor` prints JSON status for worker readiness checks:
