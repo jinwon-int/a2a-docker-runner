@@ -1043,8 +1043,10 @@ test("buildTerminalEvidenceEvent: emits compact safe PR evidence without raw log
   assert.equal(event.status, "succeeded");
   assert.equal(event.evidenceKind, "PR");
   assert.equal(event.worker, "sogyo");
+  assert.equal(event.nodeId, "sogyo");
   assert.equal(event.repo, "jinwon-int/repo");
   assert.equal(event.issue, "https://github.com/jinwon-int/repo/issues/79");
+  assert.equal(event.issueUrl, "https://github.com/jinwon-int/repo/issues/79");
   assert.equal(event.prUrl, "https://github.com/jinwon-int/repo/pull/79");
   assert.deepEqual(event.alert, {
     title: "A2A PR: jinwon-int/repo",
@@ -1109,8 +1111,10 @@ test("buildTerminalEvidenceEvent: includes safe task context required for termin
 
   assert.equal(event.taskId, "task-120");
   assert.equal(event.worker, "bangtong");
+  assert.equal(event.nodeId, "bangtong");
   assert.equal(event.repo, "jinwon-int/a2a-docker-runner");
   assert.equal(event.issue, "https://github.com/jinwon-int/a2a-docker-runner/issues/120");
+  assert.equal(event.issueUrl, "https://github.com/jinwon-int/a2a-docker-runner/issues/120");
   assert.equal(event.issueTitle, "A2A release dry-run: runner evidence contract proof");
   assert.equal(event.taskBrief, "Prove terminal evidence has enough structured context and fails closed.");
   assert.equal(event.doneUrl, "https://github.com/jinwon-int/a2a-docker-runner/issues/120#issuecomment-done");

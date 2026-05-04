@@ -67,8 +67,10 @@
         "status": "succeeded",
         "evidenceKind": "PR",
         "worker": "nosuk",
+        "nodeId": "nosuk",
         "repo": "jinwon-int/a2a-docker-runner",
         "issue": "https://github.com/jinwon-int/a2a-docker-runner/issues/98",
+        "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/98",
         "issueTitle": "R2 compact PR terminal evidence smoke",
         "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/151",
         "alert": {
@@ -136,8 +138,10 @@
         "status": "succeeded",
         "evidenceKind": "Done",
         "worker": "nosuk",
+        "nodeId": "nosuk",
         "repo": "jinwon-int/a2a-docker-runner",
         "issue": "https://github.com/jinwon-int/a2a-docker-runner/issues/98",
+        "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/98",
         "doneUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/98#issuecomment-151",
         "alert": {
           "title": "A2A Done: jinwon-int/a2a-docker-runner",
@@ -205,8 +209,10 @@
         "status": "blocked",
         "evidenceKind": "Block",
         "worker": "nosuk",
+        "nodeId": "nosuk",
         "repo": "jinwon-int/a2a-docker-runner",
         "issue": "https://github.com/jinwon-int/a2a-docker-runner/issues/98",
+        "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/98",
         "blockUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/98#issuecomment-152",
         "alert": {
           "title": "A2A Block: jinwon-int/a2a-docker-runner",
@@ -269,8 +275,10 @@
         "status": "blocked",
         "evidenceKind": "MissingEvidence",
         "worker": "nosuk",
+        "nodeId": "nosuk",
         "repo": "jinwon-int/a2a-docker-runner",
         "issue": "https://github.com/jinwon-int/a2a-docker-runner/issues/98",
+        "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/98",
         "alert": {
           "title": "A2A Needs review: jinwon-int/a2a-docker-runner",
           "body": "task=r2-nosuk-send-success-only-98 · worker=nosuk · status=blocked · exit=0 · timeout=false · artifacts=0 · issue=jinwon-int/a2a-docker-runner#98 · reason=Runner completed witho..."

@@ -67,8 +67,10 @@
     "status": "succeeded",
     "evidenceKind": "PR",
     "worker": "sogyo",
+    "nodeId": "sogyo",
     "repo": "jinwon-int/a2a-docker-runner",
     "issue": "https://github.com/jinwon-int/a2a-docker-runner/issues/94",
+    "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/94",
     "issueTitle": "Add runner-to-broker terminal evidence integration fixture",
     "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/94",
     "alert": {

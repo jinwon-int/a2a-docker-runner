@@ -95,8 +95,12 @@ export interface TerminalEvidenceEvent {
   status: TerminalEvidenceStatus;
   evidenceKind: TerminalEvidenceKind;
   worker: string;
+  /** Canonical worker/node id for broker task-report consumers. */
+  nodeId: string;
   repo?: string;
   issue?: string;
+  /** Canonical GitHub issue URL when repo + issue metadata is available. */
+  issueUrl?: string;
   issueTitle?: string;
   taskBrief?: string;
   prUrl?: string;
@@ -434,6 +438,7 @@ export function buildTerminalEvidenceEvent(
   const worker = normalizeString(nodeId) ?? "unknown";
   const repo = normalizeString(task?.payload?.repo);
   const issue = normalizeIssueReference(task);
+  const issueUrl = normalizeIssueUrl(task, repo, issue);
   const issueTitle = safeEvidenceText(task?.payload?.title ?? evidence?.issueTitle, 160);
   const taskBrief = safeEvidenceText(task?.payload?.focus ?? task?.message ?? task?.payload?.prompt ?? evidence?.taskBrief, 240);
   const testSummary = {
@@ -454,8 +459,10 @@ export function buildTerminalEvidenceEvent(
     status,
     evidenceKind,
     worker,
+    nodeId: worker,
     repo,
     issue,
+    issueUrl,
     issueTitle,
     taskBrief,
     prUrl: evidence?.prUrl,
@@ -637,6 +644,15 @@ function normalizeIssueReference(task: HandlerTask): string | undefined {
   const repo = normalizeString(task?.payload?.repo);
   if (repo && issue && /^\d+$/.test(issue)) return `https://github.com/${repo}/issues/${issue}`;
   return issue;
+}
+
+function normalizeIssueUrl(task: HandlerTask, repo?: string, issue?: string): string | undefined {
+  const explicit = normalizeString(task?.payload?.issueUrl);
+  if (explicit) return explicit;
+  if (issue?.startsWith("https://github.com/")) return issue;
+  const issueNumber = extractIssueNumber(task);
+  if (repo && issueNumber && /^\d+$/.test(issueNumber)) return `https://github.com/${repo}/issues/${issueNumber}`;
+  return undefined;
 }
 
 function buildTestSummaryLabel(result: RawRunnerOutput, kind: TerminalEvidenceKind): string {
