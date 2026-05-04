@@ -260,7 +260,7 @@ Gateway restarts, live Telegram sends, DB mutations, or real terminal-outbox ACK
 - `githubPatch` readiness for generic `github-propose-patch` execution
 - `runnerRevision` deployed-revision drift status for the runner checkout/package
 
-`runnerRevision.detail.summary` is a compact operator line suitable for broker/plugin surfaces. It reports the deployed package version, local runner SHA, upstream GitHub `main` SHA when available, branch, and dirty-worktree state without echoing remotes, tokens, secret files, or host-specific paths. A clean current checkout returns `status: "ok"`; stale, dirty, non-main, or upstream-unavailable source checkouts return `status: "warn"` so rollout operators can review drift without blocking unrelated readiness checks.
+`runnerRevision.detail.summary` is a compact operator line suitable for broker/plugin surfaces. It reports the deployed package version, local runner SHA, upstream GitHub `main` SHA when available, branch, and dirty-worktree state without echoing remotes, tokens, secret files, or host-specific paths. For exact revision proof, the JSON detail also includes full 40-character `localFullSha` and `upstreamMainFullSha` fields when they are inspectable. A clean current checkout returns `status: "ok"`; stale, dirty, non-main, or upstream-unavailable source checkouts return `status: "warn"` so rollout operators can review drift without blocking unrelated readiness checks.
 
 Examples:
 
