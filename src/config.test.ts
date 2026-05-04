@@ -68,6 +68,8 @@ test("loadConfig builds first-class OpenClaw patch profile", async () => {
   assert.match(config.commandScript ?? "", /delete config\.channels/);
   assert.match(config.commandScript ?? "", /delete defaults\.models/);
   assert.match(config.commandScript ?? "", /delete entry\.models/);
+  assert.match(config.commandScript ?? "", /delete defaults\.agentRuntime\.fallback/);
+  assert.match(config.commandScript ?? "", /delete entry\.agentRuntime\.fallback/);
   assert.match(config.commandScript ?? "", /openai-codex/);
   assert.match(config.commandScript ?? "", /openclaw_config_bytes=/);
   assert.doesNotMatch(config.commandScript ?? "", /tar -C \/run\/secrets\/openclaw-dir/);

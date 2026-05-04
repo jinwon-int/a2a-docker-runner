@@ -212,6 +212,9 @@ if (providers && typeof providers === "object" && providers["openai-codex"]) {
 const defaults = config.agents?.defaults;
 if (defaults && typeof defaults === "object") {
   delete defaults.heartbeat;
+  if (defaults.agentRuntime && typeof defaults.agentRuntime === "object") {
+    delete defaults.agentRuntime.fallback;
+  }
   if (defaults.model && typeof defaults.model === "object") {
     defaults.model.primary = "openai-codex/gpt-5.5";
     defaults.model.fallbacks = [];
@@ -224,6 +227,9 @@ if (Array.isArray(agentList)) {
   for (const entry of agentList) {
     if (!entry || typeof entry !== "object") continue;
     delete entry.heartbeat;
+    if (entry.agentRuntime && typeof entry.agentRuntime === "object") {
+      delete entry.agentRuntime.fallback;
+    }
     delete entry.models;
     if (entry.model && typeof entry.model === "object") {
       entry.model.primary = "openai-codex/gpt-5.5";
