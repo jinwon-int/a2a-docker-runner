@@ -155,9 +155,30 @@ export interface ArtifactManifestEntry {
   sizeBytes: number;
 }
 
-export type ArtifactManifestStatus = "done" | "blocked" | "failed";
+export type ArtifactManifestStatus = "done" | "blocked" | "failed" | "budget_limited";
+export type RunnerArtifactContractStatus = ArtifactManifestStatus;
+export type RunnerBudgetLimitKind = "time" | "token" | "attempt" | "command" | "safety";
 export type ArtifactEvidenceKind = "log" | "test" | "diff" | "file";
 export type ArtifactEvidenceStatus = "passed" | "failed" | "blocked" | "unknown";
+
+export interface RunnerBudgetEvidence {
+  limitKind: RunnerBudgetLimitKind;
+  /** Sanitized operator-facing budget limit, e.g. "45m" or "max_attempts=3". */
+  limit?: string;
+  /** Sanitized operator-facing usage, e.g. "44m" or "attempts=3". */
+  used?: string;
+  /** Short, secret-free reason for the limit stop. */
+  reason?: string;
+}
+
+export interface RunnerContinuationEvidence {
+  /** True when another bounded, explicitly-approved task is the safe next step. */
+  recommended: boolean;
+  /** Sanitized next prompt for a follow-up task; never auto-executed by the runner. */
+  nextPrompt?: string;
+  /** Continuation must require operator/broker approval; no unbounded auto-continuation. */
+  requiresApproval: true;
+}
 
 export interface ArtifactEvidencePart {
   /** Protocol-friendly Part kind for rendering summaries without reading raw logs. */
@@ -185,13 +206,18 @@ export interface ArtifactManifest {
   branch?: string;
   prUrl?: string;
   issueUrl?: string;
-  status: ArtifactManifestStatus;
+  /** Task outcome surfaced by artifact producers; budget_limited is not Done. */
+  status: RunnerArtifactContractStatus;
   /** Non-empty, bounded summary for broker/plugin/demo surfaces. */
   summary: string;
   /** A2A Artifact.parts projection of runner evidence. */
   evidence: ArtifactEvidencePart[];
   /** File inventory backing the evidence parts. */
   artifacts: ArtifactManifestEntry[];
+  /** Optional sanitized evidence describing which budget stopped the task. */
+  budget?: RunnerBudgetEvidence;
+  /** Optional sanitized recommendation for a bounded, approval-gated continuation. */
+  continuation?: RunnerContinuationEvidence;
 }
 
 export interface ResultSummary {
@@ -206,6 +232,10 @@ export interface ResultSummary {
   manifestPath: string;
   /** Bounded, secret-free runner build metadata suitable for broker/operator evidence. */
   runnerBuild?: RunnerBuildMetadata;
+  /** Optional artifact-contract outcome; budget_limited is handled as blocked/needs continuation. */
+  status?: RunnerArtifactContractStatus;
+  budget?: RunnerBudgetEvidence;
+  continuation?: RunnerContinuationEvidence;
 }
 
 export interface RunnerResult {
