@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { constants } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -109,8 +109,42 @@ function loadExtraMounts(env: NodeJS.ProcessEnv): RunnerExtraMount[] | undefined
     if (readOnly !== undefined && typeof readOnly !== "boolean") {
       throw new Error(`invalid extra mount at index ${index}: readOnly must be boolean`);
     }
-    return { source, target, readOnly };
+    const mount = { source, target, readOnly };
+    validateOpenClawRuntimeMount(mount, index);
+    return mount;
   });
+}
+
+function validateOpenClawRuntimeMount(mount: RunnerExtraMount, index: number): void {
+  const source = normalizeAbsolutePathForPolicy(mount.source);
+  const target = normalizeAbsolutePathForPolicy(mount.target);
+  const writable = mount.readOnly === false;
+  const protectedSource = isProtectedOpenClawRuntimePath(source);
+  const protectedTarget = isProtectedOpenClawRuntimePath(target);
+
+  if (writable && (protectedSource || protectedTarget)) {
+    throw new Error(
+      `invalid extra mount at index ${index}: writable OpenClaw runtime/session paths are forbidden; ` +
+      "mount only scratch paths read-write and keep host ~/.openclaw sessions read-only",
+    );
+  }
+}
+
+function normalizeAbsolutePathForPolicy(value: string): string {
+  try {
+    return realpathSync(value);
+  } catch {
+    return value.replace(/\/+/g, "/").replace(/\/$/, "") || "/";
+  }
+}
+
+function isProtectedOpenClawRuntimePath(value: string): boolean {
+  const normalized = value.replace(/\/+/g, "/").replace(/\/$/, "") || "/";
+  return [
+    /^\/root\/\.openclaw(?:\/|$)/,
+    /^\/home\/[^/]+\/\.openclaw(?:\/|$)/,
+    /^\/run\/secrets\/openclaw-dir(?:\/|$)/,
+  ].some((pattern) => pattern.test(normalized));
 }
 
 function loadPatchCommandConfig(env: NodeJS.ProcessEnv): Pick<RunnerConfig, "commandScript" | "commandJson" | "commandTemplate"> {
@@ -241,6 +275,61 @@ if (Array.isArray(agentList)) {
 fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\\n");
 A2A_SANITIZE_OPENCLAW_CONFIG
 fi
+
+# Refuse to run if the mounted host OpenClaw session store already looks
+# damaged or dangerously backed up. The mount is intentionally read-only, so
+# the runner reports/blocks instead of attempting host-side recovery.
+node <<'A2A_GUARD_OPENCLAW_SESSION_STORE'
+const fs = require("node:fs");
+const path = require("node:path");
+const root = "/run/secrets/openclaw-dir";
+const maxBackupCount = Number(process.env.A2A_OPENCLAW_SESSION_BACKUP_WARN_COUNT || "50");
+const maxBackupBytes = Number(process.env.A2A_OPENCLAW_SESSION_BACKUP_WARN_BYTES || String(128 * 1024 * 1024));
+const errors = [];
+const warnings = [];
+
+function readJson(file) {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); }
+  catch { return undefined; }
+}
+
+function walk(dir, out = []) {
+  let entries = [];
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return out; }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) walk(full, out);
+    else out.push(full);
+  }
+  return out;
+}
+
+for (const file of walk(root)) {
+  if (!file.endsWith("sessions.json")) continue;
+  const parsed = readJson(file);
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && Object.keys(parsed).length === 0) {
+    errors.push("empty sessions registry: " + file.replace(root, "<openclaw-dir>"));
+  }
+}
+
+const backups = walk(root).filter((file) => /\.jsonl\.bak-[^/]+$/.test(file));
+let backupBytes = 0;
+for (const file of backups) {
+  try { backupBytes += fs.statSync(file).size; } catch {}
+}
+if (backups.length >= maxBackupCount || backupBytes >= maxBackupBytes) {
+  warnings.push("session backup buildup: count=" + backups.length + " bytes=" + backupBytes);
+}
+
+for (const warning of warnings) {
+  fs.appendFileSync("/work/artifacts/summary.txt", "warning=openclaw_session_store_guard " + warning + "\n");
+}
+if (errors.length) {
+  fs.appendFileSync("/work/artifacts/summary.txt", "error=openclaw_session_store_guard " + errors.join("; ") + "\n");
+  fs.writeFileSync("/work/artifacts/patch-command.log", "OpenClaw host session store guard blocked embedded execution. " + errors.join("; ") + "\nRepair/reseed host sessions before retrying; the runner will not mutate host session state.\n");
+  process.exit(3);
+}
+A2A_GUARD_OPENCLAW_SESSION_STORE
 
 chmod -R u+rwX /root/.openclaw
 

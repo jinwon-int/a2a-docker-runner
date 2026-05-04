@@ -32,6 +32,21 @@ A2A Broker → Host A2A Worker → A2A Docker Runner → one task container
 
 The broker stays unchanged. The host worker still claims tasks and reports results over the existing HTTP broker endpoint and edge-secret contract. The broker may be hosted by Docker Compose, systemd, or another supervisor; this runner does not require or manage the broker process. The runner is only the execution engine used by the worker for file-heavy jobs.
 
+## OpenClaw session-store guard
+
+When `A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE=openclaw` is used, the runner mounts the host OpenClaw config directory read-only and copies only the minimal auth/model files into the container. It also refuses dangerous session-store states before starting embedded OpenClaw:
+
+- `sessions.json` parsed as `{}` is treated as damaged host continuity and blocks the run.
+- `*.jsonl.bak-*` buildup is reported as `warning=openclaw_session_store_guard` when count/bytes exceed thresholds.
+- Writable extra mounts that target or source host OpenClaw runtime paths are rejected; only scratch paths may be mounted read-write.
+
+Tunables:
+
+- `A2A_OPENCLAW_SESSION_BACKUP_WARN_COUNT` (default `50`)
+- `A2A_OPENCLAW_SESSION_BACKUP_WARN_BYTES` (default `134217728`, 128 MiB)
+
+The runner intentionally does **not** repair host sessions itself. A damaged session registry should be recovered by the operator/OpenClaw host guard first, then the A2A task can be retried.
+
 ## MVP Scope
 
 Phase 1 focuses on GitHub/PR-producing tasks:
