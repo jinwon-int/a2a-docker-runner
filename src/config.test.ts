@@ -82,6 +82,9 @@ test("loadConfig builds first-class OpenClaw patch profile", async () => {
   assert.match(config.commandScript ?? "", /entry\.workspace = workspace/);
   assert.match(config.commandScript ?? "", /A2A_GUARD_OPENCLAW_SESSION_STORE/);
   assert.match(config.commandScript ?? "", /openclaw_session_store_guard/);
+  assert.match(config.commandScript ?? "", /openclaw_workspace_bootstrap_leak/);
+  assert.match(config.commandScript ?? "", /bootstrap_leak=/);
+  assert.match(config.commandScript ?? "", /git status --porcelain -- \.openclaw AGENTS\.md BOOTSTRAP\.md HEARTBEAT\.md IDENTITY\.md MEMORY\.md SOUL\.md TOOLS\.md USER\.md memory/);
   assert.match(config.commandScript ?? "", /activeAgentId = process\.env\.A2A_OPENCLAW_AGENT_ID \|\| "main"/);
   assert.ok((config.commandScript ?? "").includes('warning=openclaw_session_store_guard " + warning + "\\n"'));
   assert.ok((config.commandScript ?? "").includes('error=openclaw_session_store_guard " + errors.join("; ") + "\\n"'));

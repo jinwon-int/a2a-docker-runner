@@ -424,6 +424,17 @@ openclaw agent \\
   --json \\
   2>&1 | tee /work/artifacts/openclaw-output.txt
 
+# Fail closed if the embedded agent left its workspace bootstrap/persona files
+# in the checkout. These files are prompt/runtime context, not repository
+# artifacts, and must never be swept into PRs by broad git-add behavior.
+bootstrap_leaks="$(git status --porcelain -- .openclaw AGENTS.md BOOTSTRAP.md HEARTBEAT.md IDENTITY.md MEMORY.md SOUL.md TOOLS.md USER.md memory 2>/dev/null | sed -n 's/^?? //p' || true)"
+if [ -n "$bootstrap_leaks" ]; then
+  printf 'error=openclaw_workspace_bootstrap_leak\n' | tee -a /work/artifacts/summary.txt
+  printf 'OpenClaw workspace bootstrap artifacts appeared in the checkout; refusing to produce a PR with runtime context files.\n' | tee /work/artifacts/patch-command.log
+  printf '%s\n' "$bootstrap_leaks" | sed 's#^#bootstrap_leak=#' >> /work/artifacts/summary.txt
+  exit 4
+fi
+
 if [ -z "$(git status --porcelain)" ]; then
   printf 'error=openclaw_completed_without_changes\\n' | tee -a /work/artifacts/summary.txt
   printf 'OpenClaw produced no repository changes; refusing false Done.\\n' | tee -a /work/artifacts/patch-command.log

@@ -6,3 +6,16 @@ dist/
 .DS_Store
 coverage/
 *.log
+
+# OpenClaw/A2A agent workspace bootstrap files are mounted into some
+# patch containers for prompt context only; never include them in runner PRs.
+.openclaw/
+AGENTS.md
+BOOTSTRAP.md
+HEARTBEAT.md
+IDENTITY.md
+MEMORY.md
+SOUL.md
+TOOLS.md
+USER.md
+memory/
