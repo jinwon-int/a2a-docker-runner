@@ -4,7 +4,7 @@ Scope: operator checklist for proposing and rolling out an `a2a-docker-runner` r
 
 ## Pre-PR verification
 
-- Confirm the branch is based on current `main` and does not include secrets, raw session dumps, or private host paths.
+- Confirm the branch is based on current `main` and does not include secrets, raw session dumps, private host paths, or OpenClaw workspace bootstrap files (`.openclaw/`, `SOUL.md`, `USER.md`, `IDENTITY.md`, `HEARTBEAT.md`, `TOOLS.md`, `MEMORY.md`, `BOOTSTRAP.md`, or generated `memory/` notes). The first-class OpenClaw patch profile fails closed if these appear as untracked checkout artifacts.
 - Run the local gates:
   - `npm run check`
   - `npm run build`
