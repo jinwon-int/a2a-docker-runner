@@ -82,6 +82,7 @@ test("extracts prUrl into release-gate evidence on success", async () => {
   assert.equal(evidence?.schemaVersion, "a2a.runner.github-evidence.v1");
   assert.equal(evidence?.repo, "jinwon-int/test-repo");
   assert.equal(evidence?.issue, "jinwon-int/test-repo#1");
+  assert.equal(evidence?.issueUrl, "https://github.com/jinwon-int/test-repo/issues/1");
   assert.equal(evidence?.taskId, "test-task");
   assert.equal(evidence?.worker, "seoseo");
   assert.equal(evidence?.issueTitle, "Evidence contract proof");
@@ -91,6 +92,11 @@ test("extracts prUrl into release-gate evidence on success", async () => {
   assert.equal(evidence?.outcome, "pr");
   assert.equal(evidence?.prUrl, "https://github.com/jinwon-int/test-repo/pull/99");
   assert.equal(evidence?.validation?.status, "completed");
+  assert.deepEqual(evidence?.safetyState, {
+    noLiveProviderSend: true,
+    terminalAck: "requires_operator_receipt",
+    providerSendIsReceiptEvidence: false,
+  });
   assert.equal(evidence?.validationErrors, undefined);
   assert.equal(evidence?.blockCommentUrl, undefined);
 });
@@ -358,6 +364,11 @@ test("block comment includes artifact manifest, command logs, reason and next ac
 
   assert.match(body, /### 사유/);
   assert.match(body, /### 다음 조치/);
+  assert.match(body, /\*\*Issue URL\*\*: https:\/\/github\.com\/jinwon-int\/test-repo\/issues\/1/);
+  assert.match(body, /### Validation/);
+  assert.match(body, /### 안전 상태/);
+  assert.match(body, /terminalAck: `requires_operator_receipt`/);
+  assert.match(body, /providerSendIsReceiptEvidence: `false`/);
   assert.match(body, /### 아티팩트 manifest 요약/);
   assert.match(body, /### Runner build/);
   assert.match(body, /revision: `abc123`/);
@@ -421,8 +432,12 @@ test("done comment includes manifest summary and bounded command log summary", (
   });
 
   assert.match(body, /## ✅ Done/);
+  assert.match(body, /\*\*Issue URL\*\*: https:\/\/github\.com\/jinwon-int\/test-repo\/issues\/1/);
   assert.match(body, /### 결과/);
   assert.match(body, /### 다음 조치/);
+  assert.match(body, /### Validation/);
+  assert.match(body, /### 안전 상태/);
+  assert.match(body, /noLiveProviderSend: `true`/);
   assert.match(body, /### 아티팩트 manifest 요약/);
   assert.match(body, /### 명령 로그 요약/);
   assert.match(body, /`artifacts\/result\.json` \(12 bytes\)/);

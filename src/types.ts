@@ -84,11 +84,22 @@ export interface GitHubValidationSummary {
   stderrTruncated?: boolean;
 }
 
+export interface GitHubEvidenceSafetyState {
+  /** Runner/operator closeout did not perform a live provider send. */
+  noLiveProviderSend: true;
+  /** Terminal outbox ACK is never implied by provider send or PR/Done/Block evidence. */
+  terminalAck: "not_attempted" | "requires_operator_receipt";
+  /** Provider delivery/send success is not operator receipt evidence. */
+  providerSendIsReceiptEvidence: false;
+}
+
 export interface GitHubEvidence {
   /** Canonical structured evidence envelope version for GitHub patch task closeout. */
   schemaVersion?: "a2a.runner.github-evidence.v1";
   repo?: string;
   issue?: string;
+  /** Canonical GitHub issue URL required by receipt-gated terminal/operator evidence. */
+  issueUrl?: string;
   taskId?: string;
   /** Worker/requesting node that produced or requested this evidence. */
   worker?: string;
@@ -106,6 +117,8 @@ export interface GitHubEvidence {
   /** Done comment URL for tasks that complete without a PR. */
   doneCommentUrl?: string;
   validation?: GitHubValidationSummary;
+  /** Explicit no-live/no-ACK safety state for receipt-gated Terminal Brief lanes. */
+  safetyState?: GitHubEvidenceSafetyState;
   /** Safe broker/run identifier, included when supplied by the task payload/env. */
   runId?: string;
   /** Safe distributed trace identifier, included when supplied by the task payload/env. */

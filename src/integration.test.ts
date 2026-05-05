@@ -575,14 +575,31 @@ test("extractGitHubEvidence: accepts canonical blockUrl envelope", () => {
   assert.equal(evidence?.blockCommentUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-123");
 });
 
-test("extractGitHubEvidence: extracts doneCommentUrl from github evidence block", () => {
+test("extractGitHubEvidence: extracts receipt-gated doneCommentUrl from github evidence block", () => {
   const result: RawRunnerOutput = {
     ok: true, taskId: "t1", status: "completed", workDir: "/tmp",
     stdout: "", stderr: "", artifacts: [],
-    github: { doneCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-456" },
+    github: {
+      taskId: "t1",
+      issueUrl: "https://github.com/jinwon-int/repo/issues/5",
+      doneCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-456",
+      validation: { status: "completed", exitCode: 0, timedOut: false, artifactCount: 0 },
+      safetyState: { noLiveProviderSend: true, terminalAck: "requires_operator_receipt", providerSendIsReceiptEvidence: false },
+    },
   };
   const evidence = extractGitHubEvidence(result);
   assert.ok(evidence);
+  assert.equal(evidence?.doneCommentUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-456");
+});
+
+test("extractGitHubEvidence: keeps legacy Done comment URLs for backwards-compatible receipt gates", () => {
+  const result: RawRunnerOutput = {
+    ok: true, taskId: "t1", status: "completed", workDir: "/tmp",
+    stdout: "", stderr: "", artifacts: [],
+    github: { taskId: "t1", issueUrl: "https://github.com/jinwon-int/repo/issues/5", doneCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-456" },
+  };
+  const evidence = extractGitHubEvidence(result);
+  assert.equal(evidence?.outcome, "done");
   assert.equal(evidence?.doneCommentUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-456");
 });
 
@@ -695,11 +712,17 @@ test("buildHandlerResult: status blocked when blockCommentUrl present and no prU
   assert.equal(handlerResult.prUrl, undefined);
 });
 
-test("buildHandlerResult: status done when doneCommentUrl present and no prUrl/block", () => {
+test("buildHandlerResult: status done when receipt-gated doneCommentUrl present and no prUrl/block", () => {
   const result: RawRunnerOutput = {
     ok: true, taskId: "t1", status: "completed", workDir: "/tmp",
     stdout: "", stderr: "", artifacts: [],
-    github: { doneCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-456" },
+    github: {
+      taskId: "t1",
+      issueUrl: "https://github.com/jinwon-int/repo/issues/5",
+      doneCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-456",
+      validation: { status: "completed", exitCode: 0, timedOut: false, artifactCount: 0 },
+      safetyState: { noLiveProviderSend: true, terminalAck: "requires_operator_receipt", providerSendIsReceiptEvidence: false },
+    },
   };
   const handlerResult = buildHandlerResult(result, { id: "t1" }, "sogyo");
   assert.equal(handlerResult.status, "done");
@@ -1097,7 +1120,9 @@ test("buildTerminalEvidenceEvent: includes safe task context required for termin
       outcome: "done",
       doneUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/120#issuecomment-done",
       doneCommentUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/120#issuecomment-done",
+      issueUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/120",
       validation: { status: "completed", exitCode: 0, timedOut: false, artifactCount: 1 },
+      safetyState: { noLiveProviderSend: true, terminalAck: "requires_operator_receipt", providerSendIsReceiptEvidence: false },
       issueTitle: "A2A release dry-run: runner evidence contract proof",
       taskBrief: "Prove terminal evidence has enough structured context and fails closed.",
     },
@@ -1122,6 +1147,8 @@ test("buildTerminalEvidenceEvent: includes safe task context required for termin
   assert.equal(event.worker, "bangtong");
   assert.equal(event.repo, "jinwon-int/a2a-docker-runner");
   assert.equal(event.issue, "https://github.com/jinwon-int/a2a-docker-runner/issues/120");
+  assert.equal(event.issueUrl, "https://github.com/jinwon-int/a2a-docker-runner/issues/120");
+  assert.deepEqual(event.safetyState, { noLiveProviderSend: true, terminalAck: "requires_operator_receipt", providerSendIsReceiptEvidence: false });
   assert.equal(event.issueTitle, "A2A release dry-run: runner evidence contract proof");
   assert.equal(event.taskBrief, "Prove terminal evidence has enough structured context and fails closed.");
   assert.equal(event.doneUrl, "https://github.com/jinwon-int/a2a-docker-runner/issues/120#issuecomment-done");
@@ -1141,7 +1168,13 @@ test("buildTerminalEvidenceEvent: includes short Done reason and issue URL", () 
       stdout: "bounded stdout", stderr: "", stdoutTruncated: false, stderrTruncated: false,
       artifactCount: 0, manifestPath: "artifacts/manifest.json",
     },
-    github: { doneCommentUrl: "https://github.com/jinwon-int/repo/issues/83#issuecomment-2" },
+    github: {
+      taskId: "task-done",
+      issueUrl: "https://github.com/jinwon-int/repo/issues/83",
+      doneCommentUrl: "https://github.com/jinwon-int/repo/issues/83#issuecomment-2",
+      validation: { status: "completed", exitCode: 0, timedOut: false, artifactCount: 0 },
+      safetyState: { noLiveProviderSend: true, terminalAck: "requires_operator_receipt", providerSendIsReceiptEvidence: false },
+    },
   };
 
   const event = buildTerminalEvidenceEvent(
@@ -1154,6 +1187,8 @@ test("buildTerminalEvidenceEvent: includes short Done reason and issue URL", () 
   assert.equal(event.status, "succeeded");
   assert.equal(event.evidenceKind, "Done");
   assert.equal(event.issue, "https://github.com/jinwon-int/repo/issues/83");
+  assert.equal(event.issueUrl, "https://github.com/jinwon-int/repo/issues/83");
+  assert.deepEqual(event.safetyState, { noLiveProviderSend: true, terminalAck: "requires_operator_receipt", providerSendIsReceiptEvidence: false });
   assert.equal(event.doneUrl, "https://github.com/jinwon-int/repo/issues/83#issuecomment-2");
   assert.equal(event.alert.title, "A2A Done: jinwon-int/repo");
   assert.equal(event.alert.url, "https://github.com/jinwon-int/repo/issues/83#issuecomment-2");
