@@ -77,6 +77,9 @@ test("loadConfig builds first-class OpenClaw patch profile", async () => {
   assert.match(config.commandScript ?? "", /delete entry\.agentRuntime\.fallback/);
   assert.match(config.commandScript ?? "", /openai-codex/);
   assert.match(config.commandScript ?? "", /openclaw_config_bytes=/);
+  assert.match(config.commandScript ?? "", /A2A_SET_OPENCLAW_WORKSPACE/);
+  assert.match(config.commandScript ?? "", /config\.agents\.defaults\.workspace = workspace/);
+  assert.match(config.commandScript ?? "", /entry\.workspace = workspace/);
   assert.match(config.commandScript ?? "", /A2A_GUARD_OPENCLAW_SESSION_STORE/);
   assert.match(config.commandScript ?? "", /openclaw_session_store_guard/);
   assert.match(config.commandScript ?? "", /activeAgentId = process\.env\.A2A_OPENCLAW_AGENT_ID \|\| "main"/);
