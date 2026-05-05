@@ -290,6 +290,18 @@ A compact no-live proof bundle fixture is available at
 It is intentionally synthetic and exercises the guard without production deploys,
 Gateway restarts, live Telegram sends, DB mutations, or real terminal-outbox ACKs.
 
+For public-demo readiness, run the fixture safety audit:
+
+```bash
+npm run smoke:public-demo-safety
+```
+
+The audit validates the published no-live artifact/operator fixtures as JSON and
+fails closed on secret-shaped values, private home paths, live Telegram targets,
+production deploy flags, Gateway restart flags, DB mutation flags, or terminal
+outbox ACK shortcuts. It is a local/synthetic smoke only; it does not call the
+broker, GitHub, Telegram, OpenClaw Gateway, or Docker.
+
 ## Worker operations
 
 `doctor` prints JSON status for worker readiness checks:
