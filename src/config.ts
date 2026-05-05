@@ -283,6 +283,7 @@ node <<'A2A_GUARD_OPENCLAW_SESSION_STORE'
 const fs = require("node:fs");
 const path = require("node:path");
 const root = "/run/secrets/openclaw-dir";
+const activeAgentId = process.env.A2A_OPENCLAW_AGENT_ID || "main";
 const maxBackupCount = Number(process.env.A2A_OPENCLAW_SESSION_BACKUP_WARN_COUNT || "50");
 const maxBackupBytes = Number(process.env.A2A_OPENCLAW_SESSION_BACKUP_WARN_BYTES || String(128 * 1024 * 1024));
 const errors = [];
@@ -308,7 +309,13 @@ for (const file of walk(root)) {
   if (!file.endsWith("sessions.json")) continue;
   const parsed = readJson(file);
   if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && Object.keys(parsed).length === 0) {
-    errors.push("empty sessions registry: " + file.replace(root, "<openclaw-dir>"));
+    const rel = file.replace(root + "/", "");
+    const activeAgentStore = rel === "agents/" + activeAgentId + "/sessions/sessions.json";
+    if (activeAgentStore) {
+      errors.push("empty active-agent sessions registry: " + file.replace(root, "<openclaw-dir>"));
+    } else {
+      warnings.push("empty non-active-agent sessions registry ignored: " + file.replace(root, "<openclaw-dir>"));
+    }
   }
 }
 
