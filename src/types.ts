@@ -116,6 +116,18 @@ export interface GitHubEvidence {
   branch?: string;
 }
 
+/** Compact, broker-safe pointers that can be recovered from artifacts/result summaries. */
+export interface RunnerEvidenceHints {
+  schemaVersion: "a2a.runner.evidence-hints.v1";
+  issueUrl?: string;
+  prUrl?: string;
+  doneUrl?: string;
+  blockUrl?: string;
+  branch?: string;
+  branchUrl?: string;
+  failureCategory?: GitHubEvidenceOutcome | "failed" | "exit_nonzero";
+}
+
 export interface RunnerTask {
   id: string;
   intent: string;
@@ -279,6 +291,8 @@ export interface ArtifactManifest {
   receiptTrace?: RunnerReceiptTrace;
   /** Optional sanitized recommendation for a bounded, approval-gated continuation. */
   continuation?: RunnerContinuationEvidence;
+  /** Compact structured evidence URLs for broker task-report recovery. */
+  evidenceHints?: RunnerEvidenceHints;
 }
 
 export interface ResultSummary {
@@ -298,6 +312,7 @@ export interface ResultSummary {
   budget?: RunnerBudgetEvidence;
   receiptTrace?: RunnerReceiptTrace;
   continuation?: RunnerContinuationEvidence;
+  evidenceHints?: RunnerEvidenceHints;
 }
 
 export interface RunnerResult {

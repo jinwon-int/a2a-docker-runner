@@ -3,7 +3,7 @@ import { basename, join, relative, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { normalizeTask } from "./task-normalizer.js";
 import { collectGitHubEvidence } from "./github-evidence.js";
-import type { ArtifactEvidencePart, ArtifactManifest, ArtifactManifestEntry, ArtifactManifestStatus, NormalizedRunnerTask, ResultSummary, RunnerBudgetEvidence, RunnerConfig, RunnerContinuationEvidence, RunnerReceiptTrace, RunnerResult, RunnerTask } from "./types.js";
+import type { ArtifactEvidencePart, ArtifactManifest, ArtifactManifestEntry, ArtifactManifestStatus, NormalizedRunnerTask, ResultSummary, RunnerBudgetEvidence, RunnerConfig, RunnerContinuationEvidence, RunnerEvidenceHints, RunnerReceiptTrace, RunnerResult, RunnerTask } from "./types.js";
 
 export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<RunnerResult> {
   validateTask(task);
@@ -96,6 +96,12 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
         result.github.validation.status = result.status;
       }
     }
+    const evidenceHints = buildRunnerEvidenceHints(normalizedTask, result);
+    if (evidenceHints) {
+      result.artifactManifest = { ...result.artifactManifest!, evidenceHints };
+      result.resultSummary = { ...result.resultSummary!, evidenceHints };
+      await writeArtifactManifest(workDir, result.artifactManifest);
+    }
   }
 
   return result;
@@ -105,6 +111,68 @@ function isMissingPatchCommand(stdout: string, stderr: string): boolean {
   return [stdout, stderr]
     .flatMap((text) => text.split(/\r?\n/).map((line) => line.trim()))
     .some((line) => line === "notice=no_patch_command_configured" || line === "error=no_patch_command_configured");
+}
+
+export function buildRunnerEvidenceHints(task: NormalizedRunnerTask, result: RunnerResult): RunnerEvidenceHints | undefined {
+  const github = result.github;
+  const branch = safeHintText(github?.branch ?? result.artifactManifest?.branch);
+  const repo = safeGitHubRepoSlug(github?.repo ?? result.artifactManifest?.repo ?? task.repo);
+  const failureCategory = inferEvidenceFailureCategory(result);
+  const hint: RunnerEvidenceHints = {
+    schemaVersion: "a2a.runner.evidence-hints.v1",
+    ...(safeGitHubUrl(task.issueUrl ?? result.artifactManifest?.issueUrl, "issues") ? { issueUrl: task.issueUrl ?? result.artifactManifest?.issueUrl } : {}),
+    ...(safeGitHubUrl(github?.prUrl ?? result.prUrl ?? result.artifactManifest?.prUrl, "pull") ? { prUrl: github?.prUrl ?? result.prUrl ?? result.artifactManifest?.prUrl } : {}),
+    ...(safeGitHubUrl(github?.doneUrl ?? github?.doneCommentUrl, "issues") ? { doneUrl: github?.doneUrl ?? github?.doneCommentUrl } : {}),
+    ...(safeGitHubUrl(github?.blockUrl ?? github?.blockCommentUrl, "issues") ? { blockUrl: github?.blockUrl ?? github?.blockCommentUrl } : {}),
+    ...(branch ? { branch } : {}),
+    ...(repo && branch ? { branchUrl: buildBranchUrl(repo, branch) } : {}),
+    ...(failureCategory ? { failureCategory } : {}),
+  };
+  return Object.keys(hint).length > 1 ? hint : undefined;
+}
+
+function inferEvidenceFailureCategory(result: RunnerResult): RunnerEvidenceHints["failureCategory"] | undefined {
+  const outcome = result.github?.outcome;
+  if (outcome === "block" || outcome === "budget_limited" || outcome === "timed_out" || outcome === "missing_evidence") return outcome;
+  if (result.status === "timeout") return "timed_out";
+  if (result.resultSummary?.status === "budget_limited" || result.artifactManifest?.status === "budget_limited") return "budget_limited";
+  if (!result.ok && typeof result.exitCode === "number" && result.exitCode !== 0) return "exit_nonzero";
+  if (!result.ok) return "failed";
+  return undefined;
+}
+
+function buildBranchUrl(repo: string, branch: string): string {
+  return "https://github.com/" + repo + "/tree/" + branch.split("/").map(encodeURIComponent).join("/");
+}
+
+function safeGitHubRepoSlug(value: string | undefined): string | undefined {
+  if (!value || hasUnsafeHintContent(value)) return undefined;
+  const slugPattern = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+  if (slugPattern.test(value)) return value;
+  const match = value.match(/^https?:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?(?:[/?#].*)?$/);
+  return match?.[1] && slugPattern.test(match[1]) ? match[1] : undefined;
+}
+
+function safeGitHubUrl(value: string | undefined, kind: "issues" | "pull"): boolean {
+  if (!value || hasUnsafeHintContent(value)) return false;
+  try {
+    const url = new URL(value);
+    const urlPattern = new RegExp("^/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/" + kind + "/\\d+(?:#issuecomment-\\d+)?$");
+    return url.protocol === "https:" && url.hostname === "github.com" && urlPattern.test(url.pathname + url.hash);
+  } catch {
+    return false;
+  }
+}
+
+function safeHintText(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const safe = redactAndBound(value.replace(/[\r\n]+/g, " ").trim(), 160);
+  if (!safe || hasUnsafeHintContent(safe)) return undefined;
+  return safe;
+}
+
+function hasUnsafeHintContent(value: string): boolean {
+  return /(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|Authorization:\s*(?:Bearer|token)|\/root\/|\/home\/|\/tmp\/|\/var\/folders\/|token=|password=|secret=|api[_-]?key=)/i.test(value);
 }
 
 function validateTask(task: RunnerTask): void {
@@ -450,6 +518,7 @@ export function buildResultSummary(
     ...(manifest.budget ? { budget: manifest.budget } : {}),
     ...(manifest.receiptTrace ? { receiptTrace: manifest.receiptTrace } : {}),
     ...(manifest.continuation ? { continuation: manifest.continuation } : {}),
+    ...(manifest.evidenceHints ? { evidenceHints: manifest.evidenceHints } : {}),
     ...(runnerBuild ? { runnerBuild } : {}),
   };
 }
@@ -463,6 +532,7 @@ export interface ArtifactManifestContext {
   budget?: RunnerBudgetEvidence;
   receiptTrace?: RunnerReceiptTrace;
   continuation?: RunnerContinuationEvidence;
+  evidenceHints?: RunnerEvidenceHints;
 }
 
 export async function buildArtifactManifest(workDir: string, artifacts: string[], context: ArtifactManifestContext = {}): Promise<ArtifactManifest> {
@@ -497,6 +567,7 @@ export async function buildArtifactManifest(workDir: string, artifacts: string[]
     ...(context.budget ? { budget: context.budget } : {}),
     ...(context.receiptTrace ? { receiptTrace: context.receiptTrace } : {}),
     ...(context.continuation ? { continuation: context.continuation } : {}),
+    ...(context.evidenceHints ? { evidenceHints: context.evidenceHints } : {}),
   };
 }
 
