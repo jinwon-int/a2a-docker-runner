@@ -74,7 +74,7 @@ export interface HandlerResult {
   tests: string[];
   filesChanged: string[];
   risks: string[];
-  /** Compact, payload-safe terminal event for broker push/SSE/webhook delivery. */
+  /** Compact, payload-safe Terminal Brief event for broker SSE/webhook delivery. */
   terminalEvidence: TerminalEvidenceEvent;
   /** Raw runner stdout JSON (for debugging). */
   runnerRaw?: Record<string, unknown>;
@@ -356,7 +356,7 @@ export function extractGitHubEvidence(
     const blockUrl = g.blockUrl ?? g.blockCommentUrl;
     if (blockUrl) return { ...g, outcome: "block", blockUrl, blockCommentUrl: blockUrl };
     const doneUrl = g.doneUrl ?? g.doneCommentUrl;
-    if (doneUrl && !budgetLimited) return { ...g, outcome: "done", doneUrl, doneCommentUrl: doneUrl };
+    if (doneUrl && !budgetLimited && result.ok && result.status === "completed") return { ...g, outcome: "done", doneUrl, doneCommentUrl: doneUrl };
   }
 
   // Fallback: legacy PR URL from stdout parsing

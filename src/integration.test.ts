@@ -616,6 +616,16 @@ test("extractGitHubEvidence: block takes precedence over done (no PR url)", () =
   assert.equal(evidence?.blockCommentUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-123");
 });
 
+test("extractGitHubEvidence: ignores Done evidence from failed runner output", () => {
+  const result: RawRunnerOutput = {
+    ok: false, taskId: "t2", status: "failed", workDir: "/tmp",
+    stdout: "", stderr: "error", artifacts: [],
+    github: { doneCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-456" },
+  };
+  const evidence = extractGitHubEvidence(result);
+  assert.equal(evidence, null);
+});
+
 test("extractGitHubEvidence: falls back to legacy prUrl when github block absent", () => {
   const result: RawRunnerOutput = {
     ok: true, taskId: "t1", status: "completed", workDir: "/tmp",
@@ -819,7 +829,7 @@ test("buildHandlerResult: exposes bounded resultSummary stdout/stderr instead of
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Terminal evidence event — compact broker push/SSE/webhook payload
+// Terminal Brief evidence event — compact broker SSE/webhook payload
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface TerminalEvidenceFixture {
@@ -1340,7 +1350,7 @@ test("public demo artifact fixtures pass the no-live safety audit", () => {
   assert.ok(result.files.includes("examples/rollout-receipt-evidence.no-live.json"));
 });
 
-test("buildHandlerResult: includes terminal evidence for broker push notifications", () => {
+test("buildHandlerResult: includes Terminal Brief evidence for broker delivery", () => {
   const result: RawRunnerOutput = {
     ok: false, taskId: "task-block", status: "failed", workDir: "/tmp/work",
     stdout: "", stderr: "", artifacts: [],

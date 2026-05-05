@@ -115,7 +115,7 @@ test("generates PR-producing default commands for github-propose-patch mode with
   assert.ok(pipeline.includes("gh pr create"), "Expected PR create step");
   assert.ok(pipeline.includes("--body-file /work/artifacts/pr-body.md"), "Expected PR body file use");
   assert.ok(pipeline.includes("Closes #5"), "Expected same-repo closing keyword in PR body");
-  assert.ok(pipeline.includes("## 🔁 Rerun started"), "Expected Start/Rerun issue comment body");
+  assert.ok(pipeline.includes("printf 'Start\\n' > /work/artifacts/issue-start-comment.md"), "Expected literal Start issue comment body");
   assert.ok(pipeline.includes("/work/artifacts/issue-start-comment.md"), "Expected start comment artifact");
   assert.ok(pipeline.indexOf("issue-start-comment.md") < pipeline.indexOf("patch-command.sh"), "Expected start comment before patch execution");
   assert.ok(pipeline.includes("error=gh_unavailable_start_comment_required"), "Expected gh-missing start comment to fail closed");
