@@ -294,7 +294,7 @@ if (token) {
   config.skills.entries ||= {};
   config.skills.entries["gh-issues"] ||= {};
   config.skills.entries["gh-issues"].apiKey = token;
-  fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\n");
+  fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\\n");
 }
 A2A_INJECT_GITHUB_TOKEN_FOR_OPENCLAW
 fi
