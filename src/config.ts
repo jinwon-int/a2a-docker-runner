@@ -276,6 +276,29 @@ fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\\n");
 A2A_SANITIZE_OPENCLAW_CONFIG
 fi
 
+# The outer runner shell authenticates gh/git from /run/secrets/gh-hosts.yml and
+# exports GH_TOKEN, but embedded OpenClaw tool executions may not inherit that
+# shell environment. The gh-issues skill resolves its token from OpenClaw config
+# when GH_TOKEN is unavailable, so mirror the ephemeral task token into the
+# copied in-container config. This copy lives only inside the disposable runner
+# container and is never written to artifacts.
+if [ -n "\${GH_TOKEN:-}" ] && [ -f /root/.openclaw/openclaw.json ]; then
+  export GITHUB_TOKEN="\${GITHUB_TOKEN:-$GH_TOKEN}"
+  node <<'A2A_INJECT_GITHUB_TOKEN_FOR_OPENCLAW'
+const fs = require("node:fs");
+const path = "/root/.openclaw/openclaw.json";
+const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
+if (token) {
+  const config = JSON.parse(fs.readFileSync(path, "utf8"));
+  config.skills ||= {};
+  config.skills.entries ||= {};
+  config.skills.entries["gh-issues"] ||= {};
+  config.skills.entries["gh-issues"].apiKey = token;
+  fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\n");
+}
+A2A_INJECT_GITHUB_TOKEN_FOR_OPENCLAW
+fi
+
 # Refuse to run if the mounted host OpenClaw session store already looks
 # damaged or dangerously backed up. The mount is intentionally read-only, so
 # the runner reports/blocks instead of attempting host-side recovery.

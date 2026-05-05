@@ -64,6 +64,9 @@ test("loadConfig builds first-class OpenClaw patch profile", async () => {
   assert.match(config.commandScript ?? "", /auth-state\.json/);
   assert.match(config.commandScript ?? "", /models\.json/);
   assert.match(config.commandScript ?? "", /A2A_SANITIZE_OPENCLAW_CONFIG/);
+  assert.match(config.commandScript ?? "", /A2A_INJECT_GITHUB_TOKEN_FOR_OPENCLAW/);
+  assert.match(config.commandScript ?? "", /config\.skills\.entries\["gh-issues"\]\.apiKey = token/);
+  assert.match(config.commandScript ?? "", /export GITHUB_TOKEN/);
   assert.match(config.commandScript ?? "", /delete config\.plugins/);
   assert.match(config.commandScript ?? "", /delete config\.channels/);
   assert.match(config.commandScript ?? "", /delete defaults\.models/);
