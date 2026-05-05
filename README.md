@@ -192,6 +192,15 @@ command output. Detailed logs remain in runner artifacts and bounded
 `runnerRaw` debugging fields. Adapters should use `dedupeKey` as the durable
 notification id and may render `alert` directly without re-parsing logs.
 
+For broker operator-task-report summaries, the integration exposes
+`buildOperatorTaskReportEvidence(handlerResult)`. That projection keeps only the
+canonical task id, worker, repo/issue, evidence kind, PR/Done/Block URL, tests,
+risks, runner build metadata, and summary. It intentionally omits `runnerRaw`,
+stdout/stderr excerpts, host paths, Telegram message ids, and any provider-send
+receipt. Per-worker live Telegram/message delivery remains out of scope for this
+repo; the runner produces compact evidence, while seoseo/OpenClaw broker/plugin
+surfaces decide if and when an operator-visible notification is sent and ACKed.
+
 ### Artifact budget/continuation contract
 
 Modern artifacts may include sanitized budget, receipt trace, and continuation evidence in

@@ -20,11 +20,12 @@ import {
   parseRunnerOutput,
   extractGitHubEvidence,
   buildHandlerResult,
+  buildOperatorTaskReportEvidence,
   buildTerminalEvidenceEvent,
   decideTerminalEvidenceAck,
   buildTerminalAckDecision,
 } from "./integration.js";
-import type { HandlerTask, HandlerEnv, RawRunnerOutput, TerminalAckDecision, TerminalEvidenceEvent } from "./integration.js";
+import type { HandlerTask, HandlerEnv, HandlerResult, RawRunnerOutput, TerminalAckDecision, TerminalEvidenceEvent } from "./integration.js";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // isGithubProposePatchTask
@@ -1347,6 +1348,72 @@ test("buildHandlerResult: includes terminal evidence for broker push notificatio
   assert.equal(handlerResult.terminalEvidence.blockUrl, "https://github.com/jinwon-int/repo/issues/79#issuecomment-1");
   assert.equal(handlerResult.terminalEvidence.reason, "Block evidence was posted for operator follow-up.");
   assert.equal(handlerResult.terminalEvidence.testSummary.exitCode, 1);
+});
+
+test("buildOperatorTaskReportEvidence projects PR/Done/Block without raw logs or per-worker live sends", () => {
+  const cases: Array<{ name: string; raw: RawRunnerOutput; expectedStatus: HandlerResult["status"]; expectedKind: string; expectedUrl: string }> = [
+    {
+      name: "PR",
+      raw: {
+        ok: true, taskId: "task-pr", status: "completed", workDir: "/tmp/private-pr",
+        stdout: "raw token=secret PR https://github.com/jinwon-int/repo/pull/77", stderr: "", artifacts: [],
+        resultSummary: { exitCode: 0, signal: null, timedOut: false, stdout: "bounded", stderr: "", stdoutTruncated: true, stderrTruncated: false, artifactCount: 1, manifestPath: "artifacts/manifest.json" },
+        github: { prUrl: "https://github.com/jinwon-int/repo/pull/77" },
+      },
+      expectedStatus: "pr_opened",
+      expectedKind: "PR",
+      expectedUrl: "https://github.com/jinwon-int/repo/pull/77",
+    },
+    {
+      name: "Done",
+      raw: {
+        ok: true, taskId: "task-done", status: "completed", workDir: "/tmp/private-done",
+        stdout: "raw done log", stderr: "", artifacts: [],
+        resultSummary: { exitCode: 0, signal: null, timedOut: false, stdout: "bounded", stderr: "", stdoutTruncated: false, stderrTruncated: false, artifactCount: 1, manifestPath: "artifacts/manifest.json" },
+        github: { doneCommentUrl: "https://github.com/jinwon-int/repo/issues/135#issuecomment-done" },
+      },
+      expectedStatus: "done",
+      expectedKind: "Done",
+      expectedUrl: "https://github.com/jinwon-int/repo/issues/135#issuecomment-done",
+    },
+    {
+      name: "Block",
+      raw: {
+        ok: false, taskId: "task-block", status: "failed", workDir: "/tmp/private-block",
+        stdout: "raw block log", stderr: "secret stderr", artifacts: [],
+        resultSummary: { exitCode: 1, signal: null, timedOut: false, stdout: "bounded", stderr: "bounded", stdoutTruncated: false, stderrTruncated: false, artifactCount: 1, manifestPath: "artifacts/manifest.json" },
+        github: { blockCommentUrl: "https://github.com/jinwon-int/repo/issues/135#issuecomment-block" },
+      },
+      expectedStatus: "blocked",
+      expectedKind: "Block",
+      expectedUrl: "https://github.com/jinwon-int/repo/issues/135#issuecomment-block",
+    },
+  ];
+
+  for (const entry of cases) {
+    const handlerResult = buildHandlerResult(
+      entry.raw,
+      { id: entry.raw.taskId, payload: { repo: "jinwon-int/repo", issueUrl: "https://github.com/jinwon-int/repo/issues/135", title: `${entry.name} lane`, focus: "compact task-report evidence" } },
+      "bangtong",
+    );
+    const report = buildOperatorTaskReportEvidence(handlerResult);
+
+    assert.equal(report.schemaVersion, "a2a.runner.operator-task-report.v1");
+    assert.equal(report.status, entry.expectedStatus, entry.name);
+    assert.equal(report.evidenceKind, entry.expectedKind, entry.name);
+    assert.equal(report.url, entry.expectedUrl, entry.name);
+    assert.equal(report.worker, "bangtong", entry.name);
+    assert.equal(report.repo, "jinwon-int/repo", entry.name);
+    assert.deepEqual(Object.keys(report).sort(), Object.keys(JSON.parse(JSON.stringify(report))).sort(), entry.name);
+
+    const serialized = JSON.stringify(report);
+    assert.ok(!serialized.includes("raw "), entry.name);
+    assert.ok(!serialized.includes("/tmp/private"), entry.name);
+    assert.ok(!serialized.includes("secret"), entry.name);
+    assert.ok(!serialized.includes("telegram"), entry.name);
+    assert.ok(!serialized.includes("messageId"), entry.name);
+    assert.ok(!serialized.includes("runnerRaw"), entry.name);
+  }
 });
 
 test("buildHandlerResult: broker runnerRaw trims non-broker fields while preserving evidence", () => {

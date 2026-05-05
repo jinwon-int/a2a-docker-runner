@@ -82,6 +82,25 @@ export interface HandlerResult {
   nextAction?: string;
 }
 
+export interface OperatorTaskReportEvidence {
+  schemaVersion: "a2a.runner.operator-task-report.v1";
+  taskId: string;
+  status: HandlerResult["status"];
+  evidenceKind: TerminalEvidenceKind;
+  worker: string;
+  repo?: string;
+  issue?: string;
+  issueTitle?: string;
+  taskBrief?: string;
+  /** Canonical PR/Done/Block URL, when available. */
+  url?: string;
+  summary: string;
+  tests: string[];
+  risks: string[];
+  runnerBuild?: RunnerBuildMetadata;
+  dedupeKey: string;
+}
+
 export type TerminalEvidenceStatus = "succeeded" | "failed" | "cancelled" | "blocked";
 export type TerminalEvidenceKind = "PR" | "Done" | "Block" | "BudgetLimited" | "TimedOut" | "MissingEvidence";
 
@@ -506,6 +525,27 @@ export function decideTerminalEvidenceAck(
  * terminal ack/cursor. Gateway/provider send success is intentionally not
  * enough: the caller must pass an operator-visible delivery receipt.
  */
+export function buildOperatorTaskReportEvidence(result: HandlerResult): OperatorTaskReportEvidence {
+  const event = result.terminalEvidence;
+  return omitUndefined({
+    schemaVersion: "a2a.runner.operator-task-report.v1",
+    taskId: event.taskId,
+    status: result.status,
+    evidenceKind: event.evidenceKind,
+    worker: event.worker,
+    repo: event.repo,
+    issue: event.issue,
+    issueTitle: event.issueTitle,
+    taskBrief: event.taskBrief,
+    url: result.prUrl ?? result.doneCommentUrl ?? result.blockCommentUrl ?? event.prUrl ?? event.doneUrl ?? event.blockUrl,
+    summary: result.summary,
+    tests: result.tests,
+    risks: result.risks,
+    runnerBuild: event.runnerBuild,
+    dedupeKey: event.dedupeKey,
+  }) as unknown as OperatorTaskReportEvidence;
+}
+
 export function buildTerminalAckDecision(
   event: TerminalEvidenceEvent,
   receipt?: TerminalAckReceipt,
