@@ -368,6 +368,31 @@ chmod -R u+rwX /root/.openclaw
 # bootstrap, memory, and operator state; runner code must never delete or
 # recreate that path as a sandbox alignment mechanism.
 export OPENCLAW_WORKSPACE_DIR="$PWD"
+
+# Embedded OpenClaw resolves the active agent workspace from config, not only
+# from OPENCLAW_WORKSPACE_DIR. Point the disposable in-container config at the
+# checked-out repository so repo patch runs do not fall back to the host/default
+# agent workspace or its bootstrap files.
+if [ -f /root/.openclaw/openclaw.json ]; then
+  node <<'A2A_SET_OPENCLAW_WORKSPACE'
+const fs = require("node:fs");
+const path = "/root/.openclaw/openclaw.json";
+const workspace = process.env.OPENCLAW_WORKSPACE_DIR || process.cwd();
+const agentId = process.env.A2A_OPENCLAW_AGENT_ID || "main";
+const config = JSON.parse(fs.readFileSync(path, "utf8"));
+config.agents ||= {};
+config.agents.defaults ||= {};
+config.agents.defaults.workspace = workspace;
+if (Array.isArray(config.agents.list)) {
+  for (const entry of config.agents.list) {
+    if (!entry || typeof entry !== "object") continue;
+    if (!entry.id || entry.id === agentId) entry.workspace = workspace;
+  }
+}
+fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\\n");
+A2A_SET_OPENCLAW_WORKSPACE
+fi
+
 printf 'openclaw_config_bytes=%s\n' "$(du -sb /root/.openclaw | awk '{print $1}')" | tee -a /work/artifacts/summary.txt
 printf 'openclaw_workspace=%s\n' "$OPENCLAW_WORKSPACE_DIR" | tee -a /work/artifacts/summary.txt
 
