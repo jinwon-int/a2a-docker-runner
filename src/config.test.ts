@@ -74,6 +74,9 @@ test("loadConfig builds first-class OpenClaw patch profile", async () => {
   assert.match(config.commandScript ?? "", /openclaw_config_bytes=/);
   assert.match(config.commandScript ?? "", /A2A_GUARD_OPENCLAW_SESSION_STORE/);
   assert.match(config.commandScript ?? "", /openclaw_session_store_guard/);
+  assert.ok((config.commandScript ?? "").includes('warning=openclaw_session_store_guard " + warning + "\\n"'));
+  assert.ok((config.commandScript ?? "").includes('error=openclaw_session_store_guard " + errors.join("; ") + "\\n"'));
+  assert.doesNotMatch(config.commandScript ?? "", /warning=openclaw_session_store_guard " \+ warning \+ "\n"/);
   assert.match(config.commandScript ?? "", /empty sessions registry/);
   assert.doesNotMatch(config.commandScript ?? "", /tar -C \/run\/secrets\/openclaw-dir/);
   assert.doesNotMatch(config.commandScript ?? "", /cp -a \/run\/secrets\/openclaw-dir \/root\/\.openclaw/);

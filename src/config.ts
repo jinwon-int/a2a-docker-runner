@@ -322,11 +322,11 @@ if (backups.length >= maxBackupCount || backupBytes >= maxBackupBytes) {
 }
 
 for (const warning of warnings) {
-  fs.appendFileSync("/work/artifacts/summary.txt", "warning=openclaw_session_store_guard " + warning + "\n");
+  fs.appendFileSync("/work/artifacts/summary.txt", "warning=openclaw_session_store_guard " + warning + "\\n");
 }
 if (errors.length) {
-  fs.appendFileSync("/work/artifacts/summary.txt", "error=openclaw_session_store_guard " + errors.join("; ") + "\n");
-  fs.writeFileSync("/work/artifacts/patch-command.log", "OpenClaw host session store guard blocked embedded execution. " + errors.join("; ") + "\nRepair/reseed host sessions before retrying; the runner will not mutate host session state.\n");
+  fs.appendFileSync("/work/artifacts/summary.txt", "error=openclaw_session_store_guard " + errors.join("; ") + "\\n");
+  fs.writeFileSync("/work/artifacts/patch-command.log", "OpenClaw host session store guard blocked embedded execution. " + errors.join("; ") + "\\nRepair/reseed host sessions before retrying; the runner will not mutate host session state.\\n");
   process.exit(3);
 }
 A2A_GUARD_OPENCLAW_SESSION_STORE
