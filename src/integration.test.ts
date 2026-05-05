@@ -1329,6 +1329,17 @@ test("Telegram terminal notification smoke harness script passes without live Te
   assert.ok(result.decisions.some((entry) => entry.acknowledged === true));
 });
 
+test("public demo artifact fixtures pass the no-live safety audit", () => {
+  const output = execFileSync(process.execPath, ["scripts/public-demo-safety-audit.mjs"], {
+    cwd: new URL("..", import.meta.url),
+    encoding: "utf8",
+  });
+  const result = JSON.parse(output) as { ok: boolean; files: string[]; failures: string[] };
+  assert.equal(result.ok, true);
+  assert.equal(result.failures.length, 0);
+  assert.ok(result.files.includes("examples/rollout-receipt-evidence.no-live.json"));
+});
+
 test("buildHandlerResult: includes terminal evidence for broker push notifications", () => {
   const result: RawRunnerOutput = {
     ok: false, taskId: "task-block", status: "failed", workDir: "/tmp/work",
