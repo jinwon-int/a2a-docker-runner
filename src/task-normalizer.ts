@@ -150,17 +150,10 @@ function buildDefaultPatchCommands(task: RunnerTask, primaryRepo: RunnerRepo): s
   ].join("\n");
 
   const startCommentBlock = task.issueUrl ? [
-    `cat > /work/artifacts/issue-start-comment.md <<A2A_ISSUE_START_COMMENT_EOF`,
-    `## 🔁 Rerun started`,
-    ``,
-    `A2A task: ${safeTitle}`,
-    `Branch: $BRANCH`,
-    ``,
-    `Patch worker has started this rerun and will post PR/Block evidence when finished.`,
-    `A2A_ISSUE_START_COMMENT_EOF`,
+    `printf 'Start\\n' > /work/artifacts/issue-start-comment.md`,
     `if ! command -v gh >/dev/null 2>&1; then`,
     `  printf 'error=gh_unavailable_start_comment_required\\n' | tee -a /work/artifacts/summary.txt`,
-    `  printf 'GitHub Start comment is required before patch execution, but gh is unavailable.\\n' | tee /work/artifacts/issue-start-comment-output.txt`,
+    `  printf 'GitHub literal Start comment is required before patch execution, but gh is unavailable.\\n' | tee /work/artifacts/issue-start-comment-output.txt`,
     `  exit 2`,
     `fi`,
     `if ! gh issue comment ${issueCommentTarget} --body-file /work/artifacts/issue-start-comment.md 2>&1 | tee /work/artifacts/issue-start-comment-output.txt; then`,
