@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { buildArtifactManifest, buildResultSummary, redactAndBound, RESULT_STREAM_LIMIT, sanitizeReceiptTrace } from "./runner.js";
+import { buildArtifactManifest, buildResultSummary, buildRunnerEvidenceHints, redactAndBound, RESULT_STREAM_LIMIT, sanitizeReceiptTrace } from "./runner.js";
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -165,6 +165,83 @@ test("buildArtifactManifest and resultSummary preserve bounded receipt trace met
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+
+test("buildArtifactManifest and resultSummary preserve compact GitHub evidence hints", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "a2a-evidence-hints-"));
+  try {
+    await mkdir(join(dir, "artifacts"), { recursive: true });
+    const artifact = join(dir, "artifacts", "summary.txt");
+    await writeFile(artifact, "Block: https://github.com/jinwon-int/repo/issues/5#issuecomment-123");
+    const evidenceHints = {
+      schemaVersion: "a2a.runner.evidence-hints.v1" as const,
+      issueUrl: "https://github.com/jinwon-int/repo/issues/5",
+      blockUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-123",
+      branch: "fix/issue-5",
+      branchUrl: "https://github.com/jinwon-int/repo/tree/fix/issue-5",
+      failureCategory: "block" as const,
+    };
+    const manifest = await buildArtifactManifest(dir, [artifact], { status: "failed", evidenceHints });
+    const summary = buildResultSummary(
+      { code: 1, signal: null, stdout: "failed", stderr: "", timedOut: false },
+      redactAndBound("failed"),
+      "",
+      [artifact],
+      manifest,
+    );
+
+    assert.deepEqual(manifest.evidenceHints, evidenceHints);
+    assert.deepEqual(summary.evidenceHints, evidenceHints);
+    assert.ok(!JSON.stringify(summary.evidenceHints).includes("secret="));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("buildRunnerEvidenceHints recovers Block URL from non-zero GitHub evidence without raw logs", () => {
+  const hints = buildRunnerEvidenceHints({
+    id: "task-5",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repo: "jinwon-int/repo",
+    repos: [],
+    commands: ["npm test"],
+    issueUrl: "https://github.com/jinwon-int/repo/issues/5",
+  }, {
+    ok: false,
+    taskId: "task-5",
+    status: "failed",
+    workDir: "/tmp/private-task",
+    exitCode: 2,
+    signal: null,
+    stdout: "Authorization: Bearer ghp_abcdefghijklmnopqrstuvwxyz1234567890",
+    stderr: "secret=synthetic-value",
+    artifacts: [],
+    github: {
+      schemaVersion: "a2a.runner.github-evidence.v1",
+      repo: "jinwon-int/repo",
+      issue: "jinwon-int/repo#5",
+      taskId: "task-5",
+      worker: "worker-a",
+      issueTitle: "Recovery proof",
+      outcome: "block",
+      blockCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-123",
+      branch: "fix/issue-5",
+      validation: { status: "failed", exitCode: 2, signal: null, timedOut: false, artifactCount: 0 },
+    },
+  });
+
+  assert.deepEqual(hints, {
+    schemaVersion: "a2a.runner.evidence-hints.v1",
+    issueUrl: "https://github.com/jinwon-int/repo/issues/5",
+    blockUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-123",
+    branch: "fix/issue-5",
+    branchUrl: "https://github.com/jinwon-int/repo/tree/fix/issue-5",
+    failureCategory: "block",
+  });
+  assert.ok(!JSON.stringify(hints).includes("ghp_"));
+  assert.ok(!JSON.stringify(hints).includes("/tmp/private-task"));
 });
 
 

@@ -85,6 +85,21 @@
         "nextPrompt": { "type": "string", "minLength": 1, "maxLength": 1000 },
         "requiresApproval": { "const": true }
       }
+    },
+    "evidenceHints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion"],
+      "properties": {
+        "schemaVersion": { "const": "a2a.runner.evidence-hints.v1" },
+        "issueUrl": { "type": "string", "format": "uri" },
+        "prUrl": { "type": "string", "format": "uri" },
+        "doneUrl": { "type": "string", "format": "uri" },
+        "blockUrl": { "type": "string", "format": "uri" },
+        "branch": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "branchUrl": { "type": "string", "format": "uri" },
+        "failureCategory": { "enum": ["pr", "done", "block", "budget_limited", "timed_out", "missing_evidence", "failed", "exit_nonzero"] }
+      }
     }
   }
 }
