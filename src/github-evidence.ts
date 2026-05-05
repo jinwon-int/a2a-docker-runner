@@ -93,13 +93,21 @@ function validateReleaseGateEvidence(evidence: GitHubEvidence): string[] {
   if (!isSafeStructuredText(evidence.issueTitle) && !isSafeStructuredText(evidence.taskBrief)) {
     errors.push("missing_or_unsafe_issue_title_or_task_brief");
   }
+  if (!isSafeGitHubEvidenceUrl(evidence.issueUrl)) errors.push("missing_or_unsafe_issue_url");
   if (!evidence.validation) errors.push("missing_validation_summary");
+  if (!hasExplicitNoAckSafetyState(evidence)) errors.push("missing_or_unsafe_no_live_no_ack_safety_state");
   if (evidence.runId && !isSafeStructuredText(evidence.runId)) errors.push("unsafe_runId");
   if (evidence.traceId && !isSafeStructuredText(evidence.traceId)) errors.push("unsafe_traceId");
 
   const url = evidence.prUrl ?? evidence.doneUrl ?? evidence.doneCommentUrl ?? evidence.blockUrl ?? evidence.blockCommentUrl;
   if (!isSafeGitHubEvidenceUrl(url)) errors.push("missing_or_unsafe_terminal_url");
   return errors;
+}
+
+function hasExplicitNoAckSafetyState(evidence: GitHubEvidence): boolean {
+  return evidence.safetyState?.noLiveProviderSend === true
+    && evidence.safetyState.providerSendIsReceiptEvidence === false
+    && (evidence.safetyState.terminalAck === "not_attempted" || evidence.safetyState.terminalAck === "requires_operator_receipt");
 }
 
 function isSafeStructuredText(value: string | undefined): boolean {
@@ -126,6 +134,7 @@ function buildBaseEvidence(task: NormalizedRunnerTask, result: RunnerResult): Gi
     schemaVersion: "a2a.runner.github-evidence.v1",
     repo: normalizeRepo(task),
     issue: normalizeIssue(task),
+    issueUrl: normalizeIssueUrl(task),
     taskId: task.id,
     worker: safeOptionalText(task.requestedBy, 80),
     issueTitle: safeOptionalText(task.issueTitle, 160),
@@ -139,6 +148,11 @@ function buildBaseEvidence(task: NormalizedRunnerTask, result: RunnerResult): Gi
       artifactCount: validation?.artifactCount ?? result.artifacts.length,
       stdoutTruncated: validation?.stdoutTruncated,
       stderrTruncated: validation?.stderrTruncated,
+    },
+    safetyState: {
+      noLiveProviderSend: true,
+      terminalAck: "requires_operator_receipt",
+      providerSendIsReceiptEvidence: false,
     },
     runId: safeOptionalText(task.runId ?? task.env?.A2A_RUN_ID ?? task.env?.RUN_ID, 120),
     traceId: safeOptionalText(task.traceId ?? task.env?.A2A_TRACE_ID ?? task.env?.TRACE_ID, 120),
@@ -166,6 +180,14 @@ function normalizeIssue(task: NormalizedRunnerTask): string | undefined {
   const match = text.match(/#?(\d+)/);
   const repo = normalizeRepo(task);
   return repo && match ? `${repo}#${match[1]}` : text;
+}
+
+function normalizeIssueUrl(task: NormalizedRunnerTask): string | undefined {
+  if (task.issueUrl && isSafeGitHubEvidenceUrl(task.issueUrl)) return task.issueUrl;
+  const repo = normalizeRepo(task);
+  const raw = task.issue ?? task.issueNumber;
+  const issueNumber = raw == null ? undefined : String(raw).match(/#?(\d+)/)?.[1];
+  return repo && issueNumber ? `https://github.com/${repo}/issues/${issueNumber}` : undefined;
 }
 
 function extractBranch(result: RunnerResult): string | undefined {
@@ -333,6 +355,9 @@ export function buildBlockCommentBody(task: NormalizedRunnerTask, result: Runner
   const artifactLines = buildArtifactSummaryLines(result, lang);
   const buildLines = buildRunnerBuildLines(result, lang);
   const commandLogLines = buildCommandLogLines(result, lang);
+  const issueUrl = normalizeIssueUrl(task) ?? "N/A";
+  const validationLines = buildValidationSummaryLines(result, lang);
+  const safetyLines = buildNoLiveNoAckSafetyLines(lang);
 
   if (lang === "ko") {
     return [
@@ -340,6 +365,7 @@ export function buildBlockCommentBody(task: NormalizedRunnerTask, result: Runner
       "",
       `**요청 노드**: ${requestedBy}`,
       `**Task ID**: \`${task.id}\``,
+      `**Issue URL**: ${issueUrl}`,
       `**상태**: ${result.status}`,
       `**종료 코드**: ${result.exitCode ?? "N/A"}`,
       ...(result.signal ? [`**시그널**: ${result.signal}`] : []),
@@ -349,6 +375,12 @@ export function buildBlockCommentBody(task: NormalizedRunnerTask, result: Runner
       "",
       "### 다음 조치",
       action,
+      "",
+      "### Validation",
+      ...validationLines,
+      "",
+      "### 안전 상태",
+      ...safetyLines,
       "",
       "### 아티팩트 manifest 요약",
       ...artifactLines,
@@ -368,6 +400,7 @@ export function buildBlockCommentBody(task: NormalizedRunnerTask, result: Runner
     "",
     `**Requested by**: ${requestedBy}`,
     `**Task ID**: \`${task.id}\``,
+    `**Issue URL**: ${issueUrl}`,
     `**Status**: ${result.status}`,
     `**Exit code**: ${result.exitCode ?? "N/A"}`,
     ...(result.signal ? [`**Signal**: ${result.signal}`] : []),
@@ -377,6 +410,12 @@ export function buildBlockCommentBody(task: NormalizedRunnerTask, result: Runner
     "",
     "### Next action",
     action,
+    "",
+    "### Validation",
+    ...validationLines,
+    "",
+    "### Safety state",
+    ...safetyLines,
     "",
     "### Artifact manifest summary",
     ...artifactLines,
@@ -401,6 +440,9 @@ export function buildDoneCommentBody(task: NormalizedRunnerTask, result: RunnerR
   const buildLines = buildRunnerBuildLines(result, lang);
   const commandLogLines = buildCommandLogLines(result, lang);
   const existingPr = buildExistingPrLine(task, lang);
+  const issueUrl = normalizeIssueUrl(task) ?? "N/A";
+  const validationLines = buildValidationSummaryLines(result, lang);
+  const safetyLines = buildNoLiveNoAckSafetyLines(lang);
 
   if (lang === "ko") {
     return [
@@ -408,6 +450,7 @@ export function buildDoneCommentBody(task: NormalizedRunnerTask, result: RunnerR
       "",
       `**요청 노드**: ${requestedBy}`,
       `**Task ID**: \`${task.id}\``,
+      `**Issue URL**: ${issueUrl}`,
       `**상태**: ${result.status} (PR URL 없음 — no-op 또는 PR 생성 불필요 태스크)`,
       ...(existingPr ? [existingPr] : []),
       "",
@@ -416,6 +459,12 @@ export function buildDoneCommentBody(task: NormalizedRunnerTask, result: RunnerR
       "",
       "### 다음 조치",
       "필요 시 아래 아티팩트와 명령 로그 요약을 확인하세요.",
+      "",
+      "### Validation",
+      ...validationLines,
+      "",
+      "### 안전 상태",
+      ...safetyLines,
       "",
       "### 아티팩트 manifest 요약",
       ...artifactLines,
@@ -435,6 +484,7 @@ export function buildDoneCommentBody(task: NormalizedRunnerTask, result: RunnerR
     "",
     `**Requested by**: ${requestedBy}`,
     `**Task ID**: \`${task.id}\``,
+    `**Issue URL**: ${issueUrl}`,
     `**Status**: ${result.status} (no PR URL — no-op or PR-less task)`,
     ...(existingPr ? [existingPr] : []),
     "",
@@ -443,6 +493,12 @@ export function buildDoneCommentBody(task: NormalizedRunnerTask, result: RunnerR
     "",
     "### Next action",
     "Review the artifact and command log summaries below if needed.",
+    "",
+    "### Validation",
+    ...validationLines,
+    "",
+    "### Safety state",
+    ...safetyLines,
     "",
     "### Artifact manifest summary",
     ...artifactLines,
@@ -508,6 +564,37 @@ function buildAction(task: NormalizedRunnerTask, result: RunnerResult, lang: str
   }
   if (result.status === "timeout") return "타임아웃 원인을 확인하고 timeout/resources 조정 후 재시도하세요.";
   return "명령 로그와 아티팩트를 확인해 실패 원인을 수정한 뒤 재시도하세요.";
+}
+
+function buildValidationSummaryLines(result: RunnerResult, lang: string): string[] {
+  const summary = result.resultSummary;
+  return [
+    `- status: \`${result.status}\``,
+    `- exitCode: ${summary?.exitCode ?? result.exitCode ?? "N/A"}`,
+    `- signal: ${summary?.signal ?? result.signal ?? "N/A"}`,
+    `- timedOut: ${summary?.timedOut ?? result.status === "timeout"}`,
+    `- artifactCount: ${summary?.artifactCount ?? result.artifacts.length}`,
+    `- stdoutTruncated: ${summary?.stdoutTruncated ?? false}`,
+    `- stderrTruncated: ${summary?.stderrTruncated ?? false}`,
+    lang === "ko"
+      ? "- validation source: runner result summary / command exit metadata"
+      : "- validation source: runner result summary / command exit metadata",
+  ];
+}
+
+function buildNoLiveNoAckSafetyLines(lang: string): string[] {
+  if (lang === "ko") {
+    return [
+      "- noLiveProviderSend: `true` (라이브 Telegram/provider 전송 없음)",
+      "- terminalAck: `requires_operator_receipt` (operator-visible receipt 전까지 ACK 금지)",
+      "- providerSendIsReceiptEvidence: `false` (provider send 성공은 receipt/ACK 증거가 아님)",
+    ];
+  }
+  return [
+    "- noLiveProviderSend: `true` (no live Telegram/provider send)",
+    "- terminalAck: `requires_operator_receipt` (no terminal-outbox ACK before operator-visible receipt)",
+    "- providerSendIsReceiptEvidence: `false` (provider send success is not receipt/ACK evidence)",
+  ];
 }
 
 function buildArtifactSummaryLines(result: RunnerResult, lang: string): string[] {

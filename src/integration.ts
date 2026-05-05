@@ -116,6 +116,8 @@ export interface TerminalEvidenceEvent {
   worker: string;
   repo?: string;
   issue?: string;
+  /** Canonical GitHub issue URL carried on Terminal Brief evidence. */
+  issueUrl?: string;
   issueTitle?: string;
   taskBrief?: string;
   prUrl?: string;
@@ -136,6 +138,12 @@ export interface TerminalEvidenceEvent {
     artifactCount?: number;
     stdoutTruncated?: boolean;
     stderrTruncated?: boolean;
+  };
+  /** Explicit no-live/no-ACK state; provider send success is not receipt evidence. */
+  safetyState: {
+    noLiveProviderSend: true;
+    terminalAck: "requires_operator_receipt";
+    providerSendIsReceiptEvidence: false;
   };
   /** Bounded build/source metadata; no raw env, secrets, or host paths. */
   runnerBuild?: RunnerBuildMetadata;
@@ -453,6 +461,7 @@ export function buildTerminalEvidenceEvent(
   const worker = normalizeString(nodeId) ?? "unknown";
   const repo = normalizeString(task?.payload?.repo);
   const issue = normalizeIssueReference(task);
+  const issueUrl = normalizeGitHubIssueUrl(task?.payload?.issueUrl ?? evidence?.issueUrl, repo, task?.payload?.issue ?? task?.payload?.issueNumber);
   const issueTitle = safeEvidenceText(task?.payload?.title ?? evidence?.issueTitle, 160);
   const taskBrief = safeEvidenceText(task?.payload?.focus ?? task?.message ?? task?.payload?.prompt ?? evidence?.taskBrief, 240);
   const testSummary = {
@@ -475,6 +484,7 @@ export function buildTerminalEvidenceEvent(
     worker,
     repo,
     issue,
+    issueUrl,
     issueTitle,
     taskBrief,
     prUrl: evidence?.prUrl,
@@ -483,6 +493,11 @@ export function buildTerminalEvidenceEvent(
     alert: buildTerminalAlert({ taskId, status, evidenceKind, worker, repo, issue, issueTitle, taskBrief, url, result, testSummary }),
     reason: buildTerminalReason(result, evidenceKind),
     testSummary,
+    safetyState: {
+      noLiveProviderSend: true,
+      terminalAck: "requires_operator_receipt",
+      providerSendIsReceiptEvidence: false,
+    },
     runnerBuild: summary?.runnerBuild ?? result.runnerBuild,
     timestamps: { emittedAt },
   };
@@ -677,6 +692,18 @@ function normalizeIssueReference(task: HandlerTask): string | undefined {
   const repo = normalizeString(task?.payload?.repo);
   if (repo && issue && /^\d+$/.test(issue)) return `https://github.com/${repo}/issues/${issue}`;
   return issue;
+}
+
+function normalizeGitHubIssueUrl(value?: string, repo?: string, issue?: string | number): string | undefined {
+  const safeValue = normalizeString(value);
+  if (safeValue && /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/issues\/\d+(?:[#?].*)?$/.test(safeValue)) {
+    return safeValue;
+  }
+  const issueNumber = issue == null ? undefined : String(issue).match(/#?(\d+)/)?.[1];
+  if (repo && issueNumber && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) {
+    return `https://github.com/${repo}/issues/${issueNumber}`;
+  }
+  return undefined;
 }
 
 function buildTestSummaryLabel(result: RawRunnerOutput, kind: TerminalEvidenceKind): string {

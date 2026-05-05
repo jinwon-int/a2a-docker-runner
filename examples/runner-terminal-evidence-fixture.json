@@ -94,6 +94,12 @@
     },
     "timestamps": {
       "emittedAt": "2026-05-02T00:00:00.000Z"
+    },
+    "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/94",
+    "safetyState": {
+      "noLiveProviderSend": true,
+      "terminalAck": "requires_operator_receipt",
+      "providerSendIsReceiptEvidence": false
     }
   },
   "telegramDryRun": {
