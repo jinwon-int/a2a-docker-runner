@@ -25,7 +25,7 @@ import {
   decideTerminalEvidenceAck,
   buildTerminalAckDecision,
 } from "./integration.js";
-import type { HandlerTask, HandlerEnv, HandlerResult, RawRunnerOutput, TerminalAckDecision, TerminalEvidenceEvent } from "./integration.js";
+import type { HandlerTask, HandlerEnv, HandlerResult, RawRunnerOutput, TerminalAckDecision, TerminalEvidenceEvent, TerminalEvidenceKind, TerminalEvidenceStatus } from "./integration.js";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // isGithubProposePatchTask
@@ -1282,6 +1282,32 @@ interface TelegramTerminalNotificationSmokeFixture {
   safety: { mustNotContain: string[] };
 }
 
+interface TerminalBriefReceiptR4Fixture {
+  run: string;
+  issue: string;
+  parent: string;
+  worker: string;
+  emittedAt: string;
+  canonicalCloseout: {
+    allowedEvidenceKinds: TerminalEvidenceKind[];
+    terminalAckRequiresOperatorVisibleReceipt: boolean;
+    providerSendSuccessIsReceiptEvidence: boolean;
+    noLiveProviderSend: boolean;
+    terminalOutboxAckPerformed: boolean;
+  };
+  cases: Array<{
+    name: string;
+    terminalOutboxId: string;
+    runId: string;
+    providerSendSuccessOnly?: boolean;
+    handlerTask: HandlerTask;
+    runnerOutput: RawRunnerOutput;
+    receipt?: { operatorVisible: boolean; channel?: string; receiptId?: string; url?: string; deliveredAt?: string };
+    expected: Pick<TerminalAckDecision, "evidenceKind" | "acknowledged" | "cursorComplete"> & { status: TerminalEvidenceStatus };
+  }>;
+  mustNotContain: string[];
+}
+
 function loadTerminalAckSmokeFixture(): TerminalAckSmokeFixture {
   const raw = readFileSync(new URL("../examples/runner-terminal-ack-smoke.json", import.meta.url), "utf8");
   return JSON.parse(raw) as TerminalAckSmokeFixture;
@@ -1290,6 +1316,11 @@ function loadTerminalAckSmokeFixture(): TerminalAckSmokeFixture {
 function loadTelegramTerminalNotificationSmokeFixture(): TelegramTerminalNotificationSmokeFixture {
   const raw = readFileSync(new URL("../examples/runner-telegram-terminal-notification-smoke.json", import.meta.url), "utf8");
   return JSON.parse(raw) as TelegramTerminalNotificationSmokeFixture;
+}
+
+function loadTerminalBriefReceiptR4Fixture(): TerminalBriefReceiptR4Fixture {
+  const raw = readFileSync(new URL("../examples/terminal-brief-receipt-r4-canonical.json", import.meta.url), "utf8");
+  return JSON.parse(raw) as TerminalBriefReceiptR4Fixture;
 }
 
 test("terminal ack smoke fixture: PR/Done/Block require operator-visible receipt", () => {
@@ -1372,6 +1403,85 @@ test("Telegram terminal notification smoke harness script passes without live Te
   assert.equal(result.ok, true);
   assert.ok(result.decisions.some((entry) => entry.acknowledged === false));
   assert.ok(result.decisions.some((entry) => entry.acknowledged === true));
+});
+
+test("R4 canonical Terminal Brief receipt fixture requires operator-visible receipt", () => {
+  const fixture = loadTerminalBriefReceiptR4Fixture();
+  const observedKinds = new Set<TerminalEvidenceKind>();
+
+  assert.equal(fixture.run, "terminal-brief-receipt-r4-canonical-20260506T004710Z");
+  assert.equal(fixture.issue, "https://github.com/jinwon-int/a2a-docker-runner/issues/154");
+  assert.equal(fixture.parent, "https://github.com/jinwon-int/a2a-broker/issues/383");
+  assert.equal(fixture.canonicalCloseout.terminalAckRequiresOperatorVisibleReceipt, true);
+  assert.equal(fixture.canonicalCloseout.providerSendSuccessIsReceiptEvidence, false);
+  assert.equal(fixture.canonicalCloseout.noLiveProviderSend, true);
+  assert.equal(fixture.canonicalCloseout.terminalOutboxAckPerformed, false);
+
+  for (const entry of fixture.cases) {
+    const event = buildTerminalEvidenceEvent(
+      parseRunnerOutput(JSON.stringify(entry.runnerOutput)),
+      entry.handlerTask,
+      fixture.worker,
+      fixture.emittedAt,
+    );
+    const decision = buildTerminalAckDecision(event, entry.receipt);
+
+    assert.match(entry.terminalOutboxId, /^terminal-outbox-r4-/, entry.name);
+    assert.equal(entry.runId, fixture.run, entry.name);
+    observedKinds.add(event.evidenceKind);
+    assert.equal(event.issueUrl, fixture.issue, entry.name);
+    assert.equal(event.safetyState.noLiveProviderSend, true, entry.name);
+    assert.equal(event.safetyState.terminalAck, "requires_operator_receipt", entry.name);
+    assert.equal(event.safetyState.providerSendIsReceiptEvidence, false, entry.name);
+    assert.equal(event.status, entry.expected.status, entry.name);
+    assert.equal(event.evidenceKind, entry.expected.evidenceKind, entry.name);
+    assert.equal(decision.acknowledged, entry.expected.acknowledged, entry.name);
+    assert.equal(decision.cursorComplete, entry.expected.cursorComplete, entry.name);
+
+    if (entry.providerSendSuccessOnly) {
+      assert.equal(decision.reason, "operator-visible receipt required before terminal ack", entry.name);
+      assert.equal(decision.receipt, undefined, entry.name);
+    }
+  }
+
+  for (const kind of fixture.canonicalCloseout.allowedEvidenceKinds) {
+    assert.ok(observedKinds.has(kind), `missing canonical evidence kind ${kind}`);
+  }
+
+  const serialized = JSON.stringify(fixture.cases.map((entry) => {
+    const event = buildTerminalEvidenceEvent(
+      parseRunnerOutput(JSON.stringify(entry.runnerOutput)),
+      entry.handlerTask,
+      fixture.worker,
+      fixture.emittedAt,
+    );
+    const decision = buildTerminalAckDecision(event, entry.receipt);
+    return { event, decision };
+  }));
+  for (const forbidden of fixture.mustNotContain) {
+    assert.ok(!serialized.includes(forbidden), `R4 terminal receipt fixture leaked forbidden value: ${forbidden}`);
+  }
+});
+
+test("R4 canonical Terminal Brief receipt smoke script emits safe artifacts", () => {
+  const output = execFileSync(process.execPath, ["scripts/terminal-brief-receipt-r4-smoke.mjs"], {
+    cwd: new URL("..", import.meta.url),
+    encoding: "utf8",
+  });
+  const result = JSON.parse(output) as {
+    ok: boolean;
+    noLiveProviderSend: boolean;
+    terminalOutboxAckPerformed: boolean;
+    providerSendSuccessIsReceiptEvidence: boolean;
+    artifacts: Array<{ taskId: string; terminalOutboxId: string; runId: string; status: string; testSummary: object }>;
+  };
+
+  assert.equal(result.ok, true);
+  assert.equal(result.noLiveProviderSend, true);
+  assert.equal(result.terminalOutboxAckPerformed, false);
+  assert.equal(result.providerSendSuccessIsReceiptEvidence, false);
+  assert.equal(result.artifacts.length, 4);
+  assert.ok(result.artifacts.every((entry) => entry.taskId && entry.terminalOutboxId && entry.runId && entry.status && entry.testSummary));
 });
 
 test("public demo artifact fixtures pass the no-live safety audit", () => {

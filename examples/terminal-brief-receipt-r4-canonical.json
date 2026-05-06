@@ -1,0 +1,247 @@
+{
+  "$schema": "a2a-runner-terminal-brief-receipt-r4-canonical-v1",
+  "description": "R4 canonical Terminal Brief receipt fixture. Synthetic only: validates PR/Done/Block terminal evidence plus provider-send-only rejection without live Telegram/provider sends, terminal-outbox ACKs, deploys, restarts, DB writes, tokens, raw logs, or private paths.",
+  "run": "terminal-brief-receipt-r4-canonical-20260506T004710Z",
+  "issue": "https://github.com/jinwon-int/a2a-docker-runner/issues/154",
+  "parent": "https://github.com/jinwon-int/a2a-broker/issues/383",
+  "worker": "nosuk",
+  "emittedAt": "2026-05-06T00:47:10.000Z",
+  "canonicalCloseout": {
+    "allowedEvidenceKinds": [
+      "PR",
+      "Done",
+      "Block"
+    ],
+    "terminalAckRequiresOperatorVisibleReceipt": true,
+    "providerSendSuccessIsReceiptEvidence": false,
+    "noLiveProviderSend": true,
+    "terminalOutboxAckPerformed": false
+  },
+  "cases": [
+    {
+      "name": "canonical PR evidence requires receipt before ACK",
+      "handlerTask": {
+        "id": "r4-canonical-pr-154",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "154",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/154",
+          "title": "Terminal Brief receipt R4 canonical proof",
+          "focus": "Prove canonical PR evidence waits for operator-visible receipt before terminal ACK."
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "r4-canonical-pr-154",
+        "status": "completed",
+        "workDir": "/synthetic/r4/not-forwarded/pr",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "synthetic raw stdout omitted from terminal brief",
+        "stderr": "",
+        "artifacts": [
+          "artifacts/summary.txt"
+        ],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "r4 canonical PR fixture passed",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 1,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/154"
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-sse",
+        "receiptId": "receipt-r4-pr-154",
+        "deliveredAt": "2026-05-06T00:47:11.000Z"
+      },
+      "expected": {
+        "evidenceKind": "PR",
+        "status": "succeeded",
+        "acknowledged": true,
+        "cursorComplete": true
+      },
+      "terminalOutboxId": "terminal-outbox-r4-pr-154",
+      "runId": "terminal-brief-receipt-r4-canonical-20260506T004710Z"
+    },
+    {
+      "name": "canonical Done evidence requires receipt before ACK",
+      "handlerTask": {
+        "id": "r4-canonical-done-154",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/154",
+          "commentOnly": true,
+          "title": "Terminal Brief receipt R4 canonical proof"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "r4-canonical-done-154",
+        "status": "completed",
+        "workDir": "/synthetic/r4/not-forwarded/done",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "synthetic done stdout omitted",
+        "stderr": "",
+        "artifacts": [],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "comment-only done evidence posted",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 0,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "doneCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/154#issuecomment-r4-done"
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-webhook",
+        "receiptId": "receipt-r4-done-154",
+        "url": "https://broker.example.invalid/receipts/receipt-r4-done-154"
+      },
+      "expected": {
+        "evidenceKind": "Done",
+        "status": "succeeded",
+        "acknowledged": true,
+        "cursorComplete": true
+      },
+      "terminalOutboxId": "terminal-outbox-r4-done-154",
+      "runId": "terminal-brief-receipt-r4-canonical-20260506T004710Z"
+    },
+    {
+      "name": "canonical Block evidence requires receipt before ACK",
+      "handlerTask": {
+        "id": "r4-canonical-block-154",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "154",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/154"
+        }
+      },
+      "runnerOutput": {
+        "ok": false,
+        "taskId": "r4-canonical-block-154",
+        "status": "failed",
+        "workDir": "/synthetic/r4/not-forwarded/block",
+        "exitCode": 1,
+        "signal": null,
+        "stdout": "",
+        "stderr": "synthetic blocked stderr omitted",
+        "artifacts": [
+          "artifacts/block.txt"
+        ],
+        "resultSummary": {
+          "exitCode": 1,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "",
+          "stderr": "blocked safely for R4 fixture",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 1,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "blockCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/154#issuecomment-r4-block"
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-sse",
+        "receiptId": "receipt-r4-block-154"
+      },
+      "expected": {
+        "evidenceKind": "Block",
+        "status": "blocked",
+        "acknowledged": true,
+        "cursorComplete": true
+      },
+      "terminalOutboxId": "terminal-outbox-r4-block-154",
+      "runId": "terminal-brief-receipt-r4-canonical-20260506T004710Z"
+    },
+    {
+      "name": "provider send success alone is not ACK evidence",
+      "providerSendSuccessOnly": true,
+      "handlerTask": {
+        "id": "r4-canonical-send-only-154",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "154",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/154"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "r4-canonical-send-only-154",
+        "status": "completed",
+        "workDir": "/synthetic/r4/not-forwarded/send-only",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "provider send ok, but no operator-visible receipt exists",
+        "stderr": "",
+        "artifacts": [],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "provider send ok only",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 0,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/154"
+        }
+      },
+      "receipt": {
+        "operatorVisible": false,
+        "channel": "telegram"
+      },
+      "expected": {
+        "evidenceKind": "PR",
+        "status": "succeeded",
+        "acknowledged": false,
+        "cursorComplete": false
+      },
+      "terminalOutboxId": "terminal-outbox-r4-send-only-154",
+      "runId": "terminal-brief-receipt-r4-canonical-20260506T004710Z"
+    }
+  ],
+  "mustNotContain": [
+    "Authorization",
+    "Bearer",
+    "x-access-token",
+    "ghp_",
+    "github_pat_",
+    "/root/",
+    "/home/",
+    "/synthetic/r4/not-forwarded",
+    "synthetic raw stdout",
+    "synthetic blocked stderr"
+  ]
+}
