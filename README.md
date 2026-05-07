@@ -75,6 +75,15 @@ node dist/cli.js run examples/task.github-propose-patch.json
 node dist/cli.js run examples/task.openclaw-plugin-a2a.json
 ```
 
+### Public quickstart safety
+
+Public/demo setups should start from the least-privilege path:
+
+- Use a GitHub token limited to the target repository and required PR/comment scopes; do not reuse an operator's broad personal token.
+- Keep tokens and agent auth in environment variables or read-only secret mounts. Do not put token values in task payloads, examples, prompts, artifacts, or GitHub comments.
+- Treat `A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE=openclaw`, host OpenClaw config mounts, and any host-network Docker/Podman mode as operator-only trusted-worker features, not casual public defaults.
+- Use neutral placeholder paths in docs and fixtures, for example `/secure/operator/openclaw-config`, instead of real workstation or server home directories.
+
 ## Canonical A2A Task Format
 
 The full `github-propose-patch` mode task accepts:
@@ -414,7 +423,7 @@ Precedence is `commandScript > commandJson > commandProfile > commandTemplate`:
 |---|---|---|---|
 | `A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT` | `commandScript` | `/work/patch-command.sh` | Recommended. Script content is written to a file and executed without `eval`. |
 | `A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON` | `commandJson` | `/work/patch-command.sh` | JSON `{ "argv": [...], "env": {...} }` is converted into a quoted argv script. |
-| `A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE=openclaw` | generated `commandScript` | `/work/patch-command.sh` | First-class OpenClaw profile. Mounts `A2A_DOCKER_RUNNER_OPENCLAW_CONFIG_DIR` or `/root/.openclaw` read-only at `/run/secrets/openclaw-dir`, then runs `openclaw agent` in the checked-out repo. Defaults to `A2A_OPENCLAW_MODEL=openai-codex/gpt-5.5` so OAuth-backed Codex auth is used instead of same-name OpenAI API-key models. |
+| `A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE=openclaw` | generated `commandScript` | `/work/patch-command.sh` | Operator-only trusted-worker profile. Mounts `A2A_DOCKER_RUNNER_OPENCLAW_CONFIG_DIR` (or the profile default when unset) read-only at `/run/secrets/openclaw-dir`, then runs `openclaw agent` in the checked-out repo. Defaults to `A2A_OPENCLAW_MODEL=openai-codex/gpt-5.5` so OAuth-backed Codex auth is used instead of same-name OpenAI API-key models. Do not present this profile or host-network mode as a public sandbox default. |
 | `A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE` | `commandTemplate` | blocked | Legacy eval path; rejected for GitHub patch execution. |
 
 Examples:
@@ -425,9 +434,10 @@ codex exec --full-auto "$(cat /work/artifacts/prompt.md)"'
 
 export A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON='{"argv":["codex","exec","--full-auto","example prompt"],"env":{"SAFE":"value"}}'
 
-# Preferred fleet default when standardising A2A Docker patch execution on OpenClaw.
+# Trusted-worker/operator example when standardising A2A Docker patch execution on OpenClaw.
+# Use a minimal read-only auth directory, not a full workstation OpenClaw home.
 export A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE=openclaw
-export A2A_DOCKER_RUNNER_OPENCLAW_CONFIG_DIR=/root/.openclaw
+export A2A_DOCKER_RUNNER_OPENCLAW_CONFIG_DIR=/secure/operator/openclaw-config
 export A2A_OPENCLAW_MODEL=openai-codex/gpt-5.5
 export A2A_OPENCLAW_THINKING=medium
 export A2A_OPENCLAW_TIMEOUT_SEC=1800
@@ -453,9 +463,10 @@ production fallback to Claude-in-Docker.
 A safe Docker-first worker rollout from plugin-only routing to all-GitHub routing should therefore be:
 
 ```bash
-# 1. Configure one of the safe command paths on the worker host.
+# 1. Configure one of the safe command paths on the trusted worker host.
+# OpenClaw profile use is operator-only; mount a minimal read-only auth directory.
 export A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE=openclaw
-export A2A_DOCKER_RUNNER_OPENCLAW_CONFIG_DIR=/root/.openclaw
+export A2A_DOCKER_RUNNER_OPENCLAW_CONFIG_DIR=/secure/operator/openclaw-config
 export A2A_OPENCLAW_MODEL=openai-codex/gpt-5.5
 export A2A_OPENCLAW_THINKING=medium
 export A2A_OPENCLAW_TIMEOUT_SEC=1800
@@ -496,7 +507,7 @@ The checklist covers:
 
 ## Security model
 
-Do not mount the full host `/root/.openclaw` into task containers. Mount only the minimum required secrets, preferably read-only, and prefer per-task or least-privilege GitHub credentials.
+Do not mount a full host OpenClaw home into task containers. Mount only the minimum required secrets, preferably read-only, and prefer per-task or least-privilege GitHub credentials. Public examples must use placeholders instead of real local auth-file paths and must never place token values in payloads.
 
 ## Integration target
 
