@@ -455,7 +455,7 @@ function bootstrapPostGuardScript(): string {
   return `# Post-PR bootstrap guard: check for leaked workspace files after patch commands.
 # These are prompt/runtime context files, never repository artifacts.
 # Parent: a2a-broker#446
-for repo_dir in /work/repo /work/*/repo 2>/dev/null; do
+for repo_dir in /work/repo /work/*/repo; do
   if [ -d "$repo_dir/.git" ]; then
     bootstrap_leaks_post="$(cd "$repo_dir" && git status --porcelain -- .openclaw AGENTS.md BOOTSTRAP.md HEARTBEAT.md IDENTITY.md MEMORY.md SOUL.md TOOLS.md USER.md memory 2>/dev/null || true)"
     if [ -n "$bootstrap_leaks_post" ]; then
