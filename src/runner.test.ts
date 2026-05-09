@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildContainerScript, runTask } from "./runner.js";
@@ -368,6 +369,24 @@ test("bootstrap guard includes schema marker in output", () => {
   };
   const script = buildContainerScript(task);
   assert.ok(script.includes("a2a.runner.pre-pr-bootstrap-guard.v1"), "Expected schema version marker");
+});
+
+test("buildContainerScript output is valid bash syntax with post-bootstrap guard", () => {
+  const task: NormalizedRunnerTask = {
+    id: "syntax-guard",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repos: [{ url: "jinwon-int/test-repo", path: "repo" }],
+    commands: ["printf 'ok\\n'"],
+  };
+  const dir = mkdtempSync(join(tmpdir(), "a2a-runner-script-syntax-"));
+  const scriptPath = join(dir, "run.sh");
+  try {
+    writeFileSync(scriptPath, buildContainerScript(task));
+    execFileSync("bash", ["-n", scriptPath]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("buildContainerScript guard references parent issue a2a-broker#446", () => {
