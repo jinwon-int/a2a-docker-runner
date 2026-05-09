@@ -107,6 +107,9 @@ test("loadConfig OpenClaw patch profile honors custom model", async () => {
   });
 
   assert.match(config.commandScript ?? "", /--model 'zai\/glm-5\.1'/);
+  assert.match(config.commandScript ?? "", /export A2A_OPENCLAW_MODEL='zai\/glm-5\.1'/);
+  assert.match(config.commandScript ?? "", /const selectedModel = process\.env\.A2A_OPENCLAW_MODEL/);
+  assert.match(config.commandScript ?? "", /selectedProvider/);
 });
 
 test("loadConfig honors explicit Docker network override", async () => {

@@ -177,6 +177,7 @@ function buildOpenClawPatchCommandScript(env: NodeJS.ProcessEnv): string {
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 export OPENCLAW_DISABLE_BUNDLED_PLUGINS=${disableBundledPlugins}
+export A2A_OPENCLAW_MODEL=${model}
 
 if [ ! -d /run/secrets/openclaw-dir ]; then
   printf 'error=openclaw_config_mount_missing\\n' | tee -a /work/artifacts/summary.txt
@@ -238,9 +239,17 @@ delete config.cron;
 delete config.bindings;
 delete config.hooks;
 
+const selectedModel = process.env.A2A_OPENCLAW_MODEL || "openai-codex/gpt-5.5";
+const selectedProvider = selectedModel.includes("/") ? selectedModel.split("/")[0] : "";
 const providers = config.models?.providers;
-if (providers && typeof providers === "object" && providers["openai-codex"]) {
-  config.models.providers = { "openai-codex": providers["openai-codex"] };
+if (providers && typeof providers === "object") {
+  const preservedProviders = {};
+  for (const providerId of ["openai-codex", selectedProvider]) {
+    if (providerId && providers[providerId]) preservedProviders[providerId] = providers[providerId];
+  }
+  if (Object.keys(preservedProviders).length > 0) {
+    config.models.providers = preservedProviders;
+  }
 }
 
 const defaults = config.agents?.defaults;
@@ -250,7 +259,7 @@ if (defaults && typeof defaults === "object") {
     delete defaults.agentRuntime.fallback;
   }
   if (defaults.model && typeof defaults.model === "object") {
-    defaults.model.primary = "openai-codex/gpt-5.5";
+    defaults.model.primary = selectedModel;
     defaults.model.fallbacks = [];
   }
   delete defaults.models;
@@ -266,7 +275,7 @@ if (Array.isArray(agentList)) {
     }
     delete entry.models;
     if (entry.model && typeof entry.model === "object") {
-      entry.model.primary = "openai-codex/gpt-5.5";
+      entry.model.primary = selectedModel;
       entry.model.fallbacks = [];
     }
   }
