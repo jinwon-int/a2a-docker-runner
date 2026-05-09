@@ -315,6 +315,74 @@ test("buildContainerScript provisions latest-capable gh and update-branch fallba
 });
 
 // ---------------------------------------------------------------------------
+// pre-pr-bootstrap-guard
+// ---------------------------------------------------------------------------
+
+test("bootstrap guard script is included when repos are configured", () => {
+  const task: NormalizedRunnerTask = {
+    id: "bootstrap-guard",
+    intent: "propose_patch",
+    repos: [{ url: "jinwon-int/test-repo", path: "repo" }],
+    commands: [],
+  };
+  const script = buildContainerScript(task);
+  assert.ok(script.includes("bootstrap_guard="), "Expected bootstrap guard output marker");
+  assert.ok(script.includes("bootstrap_guard=ok"), "Expected bootstrap guard ok on clean checkout");
+  assert.ok(script.includes("AGENTS.md"), "Expected banned files list");
+  assert.ok(script.includes("SOUL.md"), "Expected banned soul file");
+  assert.ok(script.includes(".openclaw"), "Expected banned .openclaw dir");
+  assert.ok(script.includes("a2a-broker#446"), "Expected parent issue reference");
+});
+
+test("bootstrap guard blocks when banned files are present (pre-check)", () => {
+  const task: NormalizedRunnerTask = {
+    id: "bootstrap-guard",
+    intent: "propose_patch",
+    repos: [{ url: "jinwon-int/test-repo", path: "repo" }],
+    commands: [],
+  };
+  const script = buildContainerScript(task);
+  assert.ok(script.includes("exit 4"), "Expected exit 4 on bootstrap leak detection");
+  assert.ok(script.includes("error=pre_pr_bootstrap_guard_blocked"), "Expected blocked error marker");
+  assert.ok(script.includes("Offending paths:"), "Expected offending paths report");
+});
+
+test("bootstrap guard skips pre-check when no repos", () => {
+  const task: NormalizedRunnerTask = {
+    id: "no-repos",
+    intent: "propose_patch",
+    repos: [],
+    commands: [],
+  };
+  const script = buildContainerScript(task);
+  // Pre-check guard function returns empty for no repos, but post-guard is always included
+  assert.ok(script.includes("bootstrap_leaks_post"), "Expected post-guard even without repos");
+});
+
+test("bootstrap guard includes schema marker in output", () => {
+  const task: NormalizedRunnerTask = {
+    id: "schema-guard",
+    intent: "propose_patch",
+    repos: [{ url: "jinwon-int/test-repo", path: "repo" }],
+    commands: [],
+  };
+  const script = buildContainerScript(task);
+  assert.ok(script.includes("a2a.runner.pre-pr-bootstrap-guard.v1"), "Expected schema version marker");
+});
+
+test("buildContainerScript guard references parent issue a2a-broker#446", () => {
+  const task: NormalizedRunnerTask = {
+    id: "parent-ref",
+    intent: "propose_patch",
+    repos: [{ url: "jinwon-int/test-repo", path: "repo" }],
+    commands: [],
+  };
+  const script = buildContainerScript(task);
+  const matches = (script.match(/a2a-broker#446/g) || []).length;
+  assert.ok(matches >= 2, `Expected at least 2 references to a2a-broker#446 (pre + post), got ${matches}`);
+});
+
+// ---------------------------------------------------------------------------
 // error handling: invalid commands
 // ---------------------------------------------------------------------------
 
