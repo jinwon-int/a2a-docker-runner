@@ -282,7 +282,7 @@ ${checkoutReposScript(task)}
 ${bootstrapGuardScript(task)}
 cat /work/task.json > /work/artifacts/task.json
 ${runCommandsScript(task)}
-${bootstrapPostGuardScript()}
+${bootstrapPostGuardScript(task)}
 printf 'status=completed\n' | tee -a /work/artifacts/summary.txt
 `;
 }
@@ -418,28 +418,42 @@ function bootstrapGuardScript(task: NormalizedRunnerTask): string {
 # Parent: a2a-broker#446
 BOOTSTRAP_BANNED="AGENTS.md BOOTSTRAP.md HEARTBEAT.md IDENTITY.md MEMORY.md SOUL.md TOOLS.md USER.md"
 BOOTSTRAP_BANNED_DIRS=".openclaw memory"
-bootstrap_leaks_pre=""
+find_bootstrap_leaks() {
+  repo_dir="$1"
+  (
+    cd "$repo_dir"
+    for name in $BOOTSTRAP_BANNED; do
+      if [ -e "$name" ]; then
+        printf '%s\\n' "$name"
+      fi
+    done
+    for name in $BOOTSTRAP_BANNED_DIRS; do
+      if [ -d "$name" ]; then
+        found=0
+        while IFS= read -r path; do
+          found=1
+          printf '%s\\n' "\${path#./}"
+        done < <(find "$name" -mindepth 1 -print | sort)
+        if [ "$found" -eq 0 ]; then
+          printf '%s\\n' "$name"
+        fi
+      fi
+    done
+  )
+}
 for repo_dir in ${repoList}; do
-  for name in $BOOTSTRAP_BANNED; do
-    if [ -f "$repo_dir/$name" ]; then
-      bootstrap_leaks_pre="$bootstrap_leaks_pre\\n  $repo_dir/$name"
-    fi
-  done
-  for name in $BOOTSTRAP_BANNED_DIRS; do
-    if [ -d "$repo_dir/$name" ]; then
-      bootstrap_leaks_pre="$bootstrap_leaks_pre\\n  $repo_dir/$name/"
-    fi
-  done
+  bootstrap_leaks_pre="$(find_bootstrap_leaks "$repo_dir")"
+  if [ -n "$bootstrap_leaks_pre" ]; then
+    printf 'error=pre_pr_bootstrap_guard_blocked\\n' | tee -a /work/artifacts/summary.txt
+    printf 'PR blocked: OpenClaw bootstrap context files found in repository checkout.\\n' | tee /work/artifacts/patch-command.log
+    printf 'Parent: a2a-broker#446\\n' | tee -a /work/artifacts/patch-command.log
+    printf 'Files detected in %s (repo-relative):\\n' "$repo_dir" | tee -a /work/artifacts/patch-command.log
+    printf '%s\\n' "$bootstrap_leaks_pre" | tee -a /work/artifacts/patch-command.log
+    printf 'bootstrap_guard=blocked\\n' >> /work/artifacts/summary.txt
+    printf 'guard_schema=a2a.runner.pre-pr-bootstrap-guard.v1\\n' >> /work/artifacts/summary.txt
+    exit 4
+  fi
 done
-if [ -n "$bootstrap_leaks_pre" ]; then
-  printf 'error=pre_pr_bootstrap_guard_blocked\\n' | tee -a /work/artifacts/summary.txt
-  printf 'PR blocked: OpenClaw bootstrap context files found in repository checkout.\\n' | tee /work/artifacts/patch-command.log
-  printf 'Parent: a2a-broker#446\\n' | tee -a /work/artifacts/patch-command.log
-  printf 'Offending paths:%s\\n' "$bootstrap_leaks_pre" | tee -a /work/artifacts/patch-command.log
-  printf 'bootstrap_guard=blocked\\n' >> /work/artifacts/summary.txt
-  printf 'guard_schema=a2a.runner.pre-pr-bootstrap-guard.v1\\n' >> /work/artifacts/summary.txt
-  exit 4
-fi
 printf 'bootstrap_guard=ok\\n' | tee -a /work/artifacts/summary.txt
 `;
 }
@@ -448,25 +462,56 @@ printf 'bootstrap_guard=ok\\n' | tee -a /work/artifacts/summary.txt
  * Post-command bootstrap guard: verify no bootstrap files leaked into the
  * repository checkout during patch execution.
  *
- * Unlike the pre-check this inspects git status to catch new untracked files
- * that weren't present at checkout time.
+ * Unlike the pre-check this runs after the patch command and checks every
+ * configured checkout path, including ignored files that git status may hide.
  */
-function bootstrapPostGuardScript(): string {
+function bootstrapPostGuardScript(task: NormalizedRunnerTask): string {
+  const repoPaths = task.repos.length
+    ? task.repos.map((repo) => shellQuote(`/work/${repo.path ?? "repo"}`))
+    : ["/work/repo", "/work/*/repo"];
+  const repoList = repoPaths.join(" ");
+
   return `# Post-PR bootstrap guard: check for leaked workspace files after patch commands.
 # These are prompt/runtime context files, never repository artifacts.
 # Parent: a2a-broker#446
-for repo_dir in /work/repo /work/*/repo; do
+BOOTSTRAP_BANNED="AGENTS.md BOOTSTRAP.md HEARTBEAT.md IDENTITY.md MEMORY.md SOUL.md TOOLS.md USER.md"
+BOOTSTRAP_BANNED_DIRS=".openclaw memory"
+if ! command -v find_bootstrap_leaks >/dev/null 2>&1; then
+  find_bootstrap_leaks() {
+    repo_dir="$1"
+    (
+      cd "$repo_dir"
+      for name in $BOOTSTRAP_BANNED; do
+        if [ -e "$name" ]; then
+          printf '%s\\n' "$name"
+        fi
+      done
+      for name in $BOOTSTRAP_BANNED_DIRS; do
+        if [ -d "$name" ]; then
+          found=0
+          while IFS= read -r path; do
+            found=1
+            printf '%s\\n' "\${path#./}"
+          done < <(find "$name" -mindepth 1 -print | sort)
+          if [ "$found" -eq 0 ]; then
+            printf '%s\\n' "$name"
+          fi
+        fi
+      done
+    )
+  }
+fi
+for repo_dir in ${repoList}; do
   if [ -d "$repo_dir/.git" ]; then
-    bootstrap_leaks_post="$(cd "$repo_dir" && git status --porcelain -- .openclaw AGENTS.md BOOTSTRAP.md HEARTBEAT.md IDENTITY.md MEMORY.md SOUL.md TOOLS.md USER.md memory 2>/dev/null || true)"
+    bootstrap_leaks_post="$(find_bootstrap_leaks "$repo_dir")"
     if [ -n "$bootstrap_leaks_post" ]; then
       printf 'error=post_pr_bootstrap_guard_leak\\n' | tee -a /work/artifacts/summary.txt
       printf 'PR blocked: OpenClaw bootstrap context files leaked into repository during patch execution.\\n' | tee -a /work/artifacts/patch-command.log
       printf 'Parent: a2a-broker#446\\n' | tee -a /work/artifacts/patch-command.log
-      printf 'Files detected in %s:\\n' "$repo_dir" | tee -a /work/artifacts/patch-command.log
+      printf 'Files detected in %s (repo-relative):\\n' "$repo_dir" | tee -a /work/artifacts/patch-command.log
       printf '%s\\n' "$bootstrap_leaks_post" | tee -a /work/artifacts/patch-command.log
       exit 4
     fi
-    break
   fi
 done
 `;

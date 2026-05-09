@@ -345,7 +345,24 @@ test("bootstrap guard blocks when banned files are present (pre-check)", () => {
   const script = buildContainerScript(task);
   assert.ok(script.includes("exit 4"), "Expected exit 4 on bootstrap leak detection");
   assert.ok(script.includes("error=pre_pr_bootstrap_guard_blocked"), "Expected blocked error marker");
-  assert.ok(script.includes("Offending paths:"), "Expected offending paths report");
+  assert.ok(script.includes("Files detected in %s (repo-relative):"), "Expected repo-relative offending paths report");
+  assert.ok(!script.includes("$repo_dir/$name"), "Guard evidence must not report absolute checkout paths as offending paths");
+});
+
+test("bootstrap post-guard checks every configured repo path", () => {
+  const task: NormalizedRunnerTask = {
+    id: "bootstrap-guard-multi-repo",
+    intent: "propose_patch",
+    repos: [
+      { url: "jinwon-int/primary", path: "primary" },
+      { url: "jinwon-int/secondary", path: "secondary" },
+    ],
+    commands: [],
+  };
+  const script = buildContainerScript(task);
+  assert.ok(script.includes("for repo_dir in '/work/primary' '/work/secondary'; do"), "Expected post-guard to inspect all task repo checkouts");
+  assert.ok(script.includes("find_bootstrap_leaks \"$repo_dir\""), "Expected post-guard to use the same ignored-file-aware scanner");
+  assert.ok(script.includes("${path#./}"), "Expected repo-relative paths for .openclaw/** and memory/** entries");
 });
 
 test("bootstrap guard skips pre-check when no repos", () => {
