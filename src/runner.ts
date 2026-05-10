@@ -40,6 +40,7 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
   const timeoutMs = normalizedTask.timeoutMs ?? config.defaultTimeoutMs;
   const engine = config.engine ?? "docker";
   const completed = await spawnWithTimeout(engine, args, timeoutMs);
+  await writeSanitizedTaskArtifact(workDir, normalizedTask);
   const artifacts = await listArtifacts(workDir);
   const stdout = redactAndBound(completed.stdout);
   const stderr = redactAndBound(completed.stderr);
@@ -283,7 +284,15 @@ ${installGhUpdateBranchFallbackScript()}
 ${githubAuthScript()}
 ${checkoutReposScript(task)}
 ${bootstrapGuardScript(task)}
-cat /work/task.json > /work/artifacts/task.json
+redact_task_artifact() {
+  sed -E \
+    -e 's#gh[pousr]_[A-Za-z0-9_]{20,}#<redacted-github-token>#g' \
+    -e 's#github_pat_[A-Za-z0-9_]{20,}#<redacted-github-token>#g' \
+    -e 's#x-access-token:[^@[:space:]]+@github\.com#x-access-token:<redacted>@github.com#g' \
+    -e 's#("[^"]*(GH_TOKEN|GITHUB_TOKEN|NPM_TOKEN|A2A_TOKEN|[Tt][Oo][Kk][Ee][Nn]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy])[^"]*"[[:space:]]*:[[:space:]]*")[^"]*"#\\1<redacted>"#g' \
+    /work/task.json > /work/artifacts/task.json
+}
+redact_task_artifact
 ${runCommandsScript(task)}
 ${bootstrapPostGuardScript(task)}
 printf 'status=completed\n' | tee -a /work/artifacts/summary.txt
@@ -450,7 +459,9 @@ for repo_dir in ${repoList}; do
     printf 'error=pre_pr_bootstrap_guard_blocked\\n' | tee -a /work/artifacts/summary.txt
     printf 'PR blocked: OpenClaw bootstrap context files found in repository checkout.\\n' | tee /work/artifacts/patch-command.log
     printf 'Parent: a2a-broker#446\\n' | tee -a /work/artifacts/patch-command.log
-    printf 'Files detected in %s (repo-relative):\\n' "$repo_dir" | tee -a /work/artifacts/patch-command.log
+    repo_label="\${repo_dir#/work/}"
+    printf 'Repository checkout: %s\\n' "$repo_label" | tee -a /work/artifacts/patch-command.log
+    printf 'Files detected (repo-relative):\\n' | tee -a /work/artifacts/patch-command.log
     printf '%s\\n' "$bootstrap_leaks_pre" | tee -a /work/artifacts/patch-command.log
     printf 'bootstrap_guard=blocked\\n' >> /work/artifacts/summary.txt
     printf 'guard_schema=a2a.runner.pre-pr-bootstrap-guard.v1\\n' >> /work/artifacts/summary.txt
@@ -511,7 +522,9 @@ for repo_dir in ${repoList}; do
       printf 'error=post_pr_bootstrap_guard_leak\\n' | tee -a /work/artifacts/summary.txt
       printf 'PR blocked: OpenClaw bootstrap context files leaked into repository during patch execution.\\n' | tee -a /work/artifacts/patch-command.log
       printf 'Parent: a2a-broker#446\\n' | tee -a /work/artifacts/patch-command.log
-      printf 'Files detected in %s (repo-relative):\\n' "$repo_dir" | tee -a /work/artifacts/patch-command.log
+      repo_label="\${repo_dir#/work/}"
+      printf 'Repository checkout: %s\\n' "$repo_label" | tee -a /work/artifacts/patch-command.log
+      printf 'Files detected (repo-relative):\\n' | tee -a /work/artifacts/patch-command.log
       printf '%s\\n' "$bootstrap_leaks_post" | tee -a /work/artifacts/patch-command.log
       exit 4
     fi
@@ -616,6 +629,34 @@ export function redactAndBound(value: string, limit = RESULT_STREAM_LIMIT): stri
   if (redacted.length <= limit) return redacted;
   const omitted = redacted.length - limit;
   return `${redacted.slice(0, limit)}\n<truncated ${omitted} chars>`;
+}
+
+export function sanitizeTaskArtifactPayload(value: unknown, fieldName?: string): unknown {
+  if (isSensitiveFieldName(fieldName)) return "<redacted>";
+  if (typeof value === "string") {
+    return redactSecrets(value);
+  }
+  if (Array.isArray(value)) return value.map((entry) => sanitizeTaskArtifactPayload(entry, fieldName));
+  if (!value || typeof value !== "object") return value;
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+      key,
+      sanitizeTaskArtifactPayload(entry, key),
+    ]),
+  );
+}
+
+function isSensitiveFieldName(fieldName: string | undefined): boolean {
+  return Boolean(fieldName && /(?:token|password|secret|api[_-]?key|authorization|credential|oauth)/i.test(fieldName));
+}
+
+async function writeSanitizedTaskArtifact(workDir: string, task: NormalizedRunnerTask): Promise<void> {
+  await mkdir(join(workDir, "artifacts"), { recursive: true, mode: 0o700 });
+  await writeFile(
+    join(workDir, "artifacts", "task.json"),
+    `${JSON.stringify(sanitizeTaskArtifactPayload(task), null, 2)}\n`,
+  );
 }
 
 export function buildResultSummary(
