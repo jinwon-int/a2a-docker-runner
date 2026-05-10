@@ -1,7 +1,8 @@
 # A2A Docker Runner
 
-Docker/Podman task runner for OpenClaw A2A workers.
+[![CI](https://github.com/jinwon-int/a2a-docker-runner/actions/workflows/ci.yml/badge.svg)](https://github.com/jinwon-int/a2a-docker-runner/actions/workflows/ci.yml)
 
+Docker/Podman task runner for OpenClaw A2A workers.
 
 ## Repository role in the A2A layout
 
@@ -524,3 +525,49 @@ a2a-docker-runner run /path/to/task.json
 ```
 
 and convert the runner result into the normal A2A worker completion payload.
+
+## Related docs
+
+- [LICENSE](LICENSE) — MIT
+- [SECURITY.md](SECURITY.md) — vulnerability reporting and security model
+- [CONTRIBUTING.md](CONTRIBUTING.md) — development, gates, branching, PR process
+- [docs/design.md](docs/design.md) — component architecture and task lifecycle
+- [docs/integration.md](docs/integration.md) — handler integration and rollout
+- [docs/release-rollout-checklist.md](docs/release-rollout-checklist.md) — operator release and worker rollout
+- [docs/artifact-manifest.md](docs/artifact-manifest.md) — artifact manifest contract and evidence parts
+
+## Compatibility matrix
+
+| Component | Min version / expected | Notes |
+|---|---|---|
+| Node.js | >= 22 | Required runtime; CI uses Node 22 |
+| Docker Engine | 20.10+ | Primary container runtime (`--rm`, `--memory`, `--cpus`) |
+| Podman | 4.0+ | Alternative container runtime; `--replace` for cleanup |
+| GitHub CLI (`gh`) | 2.40+ | Required for `gh pr update-branch`; auto-installed from cli.github.com |
+| TypeScript | 5.8+ | Build toolchain (dev dependency) |
+| Ubuntu / Debian | 22.04+ (bookworm) | Base container image (`node:22-bookworm-slim`) |
+| GitHub Actions | `ubuntu-latest` | CI runner |
+
+## Known limitations
+
+- **Single-repo PRIMARY PATCH**: The `github-propose-patch` mode operates on one
+  primary repository per task. Multi-repo PR orchestration must be split into
+  separate tasks or implemented explicitly via `repos` and `commands`.
+- **No built-in coding agent**: The runner does not embed a coding agent. Patch
+  command configuration (`commandScript`, `commandJson`, or `commandProfile`)
+  must be provided by the operator.
+- **Operator-only trusted-worker features**: The `openclaw` command profile,
+  host-network Docker/Podman mode, and host OpenClaw config mounts are
+  operator-only features and should not be presented as public/sandbox defaults.
+- **Cleanup is TTL-based**: Container and work-directory cleanup is driven by a
+  configurable TTL via `a2a-docker-runner cleanup`. There is no automatic per-task
+  cleanup at task completion time; the operator should schedule cleanup or run it
+  after task bursts.
+- **No persistent worker state**: The runner is stateless between tasks. Task
+  history and retry state live in the broker, not in the runner.
+- **Budget-limited is not Done**: Tasks that hit CPU/RAM/time budgets are reported
+  as `budget_limited` or `failed`, not `done`. Continuation requires explicit
+  operator approval.
+- **No live Telegram/notifier send**: The runner produces compact terminal evidence
+  for the broker; actual notification delivery is owned by the broker/plugin-notifier,
+  not by this runner.
