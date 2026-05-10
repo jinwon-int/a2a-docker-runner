@@ -108,7 +108,9 @@ async function main() {
   const output = {
     schemaVersion: "a2a.runner.pre-pr-bootstrap-guard.v1",
     ok: offending.length === 0,
-    repoDir: absolute,
+    // Keep guard evidence source-public: report offending paths relative to the
+    // checkout, never host-specific absolute repository paths.
+    repo: ".",
     parent: "a2a-broker#446",
     ...(offending.length ? { offendingPaths: offending } : {}),
   };

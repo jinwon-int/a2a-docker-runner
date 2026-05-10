@@ -28,6 +28,9 @@ test("guard script passes on clean repo dir", () => {
     assert.equal(output.ok, true);
     assert.equal(output.schemaVersion, "a2a.runner.pre-pr-bootstrap-guard.v1");
     assert.equal(output.parent, "a2a-broker#446");
+    assert.equal(output.repo, ".");
+    assert.equal(output.repoDir, undefined);
+    assert.ok(!result.stdout.includes(dir), "guard evidence must not leak host-specific repo paths");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -48,6 +51,7 @@ test("guard script blocks on AGENTS.md", () => {
     const output = JSON.parse(result.stdout);
     assert.equal(output.ok, false);
     assert.ok(output.offendingPaths.includes("AGENTS.md"), `Expected AGENTS.md in offending paths, got: ${JSON.stringify(output.offendingPaths)}`);
+    assert.ok(!result.stdout.includes(dir), "guard evidence must report only repo-relative offending paths");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
