@@ -315,6 +315,22 @@ test("buildContainerScript provisions latest-capable gh and update-branch fallba
   assert.ok(script.includes("warning=gh_pr_update_branch_failed_using_git_fallback"), "Expected git fallback marker");
 });
 
+test("task artifact shell redactor includes API-key and prompt secret parity patterns", () => {
+  const task: NormalizedRunnerTask = {
+    id: "redaction-parity",
+    intent: "propose_patch",
+    repos: [],
+    commands: [],
+  };
+  const script = buildContainerScript(task);
+
+  assert.ok(script.includes("xai-[A-Za-z0-9_-]{40,}"), "Expected xAI key redaction in container artifact path");
+  assert.ok(script.includes("sm_[A-Za-z0-9_-]{40,}"), "Expected supermemory key redaction in container artifact path");
+  assert.ok(script.includes("sk-[A-Za-z0-9_-]{32,}"), "Expected OpenAI key redaction in container artifact path");
+  assert.ok(script.includes("Authorization:[[:space:]]*(Bearer|token)"), "Expected Authorization header redaction in container artifact path");
+  assert.ok(script.includes("((token|password|secret|api[_-]?key)=)"), "Expected prompt key=value secret redaction in container artifact path");
+});
+
 // ---------------------------------------------------------------------------
 // pre-pr-bootstrap-guard
 // ---------------------------------------------------------------------------
