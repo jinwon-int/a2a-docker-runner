@@ -72,7 +72,19 @@ export interface RunnerRepo {
 }
 
 /** GitHub-mode completion evidence produced by the executor contract. */
-export type GitHubEvidenceOutcome = "pr" | "done" | "block" | "budget_limited" | "timed_out" | "missing_evidence";
+export type GitHubEvidenceOutcome =
+  | "pr"
+  | "done"
+  | "block"
+  | "budget_limited"
+  | "timed_out"
+  | "missing_evidence"
+  /** Evidence-only / allowNoChanges task completed with Done evidence and no code diff. */
+  | "succeeded_no_changes_with_done_evidence"
+  /** Evidence-only / allowNoChanges task blocked with Block evidence and no code diff. */
+  | "blocked_no_changes_with_evidence"
+  /** Container/infrastructure failure (image pull, daemon, mount, etc.), not a no-change or patch failure. */
+  | "failed_infrastructure";
 
 export interface GitHubValidationSummary {
   status: RunnerResult["status"];
@@ -138,7 +150,7 @@ export interface RunnerEvidenceHints {
   blockUrl?: string;
   branch?: string;
   branchUrl?: string;
-  failureCategory?: GitHubEvidenceOutcome | "failed" | "exit_nonzero";
+  failureCategory?: GitHubEvidenceOutcome | "failed" | "exit_nonzero" | "no_changes_allowed";
 }
 
 export interface RunnerTask {
@@ -174,6 +186,9 @@ export interface RunnerTask {
   forbidNewPr?: boolean;
   /** When true, skip patch execution and finish with Done/Block comment-only evidence. */
   commentOnly?: boolean;
+  /** When true, the no-changes guard must not fail the task.
+   *  The runner accepts terminal evidence without PR for audit/preflight/libero lanes. */
+  allowNoChanges?: boolean;
   /** Safe broker/run identifier to carry into release-gate evidence when present. */
   runId?: string;
   /** Safe distributed trace identifier to carry into release-gate evidence when present. */

@@ -485,3 +485,76 @@ test("issue URL single quote is shell-escaped in gh issue comment (defensive met
     `Expected full POSIX-escaped URL in gh issue comment line, got: ${ghCommentLine}`,
   );
 });
+
+// ---------------------------------------------------------------------------
+// allowNoChanges: evidence-only / preflight lanes (a2a-docker-runner#169)
+// ---------------------------------------------------------------------------
+
+test("allowNoChanges: defaults to error+exit 2 when flag is absent", () => {
+  const task = normalizeTask({
+    id: "no-allow-flag",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repo: "jinwon-int/test-repo",
+    baseBranch: "main",
+    commands: [],
+  });
+
+  // Default patch commands are synthesized.  Sanity-check.
+  const pipeline = task.commands[1] ?? "";
+  assert.ok(pipeline.includes("error=no_changes_after_patch_command"), "Expected no-changes error marker when allowNoChanges is absent");
+  assert.ok(pipeline.includes("exit 2"), "Expected exit 2 when allowNoChanges is absent");
+  assert.ok(!pipeline.includes("status=no_changes_allowed"), "Must not emit no_changes_allowed when flag is absent");
+});
+
+test("allowNoChanges: exits cleanly with evidence marker when flag is set", () => {
+  const task = normalizeTask({
+    id: "evidence-only-lane",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repo: "jinwon-int/test-repo",
+    baseBranch: "main",
+    allowNoChanges: true,
+    commands: [],
+  });
+
+  const pipeline = task.commands[1] ?? "";
+  assert.ok(pipeline.includes("status=no_changes_allowed"), "Expected no_changes_allowed marker when allowNoChanges is true");
+  assert.ok(pipeline.includes("notice=no_code_changes_produced_evidence_only_lane"), "Expected notice for evidence-only lane");
+  assert.ok(!pipeline.includes("error=no_changes_after_patch_command"), "Must not emit error marker when allowNoChanges is true");
+  // When allowNoChanges is true, the no-changes else branch must output
+  // status=no_changes_allowed (not exit 2).  Other exit 2 calls for PR
+  // creation or start-comment failures are unrelated.
+  const noChangesIdx = pipeline.indexOf("status=no_changes_allowed");
+  assert.ok(noChangesIdx >= 0, "Expected status=no_changes_allowed marker");
+  // The exit 2 must not appear immediately after the no-changes-allowed branch
+  // (the default behavior is `exit 2` right after the else).
+  const snippetAfter = pipeline.slice(noChangesIdx, noChangesIdx + 200);
+  assert.ok(!snippetAfter.includes("exit 2"), "No exit 2 must follow status=no_changes_allowed in the no-changes branch");
+});
+
+test("allowNoChanges: explicit commands are not overridden", () => {
+  const task = normalizeTask({
+    id: "explicit-cmds",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repo: "jinwon-int/test-repo",
+    allowNoChanges: true,
+    commands: ["echo 'custom'", "printf 'done\\n'"],
+  });
+
+  // Explicit commands pass through; the default pipeline is NOT synthesized.
+  assert.deepStrictEqual(task.commands, ["echo 'custom'", "printf 'done\\n'"]);
+});
+
+test("allowNoChanges: flag is preserved through normalization", () => {
+  const task = normalizeTask({
+    id: "preserve-flag",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repo: "jinwon-int/test-repo",
+    allowNoChanges: true,
+    commands: [],
+  });
+  assert.equal(task.allowNoChanges, true);
+});
