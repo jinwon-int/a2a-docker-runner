@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { buildArtifactManifest, buildResultSummary, buildRunnerEvidenceHints, redactAndBound, RESULT_STREAM_LIMIT, sanitizeReceiptTrace } from "./runner.js";
+import { buildArtifactManifest, buildResultSummary, buildRunnerEvidenceHints, redactAndBound, RESULT_STREAM_LIMIT, sanitizeReceiptTrace, sanitizeTaskArtifactPayload } from "./runner.js";
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -62,6 +62,29 @@ test("redactAndBound redacts secret-like values and truncates large output", () 
   assert.ok(bounded.includes("password=<redacted>"));
   assert.ok(bounded.length < output.length);
   assert.match(bounded, /<truncated \d+ chars>/);
+});
+
+test("sanitizeTaskArtifactPayload redacts env secrets and secret-like prompt text", () => {
+  const syntheticSecret = "github" + "_pat" + "_" + "B".repeat(90);
+  const sanitized = sanitizeTaskArtifactPayload({
+    id: "task",
+    env: {
+      GH_TOKEN: "short-but-sensitive",
+      OPENAI_API_KEY: "also-sensitive",
+      SAFE_VALUE: "kept",
+    },
+    prompt: `please do work with token=${syntheticSecret}`,
+    credentials: { nested: "must not leak" },
+  }) as Record<string, unknown>;
+
+  const serialized = JSON.stringify(sanitized);
+  assert.ok(!serialized.includes("short-but-sensitive"));
+  assert.ok(!serialized.includes("also-sensitive"));
+  assert.ok(!serialized.includes(syntheticSecret));
+  assert.ok(!serialized.includes("must not leak"));
+  assert.ok(serialized.includes("SAFE_VALUE"));
+  assert.ok(serialized.includes("kept"));
+  assert.ok(serialized.includes("<redacted>"));
 });
 
 test("buildResultSummary is bounded payload-compatible while RunnerResult fields remain additive", async () => {

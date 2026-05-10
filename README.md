@@ -487,7 +487,7 @@ export A2A_DOCKER_RUNNER_ALL_GITHUB=1
 | `A2A_PATCH_COMMAND` | `A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE` host env |
 | `/usr/local/bin/a2a-gh-pr-update-branch` | Helper that wraps `gh pr update-branch` with a git merge/push fallback |
 | `/work/artifacts/prompt.md` | Task `prompt` field |
-| `/work/artifacts/task.json` | Full normalised task payload |
+| `/work/artifacts/task.json` | Public-safe normalised task payload with secret-like fields and token patterns redacted |
 | `/work/artifacts/manifest.json` | Versioned A2A Artifact/Part manifest; see [`docs/artifact-manifest.md`](docs/artifact-manifest.md) |
 
 **Explicit commands override**: when `commands` are provided in the task
