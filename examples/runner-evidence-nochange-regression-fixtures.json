@@ -1,0 +1,281 @@
+{
+  "schemaVersion": "a2a.runner.nochange-regression-fixtures.v1",
+  "run": "a2a-evidence-nochange-hardening-20260510T100150Z",
+  "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/170",
+  "coordinatesWith": "https://github.com/jinwon-int/a2a-docker-runner/issues/169",
+  "safetyState": {
+    "noProductionDeployOrRestart": true,
+    "noLiveProviderSend": true,
+    "terminalAck": "requires_operator_receipt",
+    "providerSendIsReceiptEvidence": false
+  },
+  "cases": [
+    {
+      "name": "no-change Done evidence is accepted as Done, not a runner failure",
+      "task": {
+        "id": "fixture-nochange-done-170",
+        "intent": "propose_patch",
+        "message": "Evidence-only readiness lane found no safe repository change was needed.",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/170",
+          "title": "Team2 runner regression fixtures for evidence-only and no-change tasks",
+          "focus": "no-change Done evidence",
+          "evidenceOnly": true,
+          "requestedBy": "jingun",
+          "runId": "a2a-evidence-nochange-hardening-20260510T100150Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "fixture-nochange-done-170",
+        "status": "completed",
+        "workDir": "/synthetic/a2a/nochange-done",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "status=no_changes\nvalidation=passed\n",
+        "stderr": "",
+        "artifacts": ["artifacts/summary.txt"],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "status=no_changes\nvalidation=passed\n",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 1,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "schemaVersion": "a2a.runner.github-evidence.v1",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "jinwon-int/a2a-docker-runner#170",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/170",
+          "taskId": "fixture-nochange-done-170",
+          "worker": "jingun",
+          "issueTitle": "Team2 runner regression fixtures for evidence-only and no-change tasks",
+          "taskBrief": "no-change Done evidence",
+          "outcome": "done",
+          "doneUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/170#issuecomment-fixture-done",
+          "doneCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/170#issuecomment-fixture-done",
+          "validation": {
+            "status": "completed",
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "artifactCount": 1,
+            "stdoutTruncated": false,
+            "stderrTruncated": false
+          },
+          "safetyState": {
+            "noLiveProviderSend": true,
+            "terminalAck": "requires_operator_receipt",
+            "providerSendIsReceiptEvidence": false
+          },
+          "runId": "a2a-evidence-nochange-hardening-20260510T100150Z"
+        }
+      },
+      "expected": {
+        "handlerStatus": "done",
+        "evidenceKind": "Done",
+        "terminalStatus": "succeeded",
+        "doneCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/170#issuecomment-fixture-done"
+      }
+    },
+    {
+      "name": "no-change Block evidence is preserved as Block, not misreported as an image failure",
+      "task": {
+        "id": "fixture-nochange-block-170",
+        "intent": "propose_patch",
+        "message": "Patch lane safely refused a false Done because no repository change was warranted.",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/170",
+          "title": "Team2 runner regression fixtures for evidence-only and no-change tasks",
+          "focus": "no-change Block evidence",
+          "requestedBy": "jingun",
+          "runId": "a2a-evidence-nochange-hardening-20260510T100150Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": false,
+        "taskId": "fixture-nochange-block-170",
+        "status": "failed",
+        "workDir": "/synthetic/a2a/nochange-block",
+        "exitCode": 2,
+        "signal": null,
+        "stdout": "error=no_changes_after_patch_command\nstatus=no_changes\n",
+        "stderr": "",
+        "artifacts": ["artifacts/summary.txt", "artifacts/patch-command.log"],
+        "resultSummary": {
+          "exitCode": 2,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "error=no_changes_after_patch_command\nstatus=no_changes\n",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 2,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "error": "no repository changes after patch command; Block evidence was posted to avoid false Done",
+        "github": {
+          "schemaVersion": "a2a.runner.github-evidence.v1",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "jinwon-int/a2a-docker-runner#170",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/170",
+          "taskId": "fixture-nochange-block-170",
+          "worker": "jingun",
+          "issueTitle": "Team2 runner regression fixtures for evidence-only and no-change tasks",
+          "taskBrief": "no-change Block evidence",
+          "outcome": "block",
+          "blockUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/170#issuecomment-fixture-block",
+          "blockCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/170#issuecomment-fixture-block",
+          "validation": {
+            "status": "failed",
+            "exitCode": 2,
+            "signal": null,
+            "timedOut": false,
+            "artifactCount": 2,
+            "stdoutTruncated": false,
+            "stderrTruncated": false
+          },
+          "safetyState": {
+            "noLiveProviderSend": true,
+            "terminalAck": "requires_operator_receipt",
+            "providerSendIsReceiptEvidence": false
+          },
+          "runId": "a2a-evidence-nochange-hardening-20260510T100150Z"
+        }
+      },
+      "expected": {
+        "handlerStatus": "blocked",
+        "evidenceKind": "Block",
+        "terminalStatus": "blocked",
+        "blockCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/170#issuecomment-fixture-block"
+      }
+    },
+    {
+      "name": "true image/container startup failure stays infrastructure failure without PR/Done/Block evidence",
+      "task": {
+        "id": "fixture-image-failure-170",
+        "intent": "propose_patch",
+        "message": "Container image pull/start failed before checkout or command execution.",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/170",
+          "title": "Team2 runner regression fixtures for evidence-only and no-change tasks",
+          "focus": "true image/container failure",
+          "requestedBy": "jingun",
+          "runId": "a2a-evidence-nochange-hardening-20260510T100150Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": false,
+        "taskId": "fixture-image-failure-170",
+        "status": "failed",
+        "workDir": "/synthetic/a2a/image-failure",
+        "exitCode": 125,
+        "signal": null,
+        "stdout": "",
+        "stderr": "Unable to find image 'ghcr.io/jinwon-int/a2a-docker-runner:missing' locally\nmanifest unknown: manifest unknown\n",
+        "artifacts": [],
+        "resultSummary": {
+          "exitCode": 125,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "",
+          "stderr": "Unable to find image 'ghcr.io/jinwon-int/a2a-docker-runner:missing' locally\nmanifest unknown: manifest unknown\n",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 0,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "error": "container image pull/start failed before checkout or command execution"
+      },
+      "expected": {
+        "handlerStatus": "blocked",
+        "evidenceKind": "MissingEvidence",
+        "terminalStatus": "failed"
+      }
+    },
+    {
+      "name": "PR-producing success remains PR evidence and wins over no-change paths",
+      "task": {
+        "id": "fixture-pr-success-170",
+        "intent": "propose_patch",
+        "message": "Patch lane created a branch and opened a pull request.",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/170",
+          "title": "Team2 runner regression fixtures for evidence-only and no-change tasks",
+          "focus": "PR-producing success",
+          "requestedBy": "jingun",
+          "runId": "a2a-evidence-nochange-hardening-20260510T100150Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "fixture-pr-success-170",
+        "status": "completed",
+        "workDir": "/synthetic/a2a/pr-success",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "branch=a2a-patch-fixture-pr-success\nPR created: https://github.com/jinwon-int/a2a-docker-runner/pull/1700\n",
+        "stderr": "",
+        "artifacts": ["artifacts/summary.txt", "artifacts/pr-output.txt"],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "branch=a2a-patch-fixture-pr-success\nPR created: https://github.com/jinwon-int/a2a-docker-runner/pull/1700\n",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 2,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/1700",
+        "github": {
+          "schemaVersion": "a2a.runner.github-evidence.v1",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "jinwon-int/a2a-docker-runner#170",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/170",
+          "taskId": "fixture-pr-success-170",
+          "worker": "jingun",
+          "issueTitle": "Team2 runner regression fixtures for evidence-only and no-change tasks",
+          "taskBrief": "PR-producing success",
+          "outcome": "pr",
+          "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/1700",
+          "validation": {
+            "status": "completed",
+            "exitCode": 0,
+            "signal": null,
+            "timedOut": false,
+            "artifactCount": 2,
+            "stdoutTruncated": false,
+            "stderrTruncated": false
+          },
+          "safetyState": {
+            "noLiveProviderSend": true,
+            "terminalAck": "requires_operator_receipt",
+            "providerSendIsReceiptEvidence": false
+          },
+          "runId": "a2a-evidence-nochange-hardening-20260510T100150Z",
+          "branch": "a2a-patch-fixture-pr-success"
+        }
+      },
+      "expected": {
+        "handlerStatus": "pr_opened",
+        "evidenceKind": "PR",
+        "terminalStatus": "succeeded",
+        "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/1700"
+      }
+    }
+  ]
+}
