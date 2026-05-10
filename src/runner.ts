@@ -288,7 +288,14 @@ redact_task_artifact() {
   sed -E \
     -e 's#gh[pousr]_[A-Za-z0-9_]{20,}#<redacted-github-token>#g' \
     -e 's#github_pat_[A-Za-z0-9_]{20,}#<redacted-github-token>#g' \
+    -e 's#xai-[A-Za-z0-9_-]{40,}#<redacted-api-key>#g' \
+    -e 's#sm_[A-Za-z0-9_-]{40,}#<redacted-api-key>#g' \
+    -e 's#sk-[A-Za-z0-9_-]{32,}#<redacted-api-key>#g' \
     -e 's#x-access-token:[^@[:space:]]+@github\.com#x-access-token:<redacted>@github.com#g' \
+    -e 's#(oauth_token:[[:space:]]*)[^[:space:]]+#\\1<redacted>#Ig' \
+    -e 's#(Authorization:[[:space:]]*(Bearer|token)[[:space:]]+)[^[:space:]]+#\\1<redacted>#Ig' \
+    -e 's#(gh auth login --with-token[[:space:]]+)[^[:space:]]+#\\1<redacted>#g' \
+    -e 's#((token|password|secret|api[_-]?key)=)[^[:space:]",}]+#\\1<redacted>#Ig' \
     -e 's#("[^"]*(GH_TOKEN|GITHUB_TOKEN|NPM_TOKEN|A2A_TOKEN|[Tt][Oo][Kk][Ee][Nn]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy])[^"]*"[[:space:]]*:[[:space:]]*")[^"]*"#\\1<redacted>"#g' \
     /work/task.json > /work/artifacts/task.json
 }

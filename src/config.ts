@@ -435,11 +435,40 @@ openclaw agent \\
 
 # Fail closed if the embedded agent left its workspace bootstrap/persona files
 # in the checkout. These files are prompt/runtime context, not repository
-# artifacts, and must never be swept into PRs by broad git-add behavior.
-bootstrap_leaks="$(git status --porcelain -- .openclaw AGENTS.md BOOTSTRAP.md HEARTBEAT.md IDENTITY.md MEMORY.md SOUL.md TOOLS.md USER.md memory 2>/dev/null | sed -n 's/^?? //p' || true)"
+# artifacts, and must never be swept into PRs by broad git-add behavior. Use
+# the same ignored-file-aware scanner shape as the runner pre/post guard rather
+# than git status, because workspace files may be covered by .gitignore.
+BOOTSTRAP_BANNED="AGENTS.md BOOTSTRAP.md HEARTBEAT.md IDENTITY.md MEMORY.md SOUL.md TOOLS.md USER.md"
+BOOTSTRAP_BANNED_DIRS=".openclaw memory"
+find_bootstrap_leaks() {
+  repo_dir="$1"
+  (
+    cd "$repo_dir"
+    for name in $BOOTSTRAP_BANNED; do
+      if [ -e "$name" ]; then
+        printf '%s\n' "$name"
+      fi
+    done
+    for name in $BOOTSTRAP_BANNED_DIRS; do
+      if [ -d "$name" ]; then
+        found=0
+        while IFS= read -r path; do
+          found=1
+          printf '%s\n' "\${path#./}"
+        done < <(find "$name" -mindepth 1 -print | sort)
+        if [ "$found" -eq 0 ]; then
+          printf '%s\n' "$name"
+        fi
+      fi
+    done
+  )
+}
+bootstrap_leaks="$(find_bootstrap_leaks . 2>/dev/null || true)"
 if [ -n "$bootstrap_leaks" ]; then
   printf 'error=openclaw_workspace_bootstrap_leak\n' | tee -a /work/artifacts/summary.txt
   printf 'OpenClaw workspace bootstrap artifacts appeared in the checkout; refusing to produce a PR with runtime context files.\n' | tee /work/artifacts/patch-command.log
+  printf 'Files detected (repo-relative):\n' | tee -a /work/artifacts/patch-command.log
+  printf '%s\n' "$bootstrap_leaks" | tee -a /work/artifacts/patch-command.log
   printf '%s\n' "$bootstrap_leaks" | sed 's#^#bootstrap_leak=#' >> /work/artifacts/summary.txt
   exit 4
 fi
