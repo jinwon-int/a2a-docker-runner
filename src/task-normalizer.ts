@@ -218,8 +218,15 @@ function buildDefaultPatchCommands(task: RunnerTask, primaryRepo: RunnerRepo): s
     `  fi`,
     issueCommentBlock,
     `else`,
-    `  printf 'error=no_changes_after_patch_command\\n' | tee -a /work/artifacts/summary.txt`,
-    `  exit 2`,
+    ...(task.allowNoChanges
+      ? [
+        `  printf 'status=no_changes_allowed\\n' | tee -a /work/artifacts/summary.txt`,
+        `  printf 'notice=no_code_changes_produced_evidence_only_lane\\n' | tee -a /work/artifacts/summary.txt`,
+      ]
+      : [
+        `  printf 'error=no_changes_after_patch_command\\n' | tee -a /work/artifacts/summary.txt`,
+        `  exit 2`,
+      ]),
     `fi`,
   ].join("\n");
 

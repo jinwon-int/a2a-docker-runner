@@ -133,6 +133,9 @@ export function buildRunnerEvidenceHints(task: NormalizedRunnerTask, result: Run
 
 function inferEvidenceFailureCategory(result: RunnerResult): RunnerEvidenceHints["failureCategory"] | undefined {
   const outcome = result.github?.outcome;
+  if (outcome === "succeeded_no_changes_with_done_evidence") return "no_changes_allowed";
+  if (outcome === "blocked_no_changes_with_evidence") return outcome;
+  if (outcome === "failed_infrastructure") return outcome;
   if (outcome === "block" || outcome === "budget_limited" || outcome === "timed_out" || outcome === "missing_evidence") return outcome;
   if (result.status === "timeout") return "timed_out";
   if (result.resultSummary?.status === "budget_limited" || result.artifactManifest?.status === "budget_limited") return "budget_limited";
@@ -856,7 +859,7 @@ async function writeArtifactManifest(workDir: string, manifest: ArtifactManifest
 }
 
 
-function buildActionableError(engine: string, image: string, completed: SpawnResult): string {
+export function buildActionableError(engine: string, image: string, completed: SpawnResult): string {
   const combined = redactSecrets([completed.stderr, completed.stdout].filter(Boolean).join("\n")).trim();
   if (completed.errorCode === "ENOENT") {
     return `${engine} 실행 파일을 찾을 수 없습니다. Docker 또는 Podman을 설치하거나 A2A_DOCKER_RUNNER_ENGINE을 사용 가능한 엔진으로 설정하세요.`;
@@ -867,8 +870,15 @@ function buildActionableError(engine: string, image: string, completed: SpawnRes
   if (/Conflict\.? The container name|container name .* is already in use|name is already in use|already exists/i.test(combined)) {
     return `컨테이너 이름 충돌이 발생했습니다. runner는 task id와 run token을 포함한 고유 이름을 사용하므로, 같은 safeTaskId를 가진 오래된 컨테이너가 남았는지 '${engine} ps -a --filter label=a2a.task.id=<safeTaskId>'로 확인하고 해당 run만 정리하세요.\n${combined}`.trim();
   }
-  if (/pull access denied|manifest unknown|not found|no such image|repository does not exist/i.test(combined)) {
-    return `이미지 '${image}'를 가져오거나 찾을 수 없습니다. 이미지 이름/태그와 registry 인증을 확인하세요.\n${combined}`.trim();
+  // Image-pull error detection: only inspect stderr for Docker/Podman engine
+  // errors.  Container-side command output (stdout) must not trigger a
+  // misleading image-pull summary when the container actually started.
+  // Parent: a2a-docker-runner#169
+  {
+    const engineStderr = redactSecrets(completed.stderr).trim();
+    if (/Error response from daemon:.*pull access denied|manifest for.*not found|no such image: |repository does not exist|unauthorized:/i.test(engineStderr)) {
+      return `이미지 '${image}'를 가져오거나 찾을 수 없습니다. 이미지 이름/태그와 registry 인증을 확인하세요.\n${combined}`.trim();
+    }
   }
   if (/mkdir .*permission denied|EACCES|EROFS|read-only file system|permission denied.*work/i.test(combined)) {
     return `작업 디렉터리 생성 또는 마운트 권한 문제가 감지되었습니다. rootDir 소유권/권한과 컨테이너 볼륨 마운트 정책을 확인하고, 같은 task id의 run 디렉터리가 동시에 사용 중인지 확인하세요.\n${combined}`.trim();

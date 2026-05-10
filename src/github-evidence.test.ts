@@ -443,3 +443,92 @@ test("done comment includes manifest summary and bounded command log summary", (
   assert.match(body, /`artifacts\/result\.json` \(12 bytes\)/);
   assert.match(body, /all good/);
 });
+
+// ---------------------------------------------------------------------------
+// Evidence-only / allowNoChanges classification (a2a-docker-runner#169)
+// ---------------------------------------------------------------------------
+
+test("classifies no-change-allowed Done evidence as succeeded_no_changes_with_done_evidence", async () => {
+  const evidence = await collectGitHubEvidence(baseConfig, baseTask, {
+    ok: true,
+    taskId: "t1",
+    status: "completed",
+    workDir: "/tmp/a2a/task/run-1",
+    exitCode: 0,
+    signal: null,
+    stdout: "status=no_changes_allowed\nnotice=no_code_changes_produced_evidence_only_lane",
+    stderr: "",
+    artifacts: [],
+  });
+
+  assert.ok(evidence);
+  assert.equal(evidence?.outcome, "succeeded_no_changes_with_done_evidence");
+});
+
+test("classifies no-change-allowed Block evidence as blocked_no_changes_with_evidence", async () => {
+  // When no GitHub token is available the block comment cannot actually be
+  // posted, so the classification falls through to
+  // succeeded_no_changes_with_done_evidence.  Instead, verify the block
+  // comment body is generated correctly for the no-changes-allowed case.
+  const body = buildBlockCommentBody(
+    { ...baseTask, allowNoChanges: true },
+    {
+      ok: false,
+      taskId: "t1",
+      status: "failed",
+      workDir: "/tmp/a2a/task/run-1",
+      exitCode: 1,
+      signal: null,
+      stdout: "status=no_changes_allowed\nsomething blocked",
+      stderr: "",
+      artifacts: [],
+    },
+  );
+
+  assert.ok(body.includes("### 사유"), "Block comment body must include reason section");
+  assert.ok(body.includes("### 다음 조치"), "Block comment body must include next-action section");
+});
+
+test("no-changes-allowed evidence skips release-gate validation", async () => {
+  const evidence = await collectGitHubEvidence(baseConfig, {
+    ...baseTask,
+  }, {
+    ok: true,
+    taskId: "t1",
+    status: "completed",
+    workDir: "/tmp/a2a/task/run-1",
+    exitCode: 0,
+    signal: null,
+    stdout: [
+      "status=no_changes_allowed",
+      "notice=no_code_changes_produced_evidence_only_lane",
+    ].join("\n"),
+    stderr: "",
+    artifacts: [],
+  });
+
+  assert.ok(evidence);
+  assert.equal(evidence?.outcome, "succeeded_no_changes_with_done_evidence");
+  // release-gate validation should accept these outcomes (no errors added).
+  assert.equal(evidence?.validationErrors?.length ?? 0, 0, `Expected no validation errors, got: ${evidence?.validationErrors?.join(", ")}`);
+});
+
+test("no-changes-allowed marker absent does not affect normal classification", async () => {
+  // A normal successful PR task without the no-changes marker should still
+  // classify as "pr" not as a no-change outcome.
+  const evidence = await collectGitHubEvidence(baseConfig, baseTask, {
+    ok: true,
+    taskId: "t1",
+    status: "completed",
+    workDir: "/tmp/a2a/task/run-1",
+    exitCode: 0,
+    signal: null,
+    stdout: "pr_created=1",
+    stderr: "",
+    artifacts: [],
+    prUrl: "https://github.com/jinwon-int/test-repo/pull/99",
+  });
+
+  assert.ok(evidence);
+  assert.equal(evidence?.outcome, "pr", "Normal PR tasks must not be classified as no-change evidence");
+});

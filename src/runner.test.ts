@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { buildContainerScript, runTask } from "./runner.js";
+import { buildActionableError, buildContainerScript, runTask } from "./runner.js";
 import type { NormalizedRunnerTask, RunnerConfig, RunnerTask } from "./types.js";
 
 const baseConfig: RunnerConfig = {
@@ -439,4 +439,102 @@ test("handles failing commands", async () => {
   } catch {
     // Docker not available; skip.
   }
+});
+
+// ---------------------------------------------------------------------------
+// buildActionableError: image-pull summary regression (a2a-docker-runner#169)
+// ---------------------------------------------------------------------------
+
+test("buildActionableError: engine not found produces ENOENT message", () => {
+  const msg = buildActionableError("docker", "node:22", {
+    code: null,
+    signal: null,
+    stdout: "",
+    stderr: "",
+    timedOut: false,
+    errorCode: "ENOENT",
+  });
+  assert.ok(msg.includes("실행 파일을 찾을 수 없습니다"), `Expected ENOENT message, got: ${msg}`);
+});
+
+test("buildActionableError: no false image-pull error when stdout-only has 'not found'", () => {
+  // The container DID start and the agent produced output mentioning "not found"
+  // in the context of a git clone or file lookup.  The error must NOT be
+  // the misleading image-pull summary.
+  const msg = buildActionableError("docker", "node:22-bookworm-slim", {
+    code: 2,
+    signal: null,
+    stdout: [
+      "notice=no_patch_command_configured",
+      "Set commandScript or commandJson in RunnerConfig to inject a coding agent.",
+      "status=no_changes",
+      "fatal: repository 'https://github.com/owner/missing-repo.git/' not found",
+    ].join("\n"),
+    stderr: "",
+    timedOut: false,
+  });
+
+  // buildActionableError returns combined output when no specific pattern matches.
+  // The key regression: it must NOT produce image-pull error text when
+  // Docker/Podman engine errors are only in stdout (agent output), not stderr.
+  assert.ok(!msg.includes("이미지"), `Must not produce image-pull error for stdout-only 'not found', got: ${msg}`);
+  assert.ok(!msg.includes("pull access denied"), `Must not match engine pull errors in stdout, got: ${msg}`);
+});
+
+test("buildActionableError: no false image-pull error when stdout-only has 'repository does not exist'", () => {
+  const msg = buildActionableError("docker", "node:22-bookworm-slim", {
+    code: 1,
+    signal: null,
+    stdout: [
+      "Cloning into 'repo'...",
+      "remote: Repository not found.",
+      "fatal: repository 'https://github.com/nonexistent/repo.git/' does not exist",
+    ].join("\n"),
+    stderr: "",
+    timedOut: false,
+  });
+
+  assert.ok(!msg.includes("이미지"), `Must not produce image-pull error for stdout-only 'repository does not exist', got: ${msg}`);
+});
+
+test("buildActionableError: DOES produce image-pull error when stderr has daemon pull error", () => {
+  // Real Docker daemon pull failure: "Error response from daemon: pull access denied" in stderr.
+  const msg = buildActionableError("docker", "private/image:tag", {
+    code: 125,
+    signal: null,
+    stdout: "",
+    stderr: [
+      "Unable to find image 'private/image:tag' locally",
+      "docker: Error response from daemon: pull access denied for private/image, repository does not exist or may require 'docker login'.",
+      "See 'docker run --help'.",
+    ].join("\n"),
+    timedOut: false,
+  });
+
+  assert.ok(msg.includes("이미지"), `Expected image-pull error for daemon pull failure in stderr, got: ${msg}`);
+  assert.ok(msg.includes("가져오거나 찾을 수 없습니다"), `Expected Korean image-pull error text, got: ${msg}`);
+});
+
+test("buildActionableError: image-pull error for manifest unknown in stderr", () => {
+  const msg = buildActionableError("docker", "nonexistent/image:v9.9.9", {
+    code: 125,
+    signal: null,
+    stdout: "",
+    stderr: "docker: Error response from daemon: manifest for nonexistent/image:v9.9.9 not found: manifest unknown: manifest unknown.",
+    timedOut: false,
+  });
+
+  assert.ok(msg.includes("이미지"), `Expected image-pull error for manifest unknown, got: ${msg}`);
+});
+
+test("buildActionableError: no image-pull error when stderr is unrelated failure", () => {
+  const msg = buildActionableError("docker", "node:22", {
+    code: 1,
+    signal: null,
+    stdout: "some output",
+    stderr: "command not found: nonexistent-tool",
+    timedOut: false,
+  });
+
+  assert.ok(!msg.includes("이미지"), `Must not produce image-pull error for unrelated stderr, got: ${msg}`);
 });

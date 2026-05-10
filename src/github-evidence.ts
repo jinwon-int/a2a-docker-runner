@@ -70,6 +70,17 @@ export async function collectGitHubEvidence(
 
 function classifyGitHubEvidenceOutcome(result: RunnerResult, evidence: GitHubEvidence): GitHubEvidence["outcome"] {
   if (evidence.prUrl) return "pr";
+
+  // Evidence-only / allowNoChanges lanes: classify no-change evidence
+  // separately from infrastructure and patch failures.
+  // Parent: a2a-docker-runner#169
+  const isNoChangeAllowed = isNoChangeAllowedResult(result);
+  if (isNoChangeAllowed) {
+    if (evidence.doneUrl || evidence.doneCommentUrl) return "succeeded_no_changes_with_done_evidence";
+    if (evidence.blockUrl || evidence.blockCommentUrl) return "blocked_no_changes_with_evidence";
+    return "succeeded_no_changes_with_done_evidence";
+  }
+
   if (evidence.blockUrl || evidence.blockCommentUrl) return "block";
   if (evidence.doneUrl || evidence.doneCommentUrl) return "done";
   if (result.resultSummary?.status === "budget_limited" || result.artifactManifest?.status === "budget_limited") return "budget_limited";
@@ -77,7 +88,22 @@ function classifyGitHubEvidenceOutcome(result: RunnerResult, evidence: GitHubEvi
   return "missing_evidence";
 }
 
+/**
+ * Detect a no-change-allowed evidence-only / preflight outcome from container
+ * stdout markers.  The embedded script outputs `status=no_changes_allowed` when
+ * `allowNoChanges` is set and no code diff was produced.
+ *
+ * Parent: a2a-docker-runner#169
+ */
+function isNoChangeAllowedResult(result: RunnerResult): boolean {
+  const text = `${result.stdout}\n${result.stderr}`;
+  return /(?:^|\n)status=no_changes_allowed/.test(text);
+}
+
 function validateReleaseGateEvidence(evidence: GitHubEvidence): string[] {
+  // Evidence-only outcomes that terminate with valid Done/Block evidence are
+  // accepted without requiring PR-level release-gate checks.
+  if (evidence.outcome === "succeeded_no_changes_with_done_evidence" || evidence.outcome === "blocked_no_changes_with_evidence") return [];
   if (evidence.outcome !== "pr" && evidence.outcome !== "done" && evidence.outcome !== "block") return [];
 
   const errors: string[] = [];
