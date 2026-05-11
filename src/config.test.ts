@@ -84,6 +84,9 @@ test("loadConfig builds first-class OpenClaw patch profile", async () => {
   assert.match(config.commandScript ?? "", /openclaw_session_store_guard/);
   assert.match(config.commandScript ?? "", /openclaw_workspace_bootstrap_leak/);
   assert.match(config.commandScript ?? "", /bootstrap_leak=/);
+  assert.match(config.commandScript ?? "", /scrubbed_ignored_openclaw_bootstrap/);
+  assert.match(config.commandScript ?? "", /git check-ignore -q --/);
+  assert.match(config.commandScript ?? "", /git ls-files --/);
   assert.match(config.commandScript ?? "", /find_bootstrap_leaks \./);
   assert.match(config.commandScript ?? "", /BOOTSTRAP_BANNED="AGENTS\.md BOOTSTRAP\.md HEARTBEAT\.md IDENTITY\.md MEMORY\.md SOUL\.md TOOLS\.md USER\.md"/);
   assert.match(config.commandScript ?? "", /BOOTSTRAP_BANNED_DIRS="\.openclaw memory"/);
