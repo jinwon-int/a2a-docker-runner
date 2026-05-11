@@ -188,6 +188,126 @@
           }
         }
       }
+    },
+    "sourcePublicExecutionPreflight": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "generatedAt", "mode", "status", "approvedPacket", "scannerHistoryBinding", "executionPlan", "replayProtection", "rollbackAbortRunbook", "preflightFailureSemantics", "safetyGates"],
+      "properties": {
+        "schemaVersion": { "const": "a2a.runner.source-public-execution-preflight.v1" },
+        "generatedAt": { "const": "1970-01-01T00:00:00.000Z" },
+        "runId": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "mode": { "enum": ["dry_run", "simulate"] },
+        "status": { "enum": ["ready_for_operator_approval", "blocked"] },
+        "approvedPacket": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schemaVersion", "packetId", "targetRepo", "decision", "dedupeKey", "evidenceBundlePath"],
+          "properties": {
+            "schemaVersion": { "const": "a2a.runner.source-public-approval-packet.v1" },
+            "packetId": { "type": "string", "minLength": 1, "maxLength": 120 },
+            "targetRepo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+            "decision": { "enum": ["GO_CANDIDATE", "NO_GO", "NEEDS_OPERATOR_APPROVAL"] },
+            "dedupeKey": { "type": "string", "minLength": 1, "maxLength": 240 },
+            "evidenceBundlePath": { "const": "artifacts/manifest.json" }
+          }
+        },
+        "scannerHistoryBinding": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["scanProfileSchemaVersion", "scannerBound", "historyRunCount", "evidenceBundlePath", "manifestDigest", "historyDigest"],
+          "properties": {
+            "scanProfileSchemaVersion": { "const": "a2a.runner.scan-profile.v1" },
+            "scannerBound": { "const": true },
+            "historyRunCount": { "type": "integer", "minimum": 0 },
+            "evidenceBundlePath": { "const": "artifacts/manifest.json" },
+            "manifestDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "historyDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+          }
+        },
+        "executionPlan": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["planId", "planDedupeKey", "operatorGate", "dryRunOnly", "simulateOnly", "liveExecutionBlocked", "approvalExecutionBlocked", "replayProtected", "actions"],
+          "properties": {
+            "planId": { "type": "string", "minLength": 1, "maxLength": 120 },
+            "planDedupeKey": { "type": "string", "minLength": 1, "maxLength": 300 },
+            "operatorGate": { "const": "explicit_operator_approval_required" },
+            "dryRunOnly": { "const": true },
+            "simulateOnly": { "type": "boolean" },
+            "liveExecutionBlocked": { "const": true },
+            "approvalExecutionBlocked": { "const": true },
+            "replayProtected": { "const": true },
+            "actions": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 12,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sequence", "id", "label", "targetRepo", "requiresExplicitOperatorApproval", "dryRunOnly", "sideEffectPerformed"],
+                "properties": {
+                  "sequence": { "type": "integer", "minimum": 1, "maximum": 99 },
+                  "id": { "type": "string", "minLength": 1, "maxLength": 80 },
+                  "label": { "type": "string", "minLength": 1, "maxLength": 180 },
+                  "targetRepo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+                  "requiresExplicitOperatorApproval": { "const": true },
+                  "dryRunOnly": { "const": true },
+                  "sideEffectPerformed": { "const": false }
+                }
+              }
+            }
+          }
+        },
+        "replayProtection": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["idempotencyKey", "inputFingerprint", "replayIndex", "duplicateDetected"],
+          "properties": {
+            "idempotencyKey": { "type": "string", "minLength": 1, "maxLength": 300 },
+            "inputFingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "replayIndex": { "type": "integer", "minimum": 0 },
+            "duplicateDetected": { "type": "boolean" }
+          }
+        },
+        "rollbackAbortRunbook": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rollbackSteps", "abortSteps"],
+          "properties": {
+            "rollbackSteps": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 1, "maxLength": 240 } },
+            "abortSteps": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 1, "maxLength": 240 } }
+          }
+        },
+        "preflightFailureSemantics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["failClosed", "reasons", "approvalPacketNotGoCandidate", "missingScannerHistory", "manifestMismatch"],
+          "properties": {
+            "failClosed": { "const": true },
+            "reasons": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 220 } },
+            "approvalPacketNotGoCandidate": { "type": "boolean" },
+            "missingScannerHistory": { "type": "boolean" },
+            "manifestMismatch": { "type": "boolean" }
+          }
+        },
+        "safetyGates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operatorApprovalRequired", "sourcePublicExecutionBlocked", "approvalExecuted", "releaseExecuted", "visibilityChanged", "liveProviderSendPerformed", "terminalAckSent", "dbMutationPerformed", "deployOrRestartPerformed"],
+          "properties": {
+            "operatorApprovalRequired": { "const": true },
+            "sourcePublicExecutionBlocked": { "const": true },
+            "approvalExecuted": { "const": false },
+            "releaseExecuted": { "const": false },
+            "visibilityChanged": { "const": false },
+            "liveProviderSendPerformed": { "const": false },
+            "terminalAckSent": { "const": false },
+            "dbMutationPerformed": { "const": false },
+            "deployOrRestartPerformed": { "const": false }
+          }
+        }
+      }
     }
   }
 }
