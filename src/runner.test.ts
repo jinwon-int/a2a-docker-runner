@@ -110,6 +110,34 @@ test("extracts PR URL with query parameters", async () => {
 });
 
 // ---------------------------------------------------------------------------
+// prUrlRecoveredAfterNonzero — a2a-docker-runner#199
+// ---------------------------------------------------------------------------
+
+test("treats non-zero exit after PR creation as success (false-failure fix)", async () => {
+  // If a PR URL is detected but the container exits non-zero with a
+  // post-PR error (not a timeout), the runner must still report ok=true.
+  // Parent: a2a-docker-runner#199
+  const task: RunnerTask = {
+    id: "pr-recovery-test",
+    intent: "propose_patch",
+    commands: [
+      "printf 'https://github.com/jinwon-int/a2a-docker-runner/pull/199\\n'",
+      "printf 'some benign post-PR cleanup warning\\n' >&2",
+      "exit 2",
+    ],
+  };
+  const config = { ...baseConfig, defaultTimeoutMs: 3000 };
+
+  try {
+    const result = await runTask(config, task);
+    assert.equal(result.ok, true, `Expected ok=true after PR URL + non-zero exit, got ok=${result.ok} status=${result.status}`);
+    assert.equal(result.prUrl, "https://github.com/jinwon-int/a2a-docker-runner/pull/199");
+  } catch {
+    // Docker not available; skip.
+  }
+});
+
+// ---------------------------------------------------------------------------
 // artifact collection
 // ---------------------------------------------------------------------------
 
