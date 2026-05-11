@@ -3,7 +3,8 @@ import { basename, join, relative, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { normalizeTask } from "./task-normalizer.js";
 import { collectGitHubEvidence } from "./github-evidence.js";
-import type { ArtifactEvidencePart, ArtifactManifest, ArtifactManifestEntry, ArtifactManifestStatus, GitHubCommentProjection, GitHubCommentProjectionKind, NormalizedRunnerTask, ResultSummary, RunnerBudgetEvidence, RunnerConfig, RunnerContinuationEvidence, RunnerEvidenceHints, RunnerReceiptTrace, RunnerResult, RunnerTask, SourcePublicApprovalDecision, SourcePublicApprovalPacket, SourcePublicApprovalRehearsal } from "./types.js";
+import { sanitizeSourcePublicExecutionPreflight } from "./source-public-preflight.js";
+import type { ArtifactEvidencePart, ArtifactManifest, ArtifactManifestEntry, ArtifactManifestStatus, GitHubCommentProjection, GitHubCommentProjectionKind, NormalizedRunnerTask, ResultSummary, RunnerBudgetEvidence, RunnerConfig, RunnerContinuationEvidence, RunnerEvidenceHints, RunnerReceiptTrace, RunnerResult, RunnerTask, SourcePublicApprovalDecision, SourcePublicApprovalPacket, SourcePublicApprovalRehearsal, SourcePublicExecutionPreflight } from "./types.js";
 
 export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<RunnerResult> {
   validateTask(task);
@@ -738,6 +739,7 @@ export function buildResultSummary(
     ...(manifest.evidenceHints ? { evidenceHints: manifest.evidenceHints } : {}),
     ...(manifest.githubCommentProjection ? { githubCommentProjection: manifest.githubCommentProjection } : {}),
     ...(manifest.sourcePublicApprovalRehearsal ? { sourcePublicApprovalRehearsal: manifest.sourcePublicApprovalRehearsal } : {}),
+    ...(manifest.sourcePublicExecutionPreflight ? { sourcePublicExecutionPreflight: manifest.sourcePublicExecutionPreflight } : {}),
     ...(runnerBuild ? { runnerBuild } : {}),
   };
 }
@@ -754,6 +756,7 @@ export interface ArtifactManifestContext {
   evidenceHints?: RunnerEvidenceHints;
   githubCommentProjection?: GitHubCommentProjection;
   sourcePublicApprovalRehearsal?: SourcePublicApprovalRehearsal;
+  sourcePublicExecutionPreflight?: SourcePublicExecutionPreflight;
 }
 
 export async function buildArtifactManifest(workDir: string, artifacts: string[], context: ArtifactManifestContext = {}): Promise<ArtifactManifest> {
@@ -772,6 +775,7 @@ export async function buildArtifactManifest(workDir: string, artifacts: string[]
   const primaryRepo = task?.repos.find((repo) => repo.primary) ?? task?.repos[0];
   const summary = buildArtifactManifestSummary(context, evidence.length);
   const sourcePublicApprovalRehearsal = sanitizeSourcePublicApprovalRehearsal(context.sourcePublicApprovalRehearsal);
+  const sourcePublicExecutionPreflight = sanitizeSourcePublicExecutionPreflight(context.sourcePublicExecutionPreflight);
   return {
     artifactVersion: 1,
     schemaVersion: 1,
@@ -792,6 +796,7 @@ export async function buildArtifactManifest(workDir: string, artifacts: string[]
     ...(context.evidenceHints ? { evidenceHints: context.evidenceHints } : {}),
     ...(context.githubCommentProjection ? { githubCommentProjection: context.githubCommentProjection } : {}),
     ...(sourcePublicApprovalRehearsal ? { sourcePublicApprovalRehearsal } : {}),
+    ...(sourcePublicExecutionPreflight ? { sourcePublicExecutionPreflight } : {}),
   };
 }
 
