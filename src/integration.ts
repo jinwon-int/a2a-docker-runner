@@ -123,6 +123,17 @@ export interface TerminalEvidenceEvent {
   prUrl?: string;
   doneUrl?: string;
   blockUrl?: string;
+  /** Start comment URL posted at the beginning of the evidence round. */
+  startCommentUrl?: string;
+  /**
+   * GitHub comment evidence ledger.
+   * Comments are evidence ledger entries only — not ACK, read-receipt, or
+   * operator-approval proof.  Explicitly separate from Terminal Brief
+   * ACK/read/visibility decisions.
+   *
+   * Parent: a2a-plane#204
+   */
+  commentLedger?: import("./types.js").GitHubCommentLedger;
   /** Preformatted compact alert text for terminal notifications; never contains raw runner logs. */
   alert: {
     title: string;
@@ -490,6 +501,8 @@ export function buildTerminalEvidenceEvent(
     prUrl: evidence?.prUrl,
     doneUrl: evidence?.doneCommentUrl,
     blockUrl: evidence?.blockCommentUrl,
+    startCommentUrl: evidence?.startCommentUrl,
+    commentLedger: evidence?.commentLedger,
     alert: buildTerminalAlert({ taskId, status, evidenceKind, worker, repo, issue, issueTitle, taskBrief, url, result, testSummary }),
     reason: buildTerminalReason(result, evidenceKind),
     testSummary,

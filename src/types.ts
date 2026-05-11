@@ -105,6 +105,36 @@ export interface GitHubEvidenceSafetyState {
   providerSendIsReceiptEvidence: false;
 }
 
+/** Single entry in the GitHub comment evidence ledger. */
+export interface GitHubCommentLedgerEntry {
+  /** Stable, replay-safe idempotency key for this comment. */
+  dedupeKey: string;
+  /** URL of the posted GitHub comment. */
+  url: string;
+  /** Comment kind. */
+  kind: "start" | "block" | "done" | "progress";
+  /** ISO-8601 timestamp when the comment was posted. */
+  postedAt: string;
+}
+
+/**
+ * GitHub comment evidence ledger.
+ *
+ * Comments are evidence ledger entries only — they are NOT ACK, read-receipt,
+ * or operator-approval proof.  The ledger is explicitly separate from Terminal
+ * Brief ACK/read/visibility decisions and from operator approval.
+ *
+ * Parent: a2a-plane#204
+ */
+export interface GitHubCommentLedger {
+  /** Canonical ledger schema version. */
+  schemaVersion: "a2a.runner.github-comment-ledger.v1";
+  /** Ordered list of comment evidence entries. Start comment is first when present. */
+  entries: GitHubCommentLedgerEntry[];
+  /** Explicit separation: comments are evidence ledger entries, not approval. */
+  disclaimer: "GitHub comments are evidence ledger entries, not ACK/read/visibility proof and not approval.";
+}
+
 export interface GitHubEvidence {
   /** Canonical structured evidence envelope version for GitHub patch task closeout. */
   schemaVersion?: "a2a.runner.github-evidence.v1";
@@ -128,6 +158,17 @@ export interface GitHubEvidence {
   blockCommentUrl?: string;
   /** Done comment URL for tasks that complete without a PR. */
   doneCommentUrl?: string;
+  /** Start comment URL posted at the beginning of the evidence round. */
+  startCommentUrl?: string;
+  /**
+   * GitHub comment evidence ledger.
+   * Comments are evidence ledger entries only — not ACK, read-receipt, or
+   * operator-approval proof.  Explicitly separate from Terminal Brief
+   * ACK/read/visibility decisions.
+   *
+   * Parent: a2a-plane#204
+   */
+  commentLedger?: GitHubCommentLedger;
   validation?: GitHubValidationSummary;
   /** Explicit no-live/no-ACK safety state for receipt-gated Terminal Brief lanes. */
   safetyState?: GitHubEvidenceSafetyState;
