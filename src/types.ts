@@ -608,6 +608,212 @@ export interface ApprovalRehearsalIdempotencyProof {
   replayIndex: number;
 }
 
+// ---- Source-Public Execution Orchestrator ----
+// Parent: a2a-docker-runner#189
+// Parent: a2a-plane#218
+
+/** Scanner/history binding that anchors an execution plan to a deterministic scan snapshot. */
+export interface ScannerHistoryBinding {
+  schemaVersion: "a2a.runner.scanner-history-binding.v1";
+  /** Stable reference to the scan profile that produced this binding. */
+  scanProfileRef: string;
+  /** Deterministic timestamp when the binding was created. */
+  boundAt: "1970-01-01T00:00:00.000Z";
+  /** SHA-256 hex digest of the serialised scan profile for tamper detection. */
+  scannerDigest: string;
+  /** Number of runs captured in the scan snapshot. */
+  historySnapshotSize: number;
+  /** Most recent scan outcome for quick operator reference. */
+  lastScanOutcome?: string;
+  /** Number of historical GO_CANDIDATE packets found during the scan. */
+  goCandidateCount?: number;
+  /** Number of historical NO_GO / NEEDS_OPERATOR_APPROVAL packets found. */
+  blockedCount?: number;
+}
+
+/** Options for building an execution plan from an approval rehearsal packet. */
+export interface ExecutionOrchestratorOptions {
+  /** Safe run identifier from the task payload. */
+  runId: string;
+  /** Optional safe trace identifier. */
+  traceId?: string;
+  /** Output directory for writing the execution plan artifacts. */
+  outputPath: string;
+  /** Replay index for deduplication; 0 for the first attempt. */
+  replayIndex?: number;
+  /** Optional scanner/history binding produced by a prior scan. */
+  scannerHistoryBinding?: ScannerHistoryBinding;
+  /** Optional issue URL for evidence hints. */
+  issueUrl?: string;
+  /** When true, skip plan generation for NO_GO or NEEDS_OPERATOR_APPROVAL packets. */
+  requireGoCandidate?: boolean;
+}
+
+/** A single preflight check executed against a plan before it can be simulated. */
+export interface ExecutionPreflightCheck {
+  /** Check identifier (deterministic). */
+  checkId: string;
+  /** Human-readable label for operator review. */
+  label: string;
+  /** Whether the check passed. */
+  passed: boolean;
+  /** Explanation when check failed. */
+  reason?: string;
+}
+
+/** Preflight result: must pass all checks before an execution plan is considered valid. */
+export interface ExecutionPreflightResult {
+  /** True when every preflight check passed. */
+  passed: boolean;
+  /** Ordered list of individual preflight checks. */
+  checks: ExecutionPreflightCheck[];
+  /** Bounded summary for operator review surfaces. */
+  summary: string;
+  /**
+   * Failure semantics when preflight fails.
+   * - "abort_and_report": plan is unsafe; abort and report to operator.
+   * - "needs_operator_override": plan has recoverable issues; operator may override.
+   */
+  failureSemantics: "abort_and_report" | "needs_operator_override";
+  /** When passed is false, list of check ids that failed. */
+  failedCheckIds: string[];
+}
+
+/** A single action in the execution plan. */
+export interface PlannedAction {
+  /** Deterministic action identifier. */
+  actionId: string;
+  /** Short description of what this action does. */
+  description: string;
+  /** Action classification. */
+  kind: "git_push" | "pr_create" | "comment_post" | "branch_create" | "code_change" | "artifact_write" | "scan_bind" | "noop";
+  /** Target repository when applicable. */
+  repo?: string;
+  /** Target branch when applicable. */
+  branch?: string;
+  /** Always blocked or pending — this round never executes. */
+  status: "blocked" | "pending_operator_approval";
+  /** Corresponding rollback action if this action were executed. */
+  rollbackAction?: string;
+  /** Preflight checks specific to this action. */
+  preflightChecks: ExecutionPreflightCheck[];
+}
+
+/** A single step in the rollback runbook. */
+export interface RollbackStep {
+  /** 1-based step number. */
+  step: number;
+  /** Action identifier for cross-referencing with planned actions. */
+  action: string;
+  /** Human-readable description of how to rollback. */
+  description: string;
+  /** Whether this rollback step is reversible (always true). */
+  reversible: boolean;
+}
+
+/** Rollback runbook: ordered steps to undo every planned action. */
+export interface RollbackRunbook {
+  schemaVersion: "a2a.runner.rollback-runbook.v1";
+  /** Ordered rollback steps (reverse of execution order). */
+  steps: RollbackStep[];
+}
+
+/** A single step in the abort runbook. */
+export interface AbortStep {
+  /** 1-based step number. */
+  step: number;
+  /** Condition that triggers this abort step. */
+  trigger: string;
+  /** Human-readable description of the abort action. */
+  action: string;
+}
+
+/** Abort runbook: documented safe-abort procedures before any side effects. */
+export interface AbortRunbook {
+  schemaVersion: "a2a.runner.abort-runbook.v1";
+  /** Ordered abort steps. */
+  steps: AbortStep[];
+}
+
+/** Idempotency proof for the execution plan (never executed in this round). */
+export interface ExecutionIdempotencyProof {
+  /** Stable, deterministic dedupe key. */
+  dedupeKey: string;
+  /** SHA-256 hex fingerprint of the plan input (deterministic). */
+  inputFingerprint: string;
+  /** Always false — this round never executes. */
+  wasExecuted: false;
+  /** Monotonic replay counter. */
+  replayIndex: number;
+  /** Guarantees no duplicate plan ids in any execution context. */
+  noDuplicatePlanIds: true;
+}
+
+/** Result of simulating an execution plan in dry-run mode. */
+export interface ExecutionSimulateResult {
+  /** True when the plan can be safely simulated. */
+  ok: boolean;
+  /** Number of actions in the simulated plan. */
+  actionCount: number;
+  /** Number of actions that would change state (non-noop). */
+  stateChangingActions: number;
+  /** Estimated affected repositories. */
+  affectedRepos: string[];
+  /** Estimated affected branches. */
+  affectedBranches: string[];
+  /** Bounded summary of what would happen. */
+  summary: string;
+  /** Explicit: simulation mode — nothing was executed. */
+  simulationOnly: true;
+  /** Preflight result embedded for operator review. */
+  preflight: ExecutionPreflightResult;
+  /** When ok is false, list of blocking reasons. */
+  blockingReasons: string[];
+}
+
+/** The deterministic execution plan produced from an approved rehearsal packet. */
+export interface ExecutionPlan {
+  /** Canonical schema version. */
+  schemaVersion: "a2a.runner.execution-plan.v1";
+  /** Deterministic plan identifier. */
+  planId: string;
+  /** Deduplication key for replay/no-duplicate guards. */
+  dedupeKey: string;
+  /** References the rehearsal packet that this plan was built from. */
+  packetId: string;
+  /** Combined idempotency proof covering both rehearsal and execution. */
+  idempotencyProof: ExecutionIdempotencyProof;
+  /** Target repository (owner/repo). */
+  targetRepo: string;
+  /** Ordered list of planned actions. */
+  plannedActions: PlannedAction[];
+  /** Explicit: this round is always dry-run/simulate only. */
+  dryRun: "simulate_only";
+  /** Explicit: operator approval is required before any execution. */
+  operatorApprovalRequired: true;
+  /** Scanner/history binding for evidence chain integrity. */
+  scannerHistoryBinding?: ScannerHistoryBinding;
+  /** Rollback runbook for every planned action. */
+  rollbackRunbook: RollbackRunbook;
+  /** Abort runbook for pre-execution and mid-execution failures. */
+  abortRunbook: AbortRunbook;
+  /** Preflight result embedded in the plan. */
+  preflightResult: ExecutionPreflightResult;
+  /** Simulate result for dry-run operator review. */
+  simulateResult: ExecutionSimulateResult;
+  /** Deterministic generation timestamp. */
+  generatedAt: "1970-01-01T00:00:00.000Z";
+  /** Explicit safety: no execution happened. */
+  approvalExecuted: false;
+  releaseExecuted: false;
+  visibilityChanged: false;
+  terminalAckSent: false;
+  providerSendPerformed: false;
+  dbMutationPerformed: false;
+  /** Optional evidence hints for broker/operator recovery. */
+  evidenceHints?: RunnerEvidenceHints;
+}
+
 /** Replay-safe approval rehearsal packet produced before any real source-public change. */
 export interface ApprovalRehearsalPacket {
   /** Canonical schema version. */
