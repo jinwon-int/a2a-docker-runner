@@ -213,6 +213,60 @@ export interface GitHubCommentProjection {
   commentIsOperatorApproval: false;
 }
 
+export type SourcePublicApprovalDecision = "GO_CANDIDATE" | "NO_GO" | "NEEDS_OPERATOR_APPROVAL";
+
+/**
+ * Deterministic, no-live source-public approval rehearsal evidence.
+ *
+ * This is an approval packet preview only. It must never execute source-public
+ * publication, approval, release, provider sends, Terminal Brief ACKs, DB
+ * mutation, or repository visibility changes.
+ */
+export interface SourcePublicApprovalPacket {
+  schemaVersion: "a2a.runner.source-public-approval-packet.v1";
+  packetId: string;
+  targetRepo: string;
+  decision: SourcePublicApprovalDecision;
+  dedupeKey: string;
+  evidenceBundlePath: "artifacts/manifest.json";
+  operatorApprovalRequired: true;
+  approvalExecuted: false;
+  releaseExecuted: false;
+  visibilityChanged: false;
+  terminalAckSent: false;
+  providerSendPerformed: false;
+  dbMutationPerformed: false;
+  rollbackPath: string;
+  abortPath: string;
+}
+
+export interface SourcePublicApprovalRehearsal {
+  schemaVersion: "a2a.runner.source-public-approval-rehearsal.v1";
+  generatedAt: "1970-01-01T00:00:00.000Z";
+  runId?: string;
+  decision: SourcePublicApprovalDecision;
+  approvalPackets: SourcePublicApprovalPacket[];
+  terminalBriefRehearsalOnly: true;
+  replayNoDuplicateProof: {
+    dedupeKey: string;
+    noDuplicatePacketIds: true;
+  };
+  rollbackAbort: {
+    rollbackPath: string;
+    abortPath: string;
+  };
+  safetyGates: {
+    operatorApprovalRequired: true;
+    sourcePublicExecutionBlocked: true;
+    approvalExecuted: false;
+    releaseExecuted: false;
+    visibilityChanged: false;
+    liveProviderSendPerformed: false;
+    terminalAckSent: false;
+    dbMutationPerformed: false;
+  };
+}
+
 export interface RunnerTask {
   id: string;
   intent: string;
@@ -383,6 +437,8 @@ export interface ArtifactManifest {
   evidenceHints?: RunnerEvidenceHints;
   /** First-class Terminal Brief extension for GitHub comment ledger evidence. */
   githubCommentProjection?: GitHubCommentProjection;
+  /** Deterministic no-live rehearsal packet/evidence for source-public approval gates. */
+  sourcePublicApprovalRehearsal?: SourcePublicApprovalRehearsal;
 }
 
 export interface ResultSummary {
@@ -404,6 +460,7 @@ export interface ResultSummary {
   continuation?: RunnerContinuationEvidence;
   evidenceHints?: RunnerEvidenceHints;
   githubCommentProjection?: GitHubCommentProjection;
+  sourcePublicApprovalRehearsal?: SourcePublicApprovalRehearsal;
 }
 
 export interface RunnerResult {

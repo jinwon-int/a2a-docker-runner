@@ -24,6 +24,7 @@ Sample: [`examples/artifact-manifest.dummy-task.json`](../examples/artifact-mani
 - `continuation`: optional approval-gated follow-up recommendation; `requiresApproval` must be `true`.
 - `evidenceHints`: compact PR/Done/Block URL hints for broker task-report recovery.
 - `githubCommentProjection`: first-class Terminal Brief extension for GitHub issue/PR comment ledger evidence. It is manifest-bound (`manifestPath`), replay-safe (`dedupeKey`), and explicitly flags `commentIsTerminalAck=false`, `commentIsVisibilityReceipt=false`, and `commentIsOperatorApproval=false`.
+- `sourcePublicApprovalRehearsal`: deterministic no-live source-public approval packet preview. `buildSourcePublicApprovalRehearsal()` can produce the packet envelope before real source-public execution. It carries GO_CANDIDATE/NO_GO/NEEDS_OPERATOR_APPROVAL output, replay/no-duplicate proof, rollback/abort paths, and hard false live-execution flags for approval, release, visibility changes, provider sends, Terminal Brief ACK, and DB mutation.
 
 ## Evidence parts
 
@@ -41,4 +42,4 @@ Each `evidence[]` entry has:
 
 The runner only copies explicitly supplied receipt trace metadata from `task.receiptTrace` or JSON in `task.env.A2A_RUNNER_RECEIPT_TRACE` / `A2A_RECEIPT_TRACE`, and it bounds/redacts string fields before writing `manifest.json` or `resultSummary`.
 
-GitHub evidence remains fail-closed: `github-propose-patch` tasks still fail when no PR/Done/Block URL is produced. GitHub comments are ledger entries only: they do not prove Terminal Brief ACK/read/visibility and do not grant operator approval. The artifact manifest is additive evidence for rendering and public demos, not a replacement for canonical GitHub closeout evidence.
+GitHub evidence remains fail-closed: `github-propose-patch` tasks still fail when no PR/Done/Block URL is produced. GitHub comments are ledger entries only: they do not prove Terminal Brief ACK/read/visibility and do not grant operator approval. Source-public approval rehearsal packets are also evidence only: they never execute approval/release/visibility changes and always require explicit operator approval before any real source-public action. The artifact manifest is additive evidence for rendering and public demos, not a replacement for canonical GitHub closeout evidence.

@@ -23,6 +23,10 @@ All scanner and bundle outputs are fail-closed by construction:
 - **Null byte stripping** — `\0` bytes in metadata are removed to prevent output corruption.
 - **Unsafe URL filtering** — only `https://github.com/...` URLs are included in evidence
   pointers; `javascript:`, `file:`, and malformed URLs are discarded.
+- **Source-public rehearsal safety** — approval rehearsal metadata is reduced to
+  deterministic packet counts, dedupe proof, and hard false live-execution flags;
+  malformed packets or any approval/release/visibility/provider-send/Terminal-ACK/DB
+  mutation flag set to true are discarded fail-closed.
 
 ## History Scanner (`scanHistory`)
 
@@ -109,6 +113,7 @@ The output directory contains:
 | Bounded field sizes | ✅ truncated | ✅ truncated |
 | Null byte safety | ✅ stripped | ✅ binary-safe |
 | Malformed input handling | ✅ graceful fallback | ✅ graceful fallback |
+| Source-public rehearsal no-live flags | ✅ compact projection | ✅ sanitized manifest copy |
 
 ## Integration
 
