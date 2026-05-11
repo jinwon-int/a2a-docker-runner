@@ -3,7 +3,7 @@ import { basename, join, relative, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { normalizeTask } from "./task-normalizer.js";
 import { collectGitHubEvidence } from "./github-evidence.js";
-import type { ArtifactEvidencePart, ArtifactManifest, ArtifactManifestEntry, ArtifactManifestStatus, NormalizedRunnerTask, ResultSummary, RunnerBudgetEvidence, RunnerConfig, RunnerContinuationEvidence, RunnerEvidenceHints, RunnerReceiptTrace, RunnerResult, RunnerTask } from "./types.js";
+import type { ArtifactEvidencePart, ArtifactManifest, ArtifactManifestEntry, ArtifactManifestStatus, GitHubCommentProjection, GitHubCommentProjectionKind, NormalizedRunnerTask, ResultSummary, RunnerBudgetEvidence, RunnerConfig, RunnerContinuationEvidence, RunnerEvidenceHints, RunnerReceiptTrace, RunnerResult, RunnerTask } from "./types.js";
 
 export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<RunnerResult> {
   validateTask(task);
@@ -98,9 +98,10 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
       }
     }
     const evidenceHints = buildRunnerEvidenceHints(normalizedTask, result);
-    if (evidenceHints) {
-      result.artifactManifest = { ...result.artifactManifest!, evidenceHints };
-      result.resultSummary = { ...result.resultSummary!, evidenceHints };
+    const githubCommentProjection = buildGitHubCommentProjection(normalizedTask, result);
+    if (evidenceHints || githubCommentProjection) {
+      result.artifactManifest = { ...result.artifactManifest!, ...(evidenceHints ? { evidenceHints } : {}), ...(githubCommentProjection ? { githubCommentProjection } : {}) };
+      result.resultSummary = { ...result.resultSummary!, ...(evidenceHints ? { evidenceHints } : {}), ...(githubCommentProjection ? { githubCommentProjection } : {}) };
       await writeArtifactManifest(workDir, result.artifactManifest);
     }
   }
@@ -130,6 +131,52 @@ export function buildRunnerEvidenceHints(task: NormalizedRunnerTask, result: Run
     ...(failureCategory ? { failureCategory } : {}),
   };
   return Object.keys(hint).length > 1 ? hint : undefined;
+}
+
+export function buildGitHubCommentProjection(task: NormalizedRunnerTask, result: RunnerResult): GitHubCommentProjection | undefined {
+  const github = result.github;
+  const kind: GitHubCommentProjectionKind | undefined = github?.prUrl
+    ? "pr"
+    : github?.doneUrl ?? github?.doneCommentUrl
+      ? "done"
+      : github?.blockUrl ?? github?.blockCommentUrl
+        ? "block"
+        : undefined;
+  const url = kind === "pr"
+    ? github?.prUrl
+    : kind === "done"
+      ? github?.doneUrl ?? github?.doneCommentUrl
+      : kind === "block"
+        ? github?.blockUrl ?? github?.blockCommentUrl
+        : undefined;
+  if (!kind || !url || !safeGitHubUrl(url, kind === "pr" ? "pull" : "issues")) return undefined;
+  const projectedUrl = url;
+
+  const issueUrl = safeGitHubUrl(task.issueUrl ?? github?.issueUrl ?? result.artifactManifest?.issueUrl, "issues")
+    ? task.issueUrl ?? github?.issueUrl ?? result.artifactManifest?.issueUrl
+    : undefined;
+  const manifestPath = result.artifactManifest?.manifestPath ?? result.resultSummary?.manifestPath ?? "artifacts/manifest.json";
+  const taskId = safeHintText(task.id) ?? "task";
+  const dedupeKey = ["a2a-github-comment", taskId, kind, projectedUrl]
+    .join(":")
+    .replace(/[^A-Za-z0-9_.:/#-]+/g, "_")
+    .slice(0, 300);
+
+  return {
+    schemaVersion: "a2a.runner.github-comment-projection.v1",
+    kind,
+    url: projectedUrl,
+    ...(issueUrl ? { issueUrl } : {}),
+    manifestPath: sanitizeManifestPath(manifestPath),
+    dedupeKey,
+    commentIsTerminalAck: false,
+    commentIsVisibilityReceipt: false,
+    commentIsOperatorApproval: false,
+  };
+}
+
+function sanitizeManifestPath(_value: string): string {
+  return "artifacts/manifest.json";
 }
 
 function inferEvidenceFailureCategory(result: RunnerResult): RunnerEvidenceHints["failureCategory"] | undefined {
@@ -689,6 +736,7 @@ export function buildResultSummary(
     ...(manifest.receiptTrace ? { receiptTrace: manifest.receiptTrace } : {}),
     ...(manifest.continuation ? { continuation: manifest.continuation } : {}),
     ...(manifest.evidenceHints ? { evidenceHints: manifest.evidenceHints } : {}),
+    ...(manifest.githubCommentProjection ? { githubCommentProjection: manifest.githubCommentProjection } : {}),
     ...(runnerBuild ? { runnerBuild } : {}),
   };
 }
@@ -703,6 +751,7 @@ export interface ArtifactManifestContext {
   receiptTrace?: RunnerReceiptTrace;
   continuation?: RunnerContinuationEvidence;
   evidenceHints?: RunnerEvidenceHints;
+  githubCommentProjection?: GitHubCommentProjection;
 }
 
 export async function buildArtifactManifest(workDir: string, artifacts: string[], context: ArtifactManifestContext = {}): Promise<ArtifactManifest> {
@@ -738,6 +787,7 @@ export async function buildArtifactManifest(workDir: string, artifacts: string[]
     ...(context.receiptTrace ? { receiptTrace: context.receiptTrace } : {}),
     ...(context.continuation ? { continuation: context.continuation } : {}),
     ...(context.evidenceHints ? { evidenceHints: context.evidenceHints } : {}),
+    ...(context.githubCommentProjection ? { githubCommentProjection: context.githubCommentProjection } : {}),
   };
 }
 

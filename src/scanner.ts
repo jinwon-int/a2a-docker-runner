@@ -34,7 +34,17 @@ export interface ScanRunEntry {
   outcome?: string;
   artifactCount: number;
   prUrl?: string;
+  doneUrl?: string;
+  blockUrl?: string;
   issueUrl?: string;
+  githubCommentProjection?: {
+    kind: "pr" | "done" | "block";
+    url: string;
+    dedupeKey: string;
+    commentIsTerminalAck: false;
+    commentIsVisibilityReceipt: false;
+    commentIsOperatorApproval: false;
+  };
   summary?: string;
   exitCode?: number | null;
   branch?: string;
@@ -196,6 +206,21 @@ async function buildScanRunEntry(
   const issueUrl = manifest?.issueUrl ?? (taskMeta as Record<string, unknown>)?.issueUrl;
   if (typeof issueUrl === "string" && isSafeGitHubUrl(issueUrl)) entry.issueUrl = issueUrl;
 
+  const hints = sanitizeEvidenceHints(manifest?.evidenceHints);
+  if (hints?.doneUrl) entry.doneUrl = hints.doneUrl;
+  if (hints?.blockUrl) entry.blockUrl = hints.blockUrl;
+  const projection = sanitizeGitHubCommentProjection(manifest?.githubCommentProjection);
+  if (projection) {
+    entry.githubCommentProjection = {
+      kind: projection.kind,
+      url: projection.url,
+      dedupeKey: projection.dedupeKey,
+      commentIsTerminalAck: false,
+      commentIsVisibilityReceipt: false,
+      commentIsOperatorApproval: false,
+    };
+  }
+
   if (manifest?.status) entry.outcome = sanitizeScanText(String(manifest.status), 60);
   if (typeof exitCode === "number") entry.exitCode = exitCode;
   if (timedOut) entry.timedOut = true;
@@ -286,6 +311,46 @@ function isSafeGitHubUrl(value: string): boolean {
   }
 }
 
+function isGitHubProjectionKind(value: unknown): value is "pr" | "done" | "block" {
+  return value === "pr" || value === "done" || value === "block";
+}
+
+function sanitizeEvidenceHints(hints: ArtifactManifest["evidenceHints"] | undefined): ArtifactManifest["evidenceHints"] | undefined {
+  if (!hints || hints.schemaVersion !== "a2a.runner.evidence-hints.v1") return undefined;
+  const safe: ArtifactManifest["evidenceHints"] = { schemaVersion: "a2a.runner.evidence-hints.v1" };
+  if (typeof hints.issueUrl === "string" && isSafeGitHubUrl(hints.issueUrl)) safe.issueUrl = hints.issueUrl;
+  if (typeof hints.prUrl === "string" && isSafeGitHubUrl(hints.prUrl)) safe.prUrl = hints.prUrl;
+  if (typeof hints.doneUrl === "string" && isSafeGitHubUrl(hints.doneUrl)) safe.doneUrl = hints.doneUrl;
+  if (typeof hints.blockUrl === "string" && isSafeGitHubUrl(hints.blockUrl)) safe.blockUrl = hints.blockUrl;
+  if (typeof hints.branch === "string") safe.branch = sanitizeScanText(redactSecrets(hints.branch), 160);
+  if (typeof hints.branchUrl === "string" && isSafeGitHubUrl(hints.branchUrl)) safe.branchUrl = hints.branchUrl;
+  if (hints.failureCategory) safe.failureCategory = hints.failureCategory;
+  return Object.keys(safe).length > 1 ? safe : undefined;
+}
+
+function sanitizeGitHubCommentProjection(
+  projection: ArtifactManifest["githubCommentProjection"] | undefined,
+): ArtifactManifest["githubCommentProjection"] | undefined {
+  if (!projection || projection.schemaVersion !== "a2a.runner.github-comment-projection.v1") return undefined;
+  if (!isGitHubProjectionKind(projection.kind) || !isSafeGitHubUrl(projection.url)) return undefined;
+  if (projection.issueUrl && !isSafeGitHubUrl(projection.issueUrl)) return undefined;
+  if (projection.commentIsTerminalAck !== false || projection.commentIsVisibilityReceipt !== false || projection.commentIsOperatorApproval !== false) return undefined;
+  const dedupeKey = sanitizeScanText(redactSecrets(projection.dedupeKey), 300);
+  if (!dedupeKey) return undefined;
+  const manifestPath = "artifacts/manifest.json";
+  return {
+    schemaVersion: "a2a.runner.github-comment-projection.v1",
+    kind: projection.kind,
+    url: projection.url,
+    ...(projection.issueUrl ? { issueUrl: projection.issueUrl } : {}),
+    manifestPath,
+    dedupeKey,
+    commentIsTerminalAck: false,
+    commentIsVisibilityReceipt: false,
+    commentIsOperatorApproval: false,
+  };
+}
+
 /**
  * Produce a safe, path-info-free label for the scan root directory.
  * The label is deterministic and never contains host-specific absolute paths.
@@ -354,6 +419,9 @@ export async function createArtifactBundle(options: BundleOptions): Promise<Arti
     // No artifacts directory; empty bundle.
   }
 
+  const evidenceHints = sanitizeEvidenceHints(sourceManifest?.evidenceHints);
+  const githubCommentProjection = sanitizeGitHubCommentProjection(sourceManifest?.githubCommentProjection);
+
   // Build the bundle manifest.
   const bundleManifest: ArtifactManifest = {
     artifactVersion: 1,
@@ -369,6 +437,8 @@ export async function createArtifactBundle(options: BundleOptions): Promise<Arti
     summary: redactAndBound((sourceManifest?.summary ?? "Redacted artifact bundle produced by a2a-docker-runner scanner.").trim(), 300),
     evidence: sourceManifest?.evidence ?? [],
     artifacts: entries,
+    ...(evidenceHints ? { evidenceHints } : {}),
+    ...(githubCommentProjection ? { githubCommentProjection } : {}),
   };
 
   // Write the bundle manifest.
