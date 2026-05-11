@@ -40,6 +40,7 @@ When `A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE=openclaw` is used, the runner moun
 - `sessions.json` parsed as `{}` is treated as damaged host continuity and blocks the run.
 - `*.jsonl.bak-*` buildup is reported as `warning=openclaw_session_store_guard` when count/bytes exceed thresholds.
 - Writable extra mounts that target or source host OpenClaw runtime paths are rejected; only scratch paths may be mounted read-write.
+- The generated GitHub patch pipeline re-runs the ignored-file-aware bootstrap guard immediately before `git add`/push/PR creation and artifact evidence capture, so agent-created `AGENTS.md`, `SOUL.md`, `USER.md`, `TOOLS.md`, `HEARTBEAT.md`, `IDENTITY.md`, or `.openclaw/**` files fail closed before they can enter a branch or evidence bundle.
 
 Tunables:
 
