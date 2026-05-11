@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { loadConfig } from "./config.js";
+import { loadConfig, validateRunnerConfig } from "./config.js";
+import type { RunnerConfig } from "./types.js";
 
 const baseEnv = {
   A2A_DOCKER_RUNNER_SKIP_ENGINE_DETECT: "1",
@@ -310,4 +311,140 @@ test("loadConfig allows OpenClaw and Codex Docker patch executors", async () => 
     A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON: JSON.stringify({ argv: ["bash", "-lc", "npm install -g @openai/codex && codex exec --help"] }),
   });
   assert.match(codexConfig.commandJson ?? "", /@openai\/codex/);
+});
+
+// --- pre-deploy config validation (a2a-plane#249) ---
+
+function validConfig(overrides?: Partial<RunnerConfig>): RunnerConfig {
+  return {
+    rootDir: "/var/lib/openclaw-a2a/tasks",
+    image: "node:22-bookworm-slim",
+    engine: "docker",
+    defaultTimeoutMs: 900000,
+    ...overrides,
+  };
+}
+
+test("validateRunnerConfig accepts valid config", () => {
+  assert.doesNotThrow(() => validateRunnerConfig(validConfig()));
+  assert.doesNotThrow(() => validateRunnerConfig(validConfig({ network: "bridge" })));
+  assert.doesNotThrow(() => validateRunnerConfig(validConfig({ network: "host" })));
+  assert.doesNotThrow(() => validateRunnerConfig(validConfig({ network: "none" })));
+  assert.doesNotThrow(() => validateRunnerConfig(validConfig({ memory: "4g" })));
+  assert.doesNotThrow(() => validateRunnerConfig(validConfig({ memory: "512m" })));
+  assert.doesNotThrow(() => validateRunnerConfig(validConfig({ cpus: "4" })));
+  assert.doesNotThrow(() => validateRunnerConfig(validConfig({ cpus: "1.5" })));
+  assert.doesNotThrow(() => validateRunnerConfig(validConfig({ defaultTimeoutMs: 1 })));
+});
+
+test("validateRunnerConfig rejects empty image", () => {
+  assert.throws(
+    () => validateRunnerConfig(validConfig({ image: "" })),
+    /runner pre-deploy config validation failed/,
+  );
+  assert.throws(
+    () => validateRunnerConfig(validConfig({ image: "" })),
+    /image must be a non-empty string/,
+  );
+});
+
+test("validateRunnerConfig rejects non-absolute rootDir", () => {
+  assert.throws(
+    () => validateRunnerConfig(validConfig({ rootDir: "relative/path" })),
+    /rootDir must be a non-empty absolute path/,
+  );
+  assert.throws(
+    () => validateRunnerConfig(validConfig({ rootDir: "" })),
+    /rootDir must be a non-empty absolute path/,
+  );
+});
+
+test("validateRunnerConfig rejects unsupported network mode", () => {
+  assert.throws(
+    () => validateRunnerConfig(validConfig({ network: "overlay" })),
+    /unsupported network mode/,
+  );
+  assert.throws(
+    () => validateRunnerConfig(validConfig({ network: "container:foo" })),
+    /unsupported network mode/,
+  );
+});
+
+test("validateRunnerConfig rejects invalid memory format", () => {
+  assert.throws(
+    () => validateRunnerConfig(validConfig({ memory: "two gigabytes" })),
+    /invalid memory limit/,
+  );
+  assert.throws(
+    () => validateRunnerConfig(validConfig({ memory: "-2g" })),
+    /invalid memory limit/,
+  );
+});
+
+test("validateRunnerConfig rejects invalid cpus format", () => {
+  assert.throws(
+    () => validateRunnerConfig(validConfig({ cpus: "two" })),
+    /invalid cpus/,
+  );
+  assert.throws(
+    () => validateRunnerConfig(validConfig({ cpus: "1.2.3" })),
+    /invalid cpus/,
+  );
+});
+
+test("validateRunnerConfig rejects invalid defaultTimeoutMs", () => {
+  assert.throws(
+    () => validateRunnerConfig(validConfig({ defaultTimeoutMs: 0 })),
+    /invalid defaultTimeoutMs/,
+  );
+  assert.throws(
+    () => validateRunnerConfig(validConfig({ defaultTimeoutMs: -100 })),
+    /invalid defaultTimeoutMs/,
+  );
+  assert.throws(
+    () => validateRunnerConfig(validConfig({ defaultTimeoutMs: NaN })),
+    /invalid defaultTimeoutMs/,
+  );
+});
+
+test("validateRunnerConfig reports all errors at once", () => {
+  try {
+    validateRunnerConfig(validConfig({
+      image: "",
+      rootDir: "bad",
+      network: "overlay",
+      memory: "bad",
+      cpus: "bad",
+      defaultTimeoutMs: 0,
+    }));
+    assert.fail("expected throw");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    assert.match(msg, /image must be a non-empty string/);
+    assert.match(msg, /rootDir must be a non-empty absolute path/);
+    assert.match(msg, /unsupported network mode/);
+    assert.match(msg, /invalid memory limit/);
+    assert.match(msg, /invalid cpus/);
+    assert.match(msg, /invalid defaultTimeoutMs/);
+  }
+});
+
+test("loadConfig runs pre-deploy validation on invalid network", async () => {
+  await assert.rejects(
+    () => loadConfig({
+      ...baseEnv,
+      A2A_DOCKER_RUNNER_NETWORK: "invalid-mode",
+    }),
+    /runner pre-deploy config validation failed/,
+  );
+});
+
+test("loadConfig runs pre-deploy validation on invalid memory", async () => {
+  await assert.rejects(
+    () => loadConfig({
+      ...baseEnv,
+      A2A_DOCKER_RUNNER_MEMORY: "not-a-number",
+    }),
+    /runner pre-deploy config validation failed/,
+  );
 });
