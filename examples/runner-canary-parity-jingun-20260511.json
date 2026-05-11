@@ -1,0 +1,305 @@
+{
+  "$schema": "a2a-runner-canary-parity-jingun-v1",
+  "description": "Team2/jingun runner canary parity fixture for Terminal Brief activation after runner update f17072e. Synthetic only: no live broker, Docker, Telegram, Gateway, GitHub writes, deploys, restarts, tokens, raw logs, private paths, or terminal ACKs.",
+  "run": "terminal-brief-activation-20260511T085000Z",
+  "runnerUpdate": "f17072e",
+  "issue": "https://github.com/jinwon-int/a2a-docker-runner/issues/205",
+  "parent": "https://github.com/jinwon-int/a2a-plane/issues/241",
+  "worker": "jingun",
+  "team": "team2",
+  "team1Baseline": {
+    "worker": "nosuk",
+    "issue": "https://github.com/jinwon-int/a2a-docker-runner/issues/204",
+    "cases": [
+      {
+        "parityKey": "pr-receipt",
+        "evidenceKind": "PR",
+        "status": "succeeded",
+        "acknowledged": true,
+        "cursorComplete": true
+      },
+      {
+        "parityKey": "done-receipt",
+        "evidenceKind": "Done",
+        "status": "succeeded",
+        "acknowledged": true,
+        "cursorComplete": true
+      },
+      {
+        "parityKey": "block-receipt",
+        "evidenceKind": "Block",
+        "status": "blocked",
+        "acknowledged": true,
+        "cursorComplete": true
+      },
+      {
+        "parityKey": "provider-send-only",
+        "evidenceKind": "PR",
+        "status": "succeeded",
+        "acknowledged": false,
+        "cursorComplete": false
+      }
+    ]
+  },
+  "emittedAt": "2026-05-11T08:50:00.000Z",
+  "canaryContract": {
+    "objectives": [
+      "independently exercise runner PR/Done/Block terminal evidence",
+      "verify provider-send-only does not complete the terminal cursor",
+      "compare Team2 observed matrix against Team1 baseline outcomes",
+      "emit compact source-public artifact evidence"
+    ],
+    "noLiveProviderSend": true,
+    "terminalAckRequiresOperatorVisibleReceipt": true,
+    "providerSendSuccessIsReceiptEvidence": false,
+    "terminalOutboxAckPerformed": false,
+    "dockerIsolationRequired": true
+  },
+  "cases": [
+    {
+      "parityKey": "pr-receipt",
+      "name": "Team2 PR evidence reaches parity with Team1 receipt-confirmed canary",
+      "handlerTask": {
+        "id": "jingun-canary-pr-205",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "205",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/205",
+          "title": "Team2/jingun runner canary parity PR evidence",
+          "focus": "independent runner canary parity PR evidence after f17072e",
+          "requestedBy": "jingun",
+          "runId": "terminal-brief-activation-20260511T085000Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "jingun-canary-pr-205",
+        "status": "completed",
+        "workDir": "synthetic/parity/pr",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "bounded PR parity output",
+        "stderr": "",
+        "artifacts": [
+          "artifacts/summary.txt"
+        ],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "runner canary parity PR: ok",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 1,
+          "manifestPath": "artifacts/manifest.json",
+          "runnerBuild": {
+            "revision": "f17072e",
+            "image": "node:22-bookworm-slim"
+          }
+        },
+        "github": {
+          "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/205"
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-sse",
+        "receiptId": "receipt-jingun-canary-pr-205",
+        "deliveredAt": "2026-05-11T08:50:01.000Z"
+      },
+      "expected": {
+        "evidenceKind": "PR",
+        "status": "succeeded",
+        "acknowledged": true,
+        "cursorComplete": true
+      },
+      "terminalOutboxId": "terminal-outbox-jingun-pr-205"
+    },
+    {
+      "parityKey": "done-receipt",
+      "name": "Team2 Done evidence reaches parity with Team1 no-change canary",
+      "handlerTask": {
+        "id": "jingun-canary-done-205",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "205",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/205",
+          "title": "Team2/jingun runner canary parity Done evidence",
+          "focus": "independent runner canary parity Done evidence after f17072e",
+          "commentOnly": true,
+          "evidenceOnly": true,
+          "requestedBy": "jingun",
+          "runId": "terminal-brief-activation-20260511T085000Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "jingun-canary-done-205",
+        "status": "completed",
+        "workDir": "synthetic/parity/done",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "bounded Done parity output",
+        "stderr": "",
+        "artifacts": [],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "runner canary parity Done: no change",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 0,
+          "manifestPath": "artifacts/manifest.json",
+          "runnerBuild": {
+            "revision": "f17072e",
+            "image": "node:22-bookworm-slim"
+          }
+        },
+        "github": {
+          "doneCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/205#issuecomment-205001"
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-webhook",
+        "receiptId": "receipt-jingun-canary-done-205",
+        "url": "https://broker.example.invalid/receipts/receipt-jingun-canary-done-205"
+      },
+      "expected": {
+        "evidenceKind": "Done",
+        "status": "succeeded",
+        "acknowledged": true,
+        "cursorComplete": true
+      },
+      "terminalOutboxId": "terminal-outbox-jingun-done-205"
+    },
+    {
+      "parityKey": "block-receipt",
+      "name": "Team2 Block evidence reaches parity with Team1 blocked canary",
+      "handlerTask": {
+        "id": "jingun-canary-block-205",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "205",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/205",
+          "title": "Team2/jingun runner canary parity Block evidence",
+          "focus": "independent runner canary parity Block evidence after f17072e",
+          "requestedBy": "jingun",
+          "runId": "terminal-brief-activation-20260511T085000Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": false,
+        "taskId": "jingun-canary-block-205",
+        "status": "failed",
+        "workDir": "synthetic/parity/block",
+        "exitCode": 1,
+        "signal": null,
+        "stdout": "",
+        "stderr": "bounded Block parity output",
+        "artifacts": [
+          "artifacts/block.txt"
+        ],
+        "resultSummary": {
+          "exitCode": 1,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "",
+          "stderr": "runner canary parity Block: safe block",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 1,
+          "manifestPath": "artifacts/manifest.json",
+          "runnerBuild": {
+            "revision": "f17072e",
+            "image": "node:22-bookworm-slim"
+          }
+        },
+        "github": {
+          "blockCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/205#issuecomment-205002"
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-sse",
+        "receiptId": "receipt-jingun-canary-block-205",
+        "deliveredAt": "2026-05-11T08:50:02.000Z"
+      },
+      "expected": {
+        "evidenceKind": "Block",
+        "status": "blocked",
+        "acknowledged": true,
+        "cursorComplete": true
+      },
+      "terminalOutboxId": "terminal-outbox-jingun-block-205"
+    },
+    {
+      "parityKey": "provider-send-only",
+      "name": "Team2 provider-send-only remains incomplete like Team1 baseline",
+      "providerSendSuccessOnly": true,
+      "handlerTask": {
+        "id": "jingun-canary-send-only-205",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "205",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/205",
+          "title": "Team2/jingun runner canary parity provider-send-only rejection",
+          "focus": "prove provider send alone does not advance broker cursor after f17072e",
+          "requestedBy": "jingun",
+          "runId": "terminal-brief-activation-20260511T085000Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "jingun-canary-send-only-205",
+        "status": "completed",
+        "workDir": "synthetic/parity/send-only",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "provider send accepted without operator-visible receipt",
+        "stderr": "",
+        "artifacts": [],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "provider send only; cursor must remain open",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 0,
+          "manifestPath": "artifacts/manifest.json",
+          "runnerBuild": {
+            "revision": "f17072e",
+            "image": "node:22-bookworm-slim"
+          }
+        },
+        "github": {
+          "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/205"
+        }
+      },
+      "receipt": {
+        "operatorVisible": false,
+        "channel": "telegram"
+      },
+      "expected": {
+        "evidenceKind": "PR",
+        "status": "succeeded",
+        "acknowledged": false,
+        "cursorComplete": false
+      },
+      "terminalOutboxId": "terminal-outbox-jingun-send-only-205"
+    }
+  ]
+}

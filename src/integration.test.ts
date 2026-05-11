@@ -1484,6 +1484,37 @@ test("R4 canonical Terminal Brief receipt smoke script emits safe artifacts", ()
   assert.ok(result.artifacts.every((entry) => entry.taskId && entry.terminalOutboxId && entry.runId && entry.status && entry.testSummary));
 });
 
+test("Team2 runner canary parity smoke compares f17072e evidence against Team1 baseline", () => {
+  const output = execFileSync(process.execPath, ["scripts/runner-canary-parity-smoke.mjs"], {
+    cwd: new URL("..", import.meta.url),
+    encoding: "utf8",
+  });
+  const result = JSON.parse(output) as {
+    ok: boolean;
+    runnerUpdate: string;
+    worker: string;
+    team: string;
+    noLiveProviderSend: boolean;
+    terminalOutboxAckPerformed: boolean;
+    providerSendSuccessIsReceiptEvidence: boolean;
+    parity: Array<{ parityKey: string; evidenceKind: string; status: string; acknowledged: boolean; cursorComplete: boolean }>;
+  };
+
+  assert.equal(result.ok, true);
+  assert.equal(result.runnerUpdate, "f17072e");
+  assert.equal(result.worker, "jingun");
+  assert.equal(result.team, "team2");
+  assert.equal(result.noLiveProviderSend, true);
+  assert.equal(result.terminalOutboxAckPerformed, false);
+  assert.equal(result.providerSendSuccessIsReceiptEvidence, false);
+  assert.equal(result.parity.length, 4);
+  assert.deepEqual(result.parity.map((entry) => entry.parityKey).sort(), ["block-receipt", "done-receipt", "pr-receipt", "provider-send-only"]);
+  assert.ok(result.parity.some((entry) => entry.acknowledged === false && entry.cursorComplete === false), "must retain provider-send-only rejection");
+  assert.ok(result.parity.some((entry) => entry.evidenceKind === "PR" && entry.status === "succeeded"));
+  assert.ok(result.parity.some((entry) => entry.evidenceKind === "Done" && entry.status === "succeeded"));
+  assert.ok(result.parity.some((entry) => entry.evidenceKind === "Block" && entry.status === "blocked"));
+});
+
 test("public demo artifact fixtures pass the no-live safety audit", () => {
   const output = execFileSync(process.execPath, ["scripts/public-demo-safety-audit.mjs"], {
     cwd: new URL("..", import.meta.url),
