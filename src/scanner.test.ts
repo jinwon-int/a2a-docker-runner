@@ -4,6 +4,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, mkdtempSync
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { scanHistory, createArtifactBundle, type ScanProfile, type ScanRunEntry } from "./scanner.js";
+import { buildSourcePublicApprovalRehearsal, buildArtifactManifest } from "./runner.js";
+import { buildSourcePublicExecutionPreflight } from "./source-public-preflight.js";
 
 // ---------------------------------------------------------------------------
 // Scanner: scanHistory
@@ -760,6 +762,89 @@ test("createArtifactBundle drops unsafe source-public rehearsal packets", async 
 
     const bundle = await createArtifactBundle({ workDir: runDir, outputPath: outDir });
     assert.equal(bundle.sourcePublicApprovalRehearsal, undefined);
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+    rmSync(outDir, { recursive: true, force: true });
+  }
+});
+
+test("scanHistory projects source-public execution preflight as compact no-live evidence", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-scanner-source-public-preflight-"));
+  try {
+    const runDir = createMinimalRun(rootDir, "source-public-preflight-task", "run-source-public-preflight");
+    const manifestPath = join(runDir, "artifacts", "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    const packet = buildSourcePublicApprovalRehearsal({
+      targetRepo: "jinwon-int/a2a-docker-runner",
+      decision: "GO_CANDIDATE",
+      runId: "a2a-source-public-execution-orchestrator-20260511T023207Z",
+    }).approvalPackets[0]!;
+    const scanProfile: ScanProfile = {
+      schemaVersion: "a2a.runner.scan-profile.v1",
+      generatedAt: "1970-01-01T00:00:00.000Z",
+      rootLabel: "runner-root:test",
+      totalRunDirs: 1,
+      runs: [{
+        taskId: "source-public-preflight-task",
+        safeTaskId: "source-public-preflight-task",
+        runToken: "run-source-public-preflight",
+        createdAt: "2026-05-11T02:32:07.000Z",
+        status: "done",
+        artifactCount: 1,
+      }],
+    };
+    manifest.sourcePublicExecutionPreflight = buildSourcePublicExecutionPreflight({
+      approvedPacket: packet,
+      manifest,
+      scanProfile,
+      mode: "dry_run",
+    });
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+
+    const profile = await scanHistory({ rootDir });
+    const preflight = profile.runs[0]?.sourcePublicExecutionPreflight;
+    assert.ok(preflight);
+    assert.equal(preflight.status, "ready_for_operator_approval");
+    assert.equal(preflight.mode, "dry_run");
+    assert.equal(preflight.operatorApprovalRequired, true);
+    assert.equal(preflight.sourcePublicExecutionBlocked, true);
+    assert.equal(preflight.approvalExecuted, false);
+    assert.equal(preflight.releaseExecuted, false);
+    assert.equal(preflight.visibilityChanged, false);
+    assert.equal(preflight.liveProviderSendPerformed, false);
+    assert.equal(preflight.terminalAckSent, false);
+    assert.equal(preflight.dbMutationPerformed, false);
+    assert.equal(preflight.deployOrRestartPerformed, false);
+    assert.equal(preflight.failureReasons.length, 0);
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("createArtifactBundle preserves sanitized source-public execution preflight", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-bundle-source-public-preflight-"));
+  const outDir = mkdtempSync(join(tmpdir(), "a2a-bundle-source-public-preflight-out-"));
+  try {
+    const runDir = createMinimalRun(rootDir, "source-public-preflight-task", "run-source-public-preflight");
+    const manifestPath = join(runDir, "artifacts", "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    const packet = buildSourcePublicApprovalRehearsal({
+      targetRepo: "jinwon-int/a2a-docker-runner",
+      decision: "GO_CANDIDATE",
+    }).approvalPackets[0]!;
+    const scanProfile: ScanProfile = {
+      schemaVersion: "a2a.runner.scan-profile.v1",
+      generatedAt: "1970-01-01T00:00:00.000Z",
+      rootLabel: "runner-root:test",
+      totalRunDirs: 1,
+      runs: [{ taskId: "source-public-preflight-task", safeTaskId: "source-public-preflight-task", runToken: "run-source-public-preflight", createdAt: "2026-05-11T02:32:07.000Z", status: "done", artifactCount: 1 }],
+    };
+    manifest.sourcePublicExecutionPreflight = buildSourcePublicExecutionPreflight({ approvedPacket: packet, manifest, scanProfile });
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+
+    const bundle = await createArtifactBundle({ workDir: runDir, outputPath: outDir });
+    assert.equal(bundle.sourcePublicExecutionPreflight?.status, "ready_for_operator_approval");
+    assert.equal(bundle.sourcePublicExecutionPreflight?.safetyGates.deployOrRestartPerformed, false);
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });

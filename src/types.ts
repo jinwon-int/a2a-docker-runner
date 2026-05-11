@@ -267,6 +267,91 @@ export interface SourcePublicApprovalRehearsal {
   };
 }
 
+export type SourcePublicExecutionPreflightMode = "dry_run" | "simulate";
+export type SourcePublicExecutionPreflightStatus = "ready_for_operator_approval" | "blocked";
+
+export interface SourcePublicExecutionPlanAction {
+  sequence: number;
+  id: string;
+  label: string;
+  targetRepo: string;
+  requiresExplicitOperatorApproval: true;
+  dryRunOnly: true;
+  sideEffectPerformed: false;
+}
+
+/**
+ * Final source-public execution preflight capsule.
+ *
+ * This binds an approved source-public approval packet to deterministic
+ * scanner/history evidence and produces an operator-gated dry-run/simulate
+ * execution plan.  It is still preflight evidence only: no approval,
+ * release, visibility change, provider send, Terminal Brief ACK, DB mutation,
+ * deployment, restart, or community post has happened.
+ */
+export interface SourcePublicExecutionPreflight {
+  schemaVersion: "a2a.runner.source-public-execution-preflight.v1";
+  generatedAt: "1970-01-01T00:00:00.000Z";
+  runId?: string;
+  mode: SourcePublicExecutionPreflightMode;
+  status: SourcePublicExecutionPreflightStatus;
+  approvedPacket: {
+    schemaVersion: "a2a.runner.source-public-approval-packet.v1";
+    packetId: string;
+    targetRepo: string;
+    decision: SourcePublicApprovalDecision;
+    dedupeKey: string;
+    evidenceBundlePath: "artifacts/manifest.json";
+  };
+  scannerHistoryBinding: {
+    scanProfileSchemaVersion: "a2a.runner.scan-profile.v1";
+    scannerBound: true;
+    historyRunCount: number;
+    evidenceBundlePath: "artifacts/manifest.json";
+    manifestDigest: string;
+    historyDigest: string;
+  };
+  executionPlan: {
+    planId: string;
+    planDedupeKey: string;
+    operatorGate: "explicit_operator_approval_required";
+    dryRunOnly: true;
+    simulateOnly: boolean;
+    liveExecutionBlocked: true;
+    approvalExecutionBlocked: true;
+    replayProtected: true;
+    actions: SourcePublicExecutionPlanAction[];
+  };
+  replayProtection: {
+    idempotencyKey: string;
+    inputFingerprint: string;
+    replayIndex: number;
+    duplicateDetected: boolean;
+  };
+  rollbackAbortRunbook: {
+    rollbackSteps: string[];
+    abortSteps: string[];
+  };
+  preflightFailureSemantics: {
+    failClosed: true;
+    reasons: string[];
+    approvalPacketNotGoCandidate: boolean;
+    missingScannerHistory: boolean;
+    manifestMismatch: boolean;
+  };
+  safetyGates: {
+    operatorApprovalRequired: true;
+    sourcePublicExecutionBlocked: true;
+    approvalExecuted: false;
+    releaseExecuted: false;
+    visibilityChanged: false;
+    liveProviderSendPerformed: false;
+    terminalAckSent: false;
+    dbMutationPerformed: false;
+    deployOrRestartPerformed: false;
+  };
+}
+
 export interface RunnerTask {
   id: string;
   intent: string;
@@ -439,6 +524,8 @@ export interface ArtifactManifest {
   githubCommentProjection?: GitHubCommentProjection;
   /** Deterministic no-live rehearsal packet/evidence for source-public approval gates. */
   sourcePublicApprovalRehearsal?: SourcePublicApprovalRehearsal;
+  /** Final dry-run/simulate preflight plan bound to scanner/history evidence. */
+  sourcePublicExecutionPreflight?: SourcePublicExecutionPreflight;
 }
 
 export interface ResultSummary {
@@ -461,6 +548,7 @@ export interface ResultSummary {
   evidenceHints?: RunnerEvidenceHints;
   githubCommentProjection?: GitHubCommentProjection;
   sourcePublicApprovalRehearsal?: SourcePublicApprovalRehearsal;
+  sourcePublicExecutionPreflight?: SourcePublicExecutionPreflight;
 }
 
 export interface RunnerResult {

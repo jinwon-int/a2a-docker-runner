@@ -1,6 +1,7 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join, resolve, basename } from "node:path";
 import { RESULT_STREAM_LIMIT, redactSecrets, redactAndBound, sanitizeSourcePublicApprovalRehearsal } from "./runner.js";
+import { sanitizeSourcePublicExecutionPreflight } from "./source-public-preflight.js";
 import type { ArtifactManifest } from "./types.js";
 
 /**
@@ -58,6 +59,25 @@ export interface ScanRunEntry {
     liveProviderSendPerformed: false;
     terminalAckSent: false;
     dbMutationPerformed: false;
+  };
+  sourcePublicExecutionPreflight?: {
+    mode: "dry_run" | "simulate";
+    status: "ready_for_operator_approval" | "blocked";
+    planId: string;
+    planDedupeKey: string;
+    manifestDigest: string;
+    historyDigest: string;
+    historyRunCount: number;
+    failureReasons: string[];
+    operatorApprovalRequired: true;
+    sourcePublicExecutionBlocked: true;
+    approvalExecuted: false;
+    releaseExecuted: false;
+    visibilityChanged: false;
+    liveProviderSendPerformed: false;
+    terminalAckSent: false;
+    dbMutationPerformed: false;
+    deployOrRestartPerformed: false;
   };
   summary?: string;
   exitCode?: number | null;
@@ -249,6 +269,28 @@ async function buildScanRunEntry(
       liveProviderSendPerformed: false,
       terminalAckSent: false,
       dbMutationPerformed: false,
+    };
+  }
+  const sourcePublicExecutionPreflight = sanitizeSourcePublicExecutionPreflight(manifest?.sourcePublicExecutionPreflight);
+  if (sourcePublicExecutionPreflight) {
+    entry.sourcePublicExecutionPreflight = {
+      mode: sourcePublicExecutionPreflight.mode,
+      status: sourcePublicExecutionPreflight.status,
+      planId: sourcePublicExecutionPreflight.executionPlan.planId,
+      planDedupeKey: sourcePublicExecutionPreflight.executionPlan.planDedupeKey,
+      manifestDigest: sourcePublicExecutionPreflight.scannerHistoryBinding.manifestDigest,
+      historyDigest: sourcePublicExecutionPreflight.scannerHistoryBinding.historyDigest,
+      historyRunCount: sourcePublicExecutionPreflight.scannerHistoryBinding.historyRunCount,
+      failureReasons: sourcePublicExecutionPreflight.preflightFailureSemantics.reasons,
+      operatorApprovalRequired: true,
+      sourcePublicExecutionBlocked: true,
+      approvalExecuted: false,
+      releaseExecuted: false,
+      visibilityChanged: false,
+      liveProviderSendPerformed: false,
+      terminalAckSent: false,
+      dbMutationPerformed: false,
+      deployOrRestartPerformed: false,
     };
   }
 
@@ -453,6 +495,7 @@ export async function createArtifactBundle(options: BundleOptions): Promise<Arti
   const evidenceHints = sanitizeEvidenceHints(sourceManifest?.evidenceHints);
   const githubCommentProjection = sanitizeGitHubCommentProjection(sourceManifest?.githubCommentProjection);
   const sourcePublicApprovalRehearsal = sanitizeSourcePublicApprovalRehearsal(sourceManifest?.sourcePublicApprovalRehearsal);
+  const sourcePublicExecutionPreflight = sanitizeSourcePublicExecutionPreflight(sourceManifest?.sourcePublicExecutionPreflight);
 
   // Build the bundle manifest.
   const bundleManifest: ArtifactManifest = {
@@ -472,6 +515,7 @@ export async function createArtifactBundle(options: BundleOptions): Promise<Arti
     ...(evidenceHints ? { evidenceHints } : {}),
     ...(githubCommentProjection ? { githubCommentProjection } : {}),
     ...(sourcePublicApprovalRehearsal ? { sourcePublicApprovalRehearsal } : {}),
+    ...(sourcePublicExecutionPreflight ? { sourcePublicExecutionPreflight } : {}),
   };
 
   // Write the bundle manifest.
