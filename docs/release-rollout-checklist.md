@@ -10,6 +10,9 @@ Scope: operator checklist for proposing and rolling out an `a2a-docker-runner` r
   - `npm run build`
   - `npm run lint`
   - `npm test` (includes CI-safe canary fixture — no Docker needed)
+- Run the release-candidate parity audit:
+  - `npm run audit:release-candidate`
+  - Confirms CI gate parity, bootstrap guard coverage, chaos/receipt rollout gates, active worker targets, and the legacy `yukson` exclusion without executing source-public actions.
 - Run the CI-safe canary explicitly when changing handler integration code:
   - `node --test dist/canary.test.js`
   - Covers PR/Done/Block/malformed/failure/crash paths end-to-end with fake runner binary.
