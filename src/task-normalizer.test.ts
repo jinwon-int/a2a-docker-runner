@@ -137,6 +137,10 @@ test("generates PR-producing default commands for github-propose-patch mode with
   assert.ok(pipeline.includes("warning=pr_update_branch_failed"), "Expected non-fatal update-branch fallback marker");
   assert.ok(pipeline.includes("error=pr_create_failed_or_missing_url"), "Expected missing PR URL to fail safely");
   assert.ok(pipeline.includes("error=no_changes_after_patch_command"), "Expected no-changes fallback to fail safely");
+  assert.ok(pipeline.includes("notice=agent_changed_branch"), "Expected agent-created branch normalization marker");
+  assert.ok(pipeline.includes("git branch -f \"$BRANCH\" HEAD"), "Expected runner branch to be moved to agent HEAD when the agent changed branches");
+  assert.ok(pipeline.includes("git push origin HEAD:\"$BRANCH\""), "Expected pushing current HEAD, not a stale pre-agent branch ref");
+  assert.ok(pipeline.includes("notice=using_existing_pr_url_from_artifacts"), "Expected PR URL recovery from agent-created PR artifacts");
 
   const generated = task.commands.join("\n");
   assert.doesNotMatch(generated, /claude-(install|output|prompt)|@anthropic-ai\/claude-code|claude --/i);

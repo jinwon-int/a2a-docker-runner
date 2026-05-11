@@ -556,3 +556,20 @@ test("buildActionableError: no image-pull error when stderr is unrelated failure
 
   assert.ok(!msg.includes("이미지"), `Must not produce image-pull error for unrelated stderr, got: ${msg}`);
 });
+
+test("buildActionableError: no false container-name conflict from agent stdout", () => {
+  const msg = buildActionableError("docker", "node:22", {
+    code: 2,
+    signal: null,
+    stdout: [
+      "A2A Docker Runner task task-1",
+      "The fixture already exists, skipping generation.",
+      "pull request create failed: GraphQL: No commits between main and branch",
+      "error=pr_create_failed_or_missing_url",
+    ].join("\n"),
+    stderr: "Cloning into '/work/repo'...",
+    timedOut: false,
+  });
+
+  assert.ok(!msg.includes("컨테이너 이름 충돌"), `Must not produce container-name conflict for agent stdout, got: ${msg}`);
+});

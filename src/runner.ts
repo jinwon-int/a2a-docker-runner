@@ -59,10 +59,11 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
   await writeArtifactManifest(workDir, manifest);
   const resultSummary = buildResultSummary(completed, stdout, stderr, artifacts, manifest, config.buildMetadata);
 
+  const prUrlRecoveredAfterNonzero = Boolean(prUrl && !completed.timedOut && completed.code !== 0 && isPostPrNoChangesFailure(stdout));
   const result: RunnerResult = {
-    ok: completed.code === 0 && !completed.timedOut,
+    ok: (completed.code === 0 && !completed.timedOut) || prUrlRecoveredAfterNonzero,
     taskId: task.id,
-    status: completed.timedOut ? "timeout" : completed.code === 0 ? "completed" : "failed",
+    status: completed.timedOut ? "timeout" : (completed.code === 0 || prUrlRecoveredAfterNonzero) ? "completed" : "failed",
     workDir,
     exitCode: completed.code,
     signal: completed.signal,
@@ -73,8 +74,21 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
     resultSummary,
     runnerBuild: config.buildMetadata,
     prUrl,
-    error: completed.code === 0 && !completed.timedOut ? undefined : buildActionableError(engine, config.image, completed),
+    error: (completed.code === 0 && !completed.timedOut) || prUrlRecoveredAfterNonzero ? undefined : buildActionableError(engine, config.image, completed),
   };
+
+  if (prUrlRecoveredAfterNonzero) {
+    result.resultSummary = {
+      ...result.resultSummary!,
+      status: "done",
+    };
+    result.artifactManifest = {
+      ...result.artifactManifest!,
+      status: "done",
+      summary: `Runner recovered PR evidence after post-PR no-change failure: ${prUrl}`,
+    };
+    await writeArtifactManifest(workDir, result.artifactManifest);
+  }
 
   if (isMissingPatchCommand(stdout, stderr)) {
     result.ok = false;
@@ -107,6 +121,11 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
   }
 
   return result;
+}
+
+function isPostPrNoChangesFailure(stdout: string): boolean {
+  return /https:\/\/github\.com\/[^\s]+\/pull\/\d+/.test(stdout)
+    && /(error=openclaw_completed_without_changes|error=no_changes_after_patch_command|OpenClaw produced no repository changes; refusing false Done)/.test(stdout);
 }
 
 function isMissingPatchCommand(stdout: string, stderr: string): boolean {
@@ -1134,7 +1153,8 @@ export function buildActionableError(engine: string, image: string, completed: S
   if (completed.timedOut) {
     return `컨테이너 실행이 제한 시간 안에 끝나지 않았습니다. timeoutMs를 늘리거나 작업 명령을 줄이고, 남은 컨테이너가 있으면 '${engine} ps -a --filter label=a2a.task.id=<safeTaskId>'로 확인한 뒤 run별 container name을 지정해 정리하세요.\n${combined}`.trim();
   }
-  if (/Conflict\.? The container name|container name .* is already in use|name is already in use|already exists/i.test(combined)) {
+  const engineStderr = redactSecrets(completed.stderr).trim();
+  if (/Conflict\.? The container name|container name .* is already in use|name is already in use/i.test(engineStderr)) {
     return `컨테이너 이름 충돌이 발생했습니다. runner는 task id와 run token을 포함한 고유 이름을 사용하므로, 같은 safeTaskId를 가진 오래된 컨테이너가 남았는지 '${engine} ps -a --filter label=a2a.task.id=<safeTaskId>'로 확인하고 해당 run만 정리하세요.\n${combined}`.trim();
   }
   // Image-pull error detection: only inspect stderr for Docker/Podman engine
@@ -1142,7 +1162,6 @@ export function buildActionableError(engine: string, image: string, completed: S
   // misleading image-pull summary when the container actually started.
   // Parent: a2a-docker-runner#169
   {
-    const engineStderr = redactSecrets(completed.stderr).trim();
     if (/Error response from daemon:.*pull access denied|manifest for.*not found|no such image: |repository does not exist|unauthorized:/i.test(engineStderr)) {
       return `이미지 '${image}'를 가져오거나 찾을 수 없습니다. 이미지 이름/태그와 registry 인증을 확인하세요.\n${combined}`.trim();
     }
