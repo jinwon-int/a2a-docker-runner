@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * pre-pr-bootstrap-guard – Fail closed when OpenClaw runtime/bootstrap context
- * files are present in a repository checkout.
+ * files would be included in repository branch changes.
  *
  * Parent: a2a-broker#446
  * Schema: a2a.runner.pre-pr-bootstrap-guard.v1
@@ -13,6 +13,7 @@
 import { existsSync } from "node:fs";
 import { resolve, relative, join } from "node:path";
 import { readdir, stat } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 
 const BANNED_FILES = new Set([
   "AGENTS.md",
@@ -56,12 +57,12 @@ function parseArgs(argv) {
  */
 async function collectBannedPaths(repoDir) {
   const absolute = resolve(repoDir);
-  const offending = [];
+  const candidates = [];
 
   // Check top-level banned files.
   for (const name of BANNED_FILES) {
     const full = join(absolute, name);
-    if (existsSync(full)) offending.push(name);
+    if (existsSync(full)) candidates.push(name);
   }
 
   // Check top-level banned directories.
@@ -69,13 +70,51 @@ async function collectBannedPaths(repoDir) {
     const full = join(absolute, name);
     if (existsSync(full)) {
       const entries = await walkDir(full, name);
-      for (const entry of entries) offending.push(entry);
-      if (entries.length === 0) offending.push(name); // empty dir
+      for (const entry of entries) candidates.push(entry);
+      if (entries.length === 0) candidates.push(name); // empty dir
     }
   }
 
+  const offending = filterBranchEnteringPaths(absolute, candidates);
   offending.sort();
   return offending;
+}
+
+function filterBranchEnteringPaths(repoDir, candidates) {
+  if (candidates.length === 0) return [];
+
+  // If this is not a Git checkout or Git is unavailable, fail closed and report
+  // every discovered runtime/bootstrap path. Inside normal runner checkouts,
+  // ignored untracked files are safe because broad `git add -A` will not stage
+  // them; tracked, staged, modified, or unignored untracked files are not safe.
+  if (!isGitWorkTree(repoDir)) return [...candidates];
+
+  return candidates.filter((candidate) => {
+    const tracked = gitOutput(repoDir, ["ls-files", "--", candidate]);
+    if (tracked === undefined || tracked.trim()) return true;
+
+    const pending = gitOutput(repoDir, ["status", "--porcelain", "--", candidate]);
+    if (pending === undefined) return true;
+    return pending.trim().length > 0;
+  });
+}
+
+function isGitWorkTree(repoDir) {
+  const result = spawnSync("git", ["-C", repoDir, "rev-parse", "--is-inside-work-tree"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+    timeout: 5000,
+  });
+  return result.status === 0 && result.stdout.trim() === "true";
+}
+
+function gitOutput(repoDir, args) {
+  const result = spawnSync("git", ["-C", repoDir, ...args], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+    timeout: 5000,
+  });
+  return result.status === 0 ? result.stdout : undefined;
 }
 
 async function walkDir(dir, prefix) {
