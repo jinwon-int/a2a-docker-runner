@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "a2a.runner.approval-rehearsal.v1",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "runId": "a2a-source-public-approval-rehearsal-20260511T014240Z",
+  "traceId": "source-public-rehearsal-trace-001",
+  "repo": "jinwon-int/a2a-docker-runner",
+  "branch": "feat/source-public-approval-rehearsal",
+  "proposedChange": "Add source-public approval rehearsal module with deterministic packets, evidence bundles, and GO_CANDIDATE/NO_GO/NEEDS_OPERATOR_APPROVAL decision output",
+  "safetyGates": [
+    {
+      "id": "no_production_deploy",
+      "label": "No production deploy, restart, or live service mutation",
+      "passed": true
+    },
+    {
+      "id": "no_gateway_broker_worker_restart",
+      "label": "No Gateway, broker, or worker restart",
+      "passed": true
+    },
+    {
+      "id": "no_live_provider_send",
+      "label": "No live provider send (Telegram, Signal, etc.)",
+      "passed": true
+    },
+    {
+      "id": "no_terminal_ack",
+      "label": "No terminal ACK or read-receipt claim",
+      "passed": true
+    },
+    {
+      "id": "no_production_db_mutation",
+      "label": "No production database mutation",
+      "passed": true
+    },
+    {
+      "id": "no_secret_or_visibility_change",
+      "label": "No secret disclosure or repository visibility change",
+      "passed": true
+    },
+    {
+      "id": "no_history_rewrite",
+      "label": "No repository history rewrite or force-push",
+      "passed": true
+    },
+    {
+      "id": "no_release_publication",
+      "label": "No release publication, community post, or npm publish",
+      "passed": true
+    },
+    {
+      "id": "no_automatic_merge_approval",
+      "label": "No automatic merge or approval without explicit operator approval",
+      "passed": true
+    },
+    {
+      "id": "no_approval_execution",
+      "label": "No approval execution — rehearsal round only",
+      "passed": true
+    },
+    {
+      "id": "rehearsal_round_only",
+      "label": "This round produces approval packets only, never executes",
+      "passed": true
+    }
+  ],
+  "idempotencyProof": {
+    "dedupeKey": "a2a-src-pub-rehearsal:ab12ef34cd56ab78",
+    "inputFingerprint": "ab12ef34cd56ab7890ef1234567890ab",
+    "wasExecuted": false,
+    "replayIndex": 0
+  },
+  "decision": "GO_CANDIDATE",
+  "decisionReason": "All safety gates passed. Rehearsal packet produced. Operator must explicitly approve before executing any source-public change.",
+  "abortPaths": [
+    "Abort: delete the approval rehearsal packet and evidence bundle from the output directory.",
+    "Abort: discard this branch — no code or config changes have been deployed.",
+    "Abort: operator may decide not to approve the candidate. No state has been mutated.",
+    "Abort: the rehearsal packet is advisory; discard and re-run with corrected inputs."
+  ],
+  "rollbackPaths": [
+    "Rollback: no state was mutated during this rehearsal round — nothing to roll back.",
+    "Rollback: the evidence bundle is self-contained under the output directory; remove the directory to clean up.",
+    "Rollback: before approval execution, verify the packet decision and evidence bundle are consistent."
+  ],
+  "evidenceBundlePath": "manifest.json",
+  "evidenceHints": {
+    "schemaVersion": "a2a.runner.evidence-hints.v1",
+    "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/185"
+  }
+}
