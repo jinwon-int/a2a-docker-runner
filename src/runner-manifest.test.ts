@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { buildArtifactManifest, buildGitHubCommentProjection, buildResultSummary, buildRunnerEvidenceHints, redactAndBound, RESULT_STREAM_LIMIT, sanitizeReceiptTrace, sanitizeTaskArtifactPayload } from "./runner.js";
+import { buildArtifactManifest, buildGitHubCommentProjection, buildResultSummary, buildRunnerEvidenceHints, buildSourcePublicApprovalRehearsal, redactAndBound, RESULT_STREAM_LIMIT, sanitizeReceiptTrace, sanitizeSourcePublicApprovalRehearsal, sanitizeTaskArtifactPayload } from "./runner.js";
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -343,4 +343,131 @@ test("buildGitHubCommentProjection and manifest carry replay-safe ledger-only me
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("source-public approval rehearsal is preserved only as no-live deterministic evidence", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "a2a-source-public-rehearsal-"));
+  try {
+    await mkdir(join(dir, "artifacts"), { recursive: true });
+    const artifact = join(dir, "artifacts", "source-public-approval-rehearsal.json");
+    await writeFile(artifact, "synthetic source-public approval rehearsal only");
+    const rehearsal = sanitizeSourcePublicApprovalRehearsal({
+      schemaVersion: "a2a.runner.source-public-approval-rehearsal.v1",
+      generatedAt: "1970-01-01T00:00:00.000Z",
+      runId: "a2a-source-public-approval-rehearsal-20260511T014240Z",
+      decision: "GO_CANDIDATE",
+      terminalBriefRehearsalOnly: true,
+      approvalPackets: [{
+        schemaVersion: "a2a.runner.source-public-approval-packet.v1",
+        packetId: "packet-001",
+        targetRepo: "jinwon-int/a2a-docker-runner",
+        decision: "GO_CANDIDATE",
+        dedupeKey: "source-public:packet-001",
+        evidenceBundlePath: "artifacts/manifest.json",
+        operatorApprovalRequired: true,
+        approvalExecuted: false,
+        releaseExecuted: false,
+        visibilityChanged: false,
+        terminalAckSent: false,
+        providerSendPerformed: false,
+        dbMutationPerformed: false,
+        rollbackPath: "rollback/source-public-rehearsal.md",
+        abortPath: "abort/source-public-rehearsal.md",
+      }],
+      replayNoDuplicateProof: { dedupeKey: "source-public:packet-001", noDuplicatePacketIds: true },
+      rollbackAbort: { rollbackPath: "rollback/source-public-rehearsal.md", abortPath: "abort/source-public-rehearsal.md" },
+      safetyGates: {
+        operatorApprovalRequired: true,
+        sourcePublicExecutionBlocked: true,
+        approvalExecuted: false,
+        releaseExecuted: false,
+        visibilityChanged: false,
+        liveProviderSendPerformed: false,
+        terminalAckSent: false,
+        dbMutationPerformed: false,
+      },
+    });
+    assert.ok(rehearsal);
+
+    const manifest = await buildArtifactManifest(dir, [artifact], { status: "done", sourcePublicApprovalRehearsal: rehearsal });
+    const summary = buildResultSummary({ code: 0, signal: null, stdout: "ok", stderr: "", timedOut: false }, "ok", "", [artifact], manifest);
+
+    assert.equal(manifest.sourcePublicApprovalRehearsal?.decision, "GO_CANDIDATE");
+    assert.equal(manifest.sourcePublicApprovalRehearsal?.terminalBriefRehearsalOnly, true);
+    assert.equal(manifest.sourcePublicApprovalRehearsal?.approvalPackets[0]?.approvalExecuted, false);
+    assert.equal(manifest.sourcePublicApprovalRehearsal?.approvalPackets[0]?.releaseExecuted, false);
+    assert.equal(manifest.sourcePublicApprovalRehearsal?.approvalPackets[0]?.visibilityChanged, false);
+    assert.equal(manifest.sourcePublicApprovalRehearsal?.approvalPackets[0]?.terminalAckSent, false);
+    assert.equal(manifest.sourcePublicApprovalRehearsal?.approvalPackets[0]?.providerSendPerformed, false);
+    assert.equal(manifest.sourcePublicApprovalRehearsal?.approvalPackets[0]?.dbMutationPerformed, false);
+    assert.deepEqual(summary.sourcePublicApprovalRehearsal, manifest.sourcePublicApprovalRehearsal);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("source-public approval rehearsal fails closed when live execution flags appear", () => {
+  const unsafe = sanitizeSourcePublicApprovalRehearsal({
+    schemaVersion: "a2a.runner.source-public-approval-rehearsal.v1",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    decision: "NEEDS_OPERATOR_APPROVAL",
+    terminalBriefRehearsalOnly: true,
+    approvalPackets: [{
+      schemaVersion: "a2a.runner.source-public-approval-packet.v1",
+      packetId: "packet-unsafe",
+      targetRepo: "jinwon-int/a2a-docker-runner",
+      decision: "NEEDS_OPERATOR_APPROVAL",
+      dedupeKey: "source-public:packet-unsafe",
+      evidenceBundlePath: "artifacts/manifest.json",
+      operatorApprovalRequired: true,
+      approvalExecuted: true,
+      releaseExecuted: false,
+      visibilityChanged: false,
+      terminalAckSent: false,
+      providerSendPerformed: false,
+      dbMutationPerformed: false,
+      rollbackPath: "rollback/source-public-rehearsal.md",
+      abortPath: "abort/source-public-rehearsal.md",
+    }],
+    replayNoDuplicateProof: { dedupeKey: "source-public:packet-unsafe", noDuplicatePacketIds: true },
+    rollbackAbort: { rollbackPath: "rollback/source-public-rehearsal.md", abortPath: "abort/source-public-rehearsal.md" },
+    safetyGates: {
+      operatorApprovalRequired: true,
+      sourcePublicExecutionBlocked: true,
+      approvalExecuted: false,
+      releaseExecuted: false,
+      visibilityChanged: false,
+      liveProviderSendPerformed: false,
+      terminalAckSent: false,
+      dbMutationPerformed: false,
+    },
+  });
+
+  assert.equal(unsafe, undefined);
+});
+
+test("buildSourcePublicApprovalRehearsal produces deterministic packets", () => {
+  const first = buildSourcePublicApprovalRehearsal({
+    targetRepo: "jinwon-int/a2a-docker-runner",
+    decision: "NO_GO",
+    runId: "a2a-source-public-approval-rehearsal-20260511T014240Z",
+  });
+  const second = buildSourcePublicApprovalRehearsal({
+    targetRepo: "jinwon-int/a2a-docker-runner",
+    decision: "NO_GO",
+    runId: "a2a-source-public-approval-rehearsal-20260511T014240Z",
+  });
+
+  assert.deepEqual(first, second);
+  assert.equal(first.generatedAt, "1970-01-01T00:00:00.000Z");
+  assert.equal(first.decision, "NO_GO");
+  assert.equal(first.approvalPackets.length, 1);
+  assert.equal(first.approvalPackets[0]?.operatorApprovalRequired, true);
+  assert.equal(first.safetyGates.sourcePublicExecutionBlocked, true);
+  assert.equal(first.safetyGates.approvalExecuted, false);
+  assert.equal(first.safetyGates.releaseExecuted, false);
+  assert.equal(first.safetyGates.visibilityChanged, false);
+  assert.equal(first.safetyGates.liveProviderSendPerformed, false);
+  assert.equal(first.safetyGates.terminalAckSent, false);
+  assert.equal(first.safetyGates.dbMutationPerformed, false);
 });

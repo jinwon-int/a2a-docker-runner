@@ -3,7 +3,7 @@ import { basename, join, relative, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { normalizeTask } from "./task-normalizer.js";
 import { collectGitHubEvidence } from "./github-evidence.js";
-import type { ArtifactEvidencePart, ArtifactManifest, ArtifactManifestEntry, ArtifactManifestStatus, GitHubCommentProjection, GitHubCommentProjectionKind, NormalizedRunnerTask, ResultSummary, RunnerBudgetEvidence, RunnerConfig, RunnerContinuationEvidence, RunnerEvidenceHints, RunnerReceiptTrace, RunnerResult, RunnerTask } from "./types.js";
+import type { ArtifactEvidencePart, ArtifactManifest, ArtifactManifestEntry, ArtifactManifestStatus, GitHubCommentProjection, GitHubCommentProjectionKind, NormalizedRunnerTask, ResultSummary, RunnerBudgetEvidence, RunnerConfig, RunnerContinuationEvidence, RunnerEvidenceHints, RunnerReceiptTrace, RunnerResult, RunnerTask, SourcePublicApprovalDecision, SourcePublicApprovalPacket, SourcePublicApprovalRehearsal } from "./types.js";
 
 export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<RunnerResult> {
   validateTask(task);
@@ -737,6 +737,7 @@ export function buildResultSummary(
     ...(manifest.continuation ? { continuation: manifest.continuation } : {}),
     ...(manifest.evidenceHints ? { evidenceHints: manifest.evidenceHints } : {}),
     ...(manifest.githubCommentProjection ? { githubCommentProjection: manifest.githubCommentProjection } : {}),
+    ...(manifest.sourcePublicApprovalRehearsal ? { sourcePublicApprovalRehearsal: manifest.sourcePublicApprovalRehearsal } : {}),
     ...(runnerBuild ? { runnerBuild } : {}),
   };
 }
@@ -752,6 +753,7 @@ export interface ArtifactManifestContext {
   continuation?: RunnerContinuationEvidence;
   evidenceHints?: RunnerEvidenceHints;
   githubCommentProjection?: GitHubCommentProjection;
+  sourcePublicApprovalRehearsal?: SourcePublicApprovalRehearsal;
 }
 
 export async function buildArtifactManifest(workDir: string, artifacts: string[], context: ArtifactManifestContext = {}): Promise<ArtifactManifest> {
@@ -769,6 +771,7 @@ export async function buildArtifactManifest(workDir: string, artifacts: string[]
   const task = context.task;
   const primaryRepo = task?.repos.find((repo) => repo.primary) ?? task?.repos[0];
   const summary = buildArtifactManifestSummary(context, evidence.length);
+  const sourcePublicApprovalRehearsal = sanitizeSourcePublicApprovalRehearsal(context.sourcePublicApprovalRehearsal);
   return {
     artifactVersion: 1,
     schemaVersion: 1,
@@ -788,6 +791,7 @@ export async function buildArtifactManifest(workDir: string, artifacts: string[]
     ...(context.continuation ? { continuation: context.continuation } : {}),
     ...(context.evidenceHints ? { evidenceHints: context.evidenceHints } : {}),
     ...(context.githubCommentProjection ? { githubCommentProjection: context.githubCommentProjection } : {}),
+    ...(sourcePublicApprovalRehearsal ? { sourcePublicApprovalRehearsal } : {}),
   };
 }
 
@@ -824,6 +828,171 @@ function parseReceiptTraceEnv(env: Record<string, string> | undefined): unknown 
   } catch {
     return { status: "failed", reason: "invalid receipt trace metadata" };
   }
+}
+
+export interface SourcePublicApprovalRehearsalInput {
+  targetRepo: string;
+  decision?: SourcePublicApprovalDecision;
+  runId?: string;
+  packetId?: string;
+  dedupeKey?: string;
+  rollbackPath?: string;
+  abortPath?: string;
+}
+
+export function buildSourcePublicApprovalRehearsal(input: SourcePublicApprovalRehearsalInput): SourcePublicApprovalRehearsal {
+  const targetRepo = safeSourcePublicRepo(input.targetRepo);
+  if (!targetRepo) throw new Error("source-public rehearsal targetRepo must be owner/repo");
+  const decision = input.decision ?? "NEEDS_OPERATOR_APPROVAL";
+  const packetId = safeBudgetText(input.packetId ?? `source-public-${targetRepo.replace("/", "-")}`, 120);
+  const dedupeKey = safeBudgetText(input.dedupeKey ?? `source-public:${targetRepo}:${packetId}:${decision}`, 240);
+  const rollbackPath = safeRehearsalPath(input.rollbackPath ?? "rollback/source-public-approval-rehearsal.md");
+  const abortPath = safeRehearsalPath(input.abortPath ?? "abort/source-public-approval-rehearsal.md");
+  if (!isSourcePublicDecision(decision) || !packetId || !dedupeKey || !rollbackPath || !abortPath) {
+    throw new Error("invalid source-public approval rehearsal input");
+  }
+  const rehearsal = sanitizeSourcePublicApprovalRehearsal({
+    schemaVersion: "a2a.runner.source-public-approval-rehearsal.v1",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    ...(input.runId ? { runId: input.runId } : {}),
+    decision,
+    terminalBriefRehearsalOnly: true,
+    approvalPackets: [{
+      schemaVersion: "a2a.runner.source-public-approval-packet.v1",
+      packetId,
+      targetRepo,
+      decision,
+      dedupeKey,
+      evidenceBundlePath: "artifacts/manifest.json",
+      operatorApprovalRequired: true,
+      approvalExecuted: false,
+      releaseExecuted: false,
+      visibilityChanged: false,
+      terminalAckSent: false,
+      providerSendPerformed: false,
+      dbMutationPerformed: false,
+      rollbackPath,
+      abortPath,
+    }],
+    replayNoDuplicateProof: { dedupeKey, noDuplicatePacketIds: true },
+    rollbackAbort: { rollbackPath, abortPath },
+    safetyGates: {
+      operatorApprovalRequired: true,
+      sourcePublicExecutionBlocked: true,
+      approvalExecuted: false,
+      releaseExecuted: false,
+      visibilityChanged: false,
+      liveProviderSendPerformed: false,
+      terminalAckSent: false,
+      dbMutationPerformed: false,
+    },
+  });
+  if (!rehearsal) throw new Error("failed to build source-public approval rehearsal");
+  return rehearsal;
+}
+
+export function sanitizeSourcePublicApprovalRehearsal(input: unknown): SourcePublicApprovalRehearsal | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const value = input as Record<string, unknown>;
+  if (value.schemaVersion !== "a2a.runner.source-public-approval-rehearsal.v1") return undefined;
+  if (value.generatedAt !== "1970-01-01T00:00:00.000Z") return undefined;
+  if (!isSourcePublicDecision(value.decision)) return undefined;
+  if (value.terminalBriefRehearsalOnly !== true) return undefined;
+  const packets = Array.isArray(value.approvalPackets)
+    ? value.approvalPackets.map(sanitizeSourcePublicApprovalPacket).filter((packet): packet is SourcePublicApprovalPacket => Boolean(packet))
+    : [];
+  if (packets.length === 0 || packets.length > 10) return undefined;
+  const packetIds = new Set(packets.map((packet) => packet.packetId));
+  if (packetIds.size !== packets.length) return undefined;
+  const replay = value.replayNoDuplicateProof as Record<string, unknown> | undefined;
+  const rollbackAbort = value.rollbackAbort as Record<string, unknown> | undefined;
+  const safetyGates = value.safetyGates as Record<string, unknown> | undefined;
+  if (replay?.noDuplicatePacketIds !== true) return undefined;
+  if (!hasSafeSourcePublicGates(safetyGates)) return undefined;
+  const dedupeKey = safeBudgetText(typeof replay?.dedupeKey === "string" ? replay.dedupeKey : undefined, 240);
+  const rollbackPath = safeRehearsalPath(typeof rollbackAbort?.rollbackPath === "string" ? rollbackAbort.rollbackPath : undefined);
+  const abortPath = safeRehearsalPath(typeof rollbackAbort?.abortPath === "string" ? rollbackAbort.abortPath : undefined);
+  if (!dedupeKey || !rollbackPath || !abortPath) return undefined;
+  return {
+    schemaVersion: "a2a.runner.source-public-approval-rehearsal.v1",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    ...(typeof value.runId === "string" && safeBudgetText(value.runId, 160) ? { runId: safeBudgetText(value.runId, 160) } : {}),
+    decision: value.decision,
+    approvalPackets: packets.sort((a, b) => a.packetId.localeCompare(b.packetId)),
+    terminalBriefRehearsalOnly: true,
+    replayNoDuplicateProof: { dedupeKey, noDuplicatePacketIds: true },
+    rollbackAbort: { rollbackPath, abortPath },
+    safetyGates: {
+      operatorApprovalRequired: true,
+      sourcePublicExecutionBlocked: true,
+      approvalExecuted: false,
+      releaseExecuted: false,
+      visibilityChanged: false,
+      liveProviderSendPerformed: false,
+      terminalAckSent: false,
+      dbMutationPerformed: false,
+    },
+  };
+}
+
+function sanitizeSourcePublicApprovalPacket(input: unknown): SourcePublicApprovalPacket | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const value = input as Record<string, unknown>;
+  if (value.schemaVersion !== "a2a.runner.source-public-approval-packet.v1") return undefined;
+  if (!isSourcePublicDecision(value.decision)) return undefined;
+  if (value.evidenceBundlePath !== "artifacts/manifest.json") return undefined;
+  if (value.operatorApprovalRequired !== true || value.approvalExecuted !== false || value.releaseExecuted !== false || value.visibilityChanged !== false || value.terminalAckSent !== false || value.providerSendPerformed !== false || value.dbMutationPerformed !== false) return undefined;
+  const packetId = safeBudgetText(typeof value.packetId === "string" ? value.packetId : undefined, 120);
+  const targetRepo = safeSourcePublicRepo(typeof value.targetRepo === "string" ? value.targetRepo : undefined);
+  const dedupeKey = safeBudgetText(typeof value.dedupeKey === "string" ? value.dedupeKey : undefined, 240);
+  const rollbackPath = safeRehearsalPath(typeof value.rollbackPath === "string" ? value.rollbackPath : undefined);
+  const abortPath = safeRehearsalPath(typeof value.abortPath === "string" ? value.abortPath : undefined);
+  if (!packetId || !targetRepo || !dedupeKey || !rollbackPath || !abortPath) return undefined;
+  return {
+    schemaVersion: "a2a.runner.source-public-approval-packet.v1",
+    packetId,
+    targetRepo,
+    decision: value.decision,
+    dedupeKey,
+    evidenceBundlePath: "artifacts/manifest.json",
+    operatorApprovalRequired: true,
+    approvalExecuted: false,
+    releaseExecuted: false,
+    visibilityChanged: false,
+    terminalAckSent: false,
+    providerSendPerformed: false,
+    dbMutationPerformed: false,
+    rollbackPath,
+    abortPath,
+  };
+}
+
+function isSourcePublicDecision(value: unknown): value is SourcePublicApprovalDecision {
+  return value === "GO_CANDIDATE" || value === "NO_GO" || value === "NEEDS_OPERATOR_APPROVAL";
+}
+
+function hasSafeSourcePublicGates(value: Record<string, unknown> | undefined): boolean {
+  return value?.operatorApprovalRequired === true
+    && value.sourcePublicExecutionBlocked === true
+    && value.approvalExecuted === false
+    && value.releaseExecuted === false
+    && value.visibilityChanged === false
+    && value.liveProviderSendPerformed === false
+    && value.terminalAckSent === false
+    && value.dbMutationPerformed === false;
+}
+
+function safeSourcePublicRepo(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const safe = safeBudgetText(value, 160);
+  return safe && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(safe) ? safe : undefined;
+}
+
+function safeRehearsalPath(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const safe = safeBudgetText(value, 160);
+  if (!safe || safe.includes("..") || safe.startsWith("/") || /^~(?:\/|$)/.test(safe)) return undefined;
+  return safe;
 }
 
 export function sanitizeReceiptTrace(input: unknown): RunnerReceiptTrace | undefined {

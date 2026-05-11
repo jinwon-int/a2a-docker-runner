@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join, resolve, basename } from "node:path";
-import { RESULT_STREAM_LIMIT, redactSecrets, redactAndBound } from "./runner.js";
+import { RESULT_STREAM_LIMIT, redactSecrets, redactAndBound, sanitizeSourcePublicApprovalRehearsal } from "./runner.js";
 import type { ArtifactManifest } from "./types.js";
 
 /**
@@ -44,6 +44,20 @@ export interface ScanRunEntry {
     commentIsTerminalAck: false;
     commentIsVisibilityReceipt: false;
     commentIsOperatorApproval: false;
+  };
+  sourcePublicApprovalRehearsal?: {
+    decision: "GO_CANDIDATE" | "NO_GO" | "NEEDS_OPERATOR_APPROVAL";
+    approvalPacketCount: number;
+    terminalBriefRehearsalOnly: true;
+    dedupeKey: string;
+    operatorApprovalRequired: true;
+    sourcePublicExecutionBlocked: true;
+    approvalExecuted: false;
+    releaseExecuted: false;
+    visibilityChanged: false;
+    liveProviderSendPerformed: false;
+    terminalAckSent: false;
+    dbMutationPerformed: false;
   };
   summary?: string;
   exitCode?: number | null;
@@ -218,6 +232,23 @@ async function buildScanRunEntry(
       commentIsTerminalAck: false,
       commentIsVisibilityReceipt: false,
       commentIsOperatorApproval: false,
+    };
+  }
+  const sourcePublicApprovalRehearsal = sanitizeSourcePublicApprovalRehearsal(manifest?.sourcePublicApprovalRehearsal);
+  if (sourcePublicApprovalRehearsal) {
+    entry.sourcePublicApprovalRehearsal = {
+      decision: sourcePublicApprovalRehearsal.decision,
+      approvalPacketCount: sourcePublicApprovalRehearsal.approvalPackets.length,
+      terminalBriefRehearsalOnly: true,
+      dedupeKey: sourcePublicApprovalRehearsal.replayNoDuplicateProof.dedupeKey,
+      operatorApprovalRequired: true,
+      sourcePublicExecutionBlocked: true,
+      approvalExecuted: false,
+      releaseExecuted: false,
+      visibilityChanged: false,
+      liveProviderSendPerformed: false,
+      terminalAckSent: false,
+      dbMutationPerformed: false,
     };
   }
 
@@ -421,6 +452,7 @@ export async function createArtifactBundle(options: BundleOptions): Promise<Arti
 
   const evidenceHints = sanitizeEvidenceHints(sourceManifest?.evidenceHints);
   const githubCommentProjection = sanitizeGitHubCommentProjection(sourceManifest?.githubCommentProjection);
+  const sourcePublicApprovalRehearsal = sanitizeSourcePublicApprovalRehearsal(sourceManifest?.sourcePublicApprovalRehearsal);
 
   // Build the bundle manifest.
   const bundleManifest: ArtifactManifest = {
@@ -439,6 +471,7 @@ export async function createArtifactBundle(options: BundleOptions): Promise<Arti
     artifacts: entries,
     ...(evidenceHints ? { evidenceHints } : {}),
     ...(githubCommentProjection ? { githubCommentProjection } : {}),
+    ...(sourcePublicApprovalRehearsal ? { sourcePublicApprovalRehearsal } : {}),
   };
 
   // Write the bundle manifest.

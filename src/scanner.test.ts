@@ -650,3 +650,118 @@ test("scanHistory omits unsafe GitHub projection flags instead of converting the
     rmSync(rootDir, { recursive: true, force: true });
   }
 });
+
+test("scanHistory projects source-public rehearsal as compact no-live evidence", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-scanner-source-public-"));
+  try {
+    const runDir = createMinimalRun(rootDir, "source-public-task", "run-source-public");
+    const manifestPath = join(runDir, "artifacts", "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.sourcePublicApprovalRehearsal = {
+      schemaVersion: "a2a.runner.source-public-approval-rehearsal.v1",
+      generatedAt: "1970-01-01T00:00:00.000Z",
+      runId: "a2a-source-public-approval-rehearsal-20260511T014240Z",
+      decision: "NEEDS_OPERATOR_APPROVAL",
+      terminalBriefRehearsalOnly: true,
+      approvalPackets: [{
+        schemaVersion: "a2a.runner.source-public-approval-packet.v1",
+        packetId: "packet-001",
+        targetRepo: "jinwon-int/a2a-docker-runner",
+        decision: "NEEDS_OPERATOR_APPROVAL",
+        dedupeKey: "source-public:packet-001",
+        evidenceBundlePath: "artifacts/manifest.json",
+        operatorApprovalRequired: true,
+        approvalExecuted: false,
+        releaseExecuted: false,
+        visibilityChanged: false,
+        terminalAckSent: false,
+        providerSendPerformed: false,
+        dbMutationPerformed: false,
+        rollbackPath: "rollback/source-public-rehearsal.md",
+        abortPath: "abort/source-public-rehearsal.md",
+      }],
+      replayNoDuplicateProof: { dedupeKey: "source-public:packet-001", noDuplicatePacketIds: true },
+      rollbackAbort: { rollbackPath: "rollback/source-public-rehearsal.md", abortPath: "abort/source-public-rehearsal.md" },
+      safetyGates: {
+        operatorApprovalRequired: true,
+        sourcePublicExecutionBlocked: true,
+        approvalExecuted: false,
+        releaseExecuted: false,
+        visibilityChanged: false,
+        liveProviderSendPerformed: false,
+        terminalAckSent: false,
+        dbMutationPerformed: false,
+      },
+    };
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+
+    const profile = await scanHistory({ rootDir });
+    const rehearsal = profile.runs[0]?.sourcePublicApprovalRehearsal;
+    assert.ok(rehearsal);
+    assert.equal(rehearsal.decision, "NEEDS_OPERATOR_APPROVAL");
+    assert.equal(rehearsal.approvalPacketCount, 1);
+    assert.equal(rehearsal.terminalBriefRehearsalOnly, true);
+    assert.equal(rehearsal.operatorApprovalRequired, true);
+    assert.equal(rehearsal.sourcePublicExecutionBlocked, true);
+    assert.equal(rehearsal.approvalExecuted, false);
+    assert.equal(rehearsal.releaseExecuted, false);
+    assert.equal(rehearsal.visibilityChanged, false);
+    assert.equal(rehearsal.liveProviderSendPerformed, false);
+    assert.equal(rehearsal.terminalAckSent, false);
+    assert.equal(rehearsal.dbMutationPerformed, false);
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("createArtifactBundle drops unsafe source-public rehearsal packets", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-bundle-source-public-"));
+  const outDir = mkdtempSync(join(tmpdir(), "a2a-bundle-source-public-out-"));
+  try {
+    const runDir = createMinimalRun(rootDir, "source-public-task", "run-source-public");
+    const manifestPath = join(runDir, "artifacts", "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.sourcePublicApprovalRehearsal = {
+      schemaVersion: "a2a.runner.source-public-approval-rehearsal.v1",
+      generatedAt: "1970-01-01T00:00:00.000Z",
+      decision: "GO_CANDIDATE",
+      terminalBriefRehearsalOnly: true,
+      approvalPackets: [{
+        schemaVersion: "a2a.runner.source-public-approval-packet.v1",
+        packetId: "packet-unsafe",
+        targetRepo: "jinwon-int/a2a-docker-runner",
+        decision: "GO_CANDIDATE",
+        dedupeKey: "source-public:packet-unsafe",
+        evidenceBundlePath: "artifacts/manifest.json",
+        operatorApprovalRequired: true,
+        approvalExecuted: false,
+        releaseExecuted: false,
+        visibilityChanged: true,
+        terminalAckSent: false,
+        providerSendPerformed: false,
+        dbMutationPerformed: false,
+        rollbackPath: "rollback/source-public-rehearsal.md",
+        abortPath: "abort/source-public-rehearsal.md",
+      }],
+      replayNoDuplicateProof: { dedupeKey: "source-public:packet-unsafe", noDuplicatePacketIds: true },
+      rollbackAbort: { rollbackPath: "rollback/source-public-rehearsal.md", abortPath: "abort/source-public-rehearsal.md" },
+      safetyGates: {
+        operatorApprovalRequired: true,
+        sourcePublicExecutionBlocked: true,
+        approvalExecuted: false,
+        releaseExecuted: false,
+        visibilityChanged: false,
+        liveProviderSendPerformed: false,
+        terminalAckSent: false,
+        dbMutationPerformed: false,
+      },
+    };
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+
+    const bundle = await createArtifactBundle({ workDir: runDir, outputPath: outDir });
+    assert.equal(bundle.sourcePublicApprovalRehearsal, undefined);
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+    rmSync(outDir, { recursive: true, force: true });
+  }
+});
