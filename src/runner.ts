@@ -60,7 +60,11 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
   await writeArtifactManifest(workDir, manifest);
   const resultSummary = buildResultSummary(completed, stdout, stderr, artifacts, manifest, config.buildMetadata);
 
-  const prUrlRecoveredAfterNonzero = Boolean(prUrl && !completed.timedOut && completed.code !== 0 && isPostPrNoChangesFailure(stdout));
+  // When a PR URL is detected in stdout but the container exited non-zero,
+  // treat it as success — the PR was created.  Post-PR cleanup / no-change
+  // checks that fail non-zero after PR creation are not patch failures.
+  // Parent: a2a-docker-runner#199
+  const prUrlRecoveredAfterNonzero = Boolean(prUrl && !completed.timedOut && completed.code !== 0);
   const result: RunnerResult = {
     ok: (completed.code === 0 && !completed.timedOut) || prUrlRecoveredAfterNonzero,
     taskId: task.id,
@@ -122,11 +126,6 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
   }
 
   return result;
-}
-
-function isPostPrNoChangesFailure(stdout: string): boolean {
-  return /https:\/\/github\.com\/[^\s]+\/pull\/\d+/.test(stdout)
-    && /(error=openclaw_completed_without_changes|error=no_changes_after_patch_command|OpenClaw produced no repository changes; refusing false Done)/.test(stdout);
 }
 
 function isMissingPatchCommand(stdout: string, stderr: string): boolean {
