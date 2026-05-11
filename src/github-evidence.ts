@@ -1,6 +1,143 @@
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import type { GitHubEvidence, NormalizedRunnerTask, RunnerConfig, RunnerResult } from "./types.js";
+import type { GitHubCommentLedger, GitHubEvidence, NormalizedRunnerTask, RunnerConfig, RunnerResult } from "./types.js";
+
+/**
+ * Post a Start comment on the linked GitHub issue to begin an evidence round.
+ *
+ * The Start comment is the first ledger entry.  It is idempotent:
+ * before posting, we check for an existing comment with the same dedupe key
+ * and return that URL instead of creating a duplicate.
+ *
+ * Parent: a2a-plane#204
+ */
+export async function postStartComment(
+  config: RunnerConfig,
+  task: NormalizedRunnerTask,
+): Promise<{ url: string; dedupeKey: string } | undefined> {
+  if (!task.issueUrl) {
+    console.error("[github-evidence] no issue URL; cannot post start comment");
+    return undefined;
+  }
+
+  const token = await readGitHubToken(config);
+  if (!token) {
+    console.error("[github-evidence] no GitHub token available; cannot post start comment");
+    return undefined;
+  }
+
+  const dedupeKey = buildStartCommentDedupeKey(task);
+  const dedupeMarker = `<!-- a2a-runner-start-comment:${dedupeKey} -->`;
+
+  // Idempotency: check if a Start comment with this dedupe marker already exists.
+  const existingUrl = await findExistingCommentByMarker(token, task.issueUrl, "a2a-runner-start-comment");
+  if (existingUrl) {
+    return { url: existingUrl, dedupeKey };
+  }
+
+  const body = buildStartCommentBody(task) + "\n" + dedupeMarker;
+  const url = await postGitHubComment(token, task.issueUrl, body);
+  if (!url) return undefined;
+  return { url, dedupeKey };
+}
+
+/**
+ * Build a replay-safe dedupe key for the Start comment.
+ *
+ * Uses task ID + run ID when available, falling back to task ID + issue URL.
+ */
+function buildStartCommentDedupeKey(task: NormalizedRunnerTask): string {
+  const taskPart = task.id.slice(0, 64);
+  const runPart = (task.runId ?? task.traceId ?? task.env?.A2A_RUN_ID ?? task.env?.RUN_ID ?? "").slice(0, 40);
+  const unique = runPart ? `${taskPart}-${runPart}` : taskPart;
+  // Remove characters that could break the HTML comment or URL.
+  return unique.replace(/[^A-Za-z0-9_.-]/g, "_").slice(0, 120) || "start";
+}
+
+/**
+ * Post a GitHub issue comment (internal helper).
+ *
+ * Returns the html_url of the created comment, or undefined on failure.
+ */
+async function postGitHubComment(
+  token: string,
+  issueUrl: string,
+  body: string,
+): Promise<string | undefined> {
+  const issueCommentUrl = parseIssueCommentApiUrl(issueUrl);
+  if (!issueCommentUrl) {
+    console.error(`[github-evidence] cannot parse issue URL: ${issueUrl}`);
+    return undefined;
+  }
+
+  const response = await fetch(issueCommentUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ body }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`GitHub API ${response.status}: ${text.slice(0, 200)}`);
+  }
+
+  const data = await response.json() as { html_url?: string };
+  return data.html_url;
+}
+
+/**
+ * Find an existing issue comment that contains the given marker substring.
+ *
+ * Used for idempotent comment posting — if a comment with the dedupe marker
+ * already exists, return its URL instead of creating a duplicate.
+ */
+async function findExistingCommentByMarker(
+  token: string,
+  issueUrl: string,
+  marker: string,
+): Promise<string | undefined> {
+  const issueNumber = extractIssueNumber(issueUrl);
+  const ownerRepo = extractOwnerRepo(issueUrl);
+  if (!issueNumber || !ownerRepo) return undefined;
+
+  const listUrl = `https://api.github.com/repos/${ownerRepo}/issues/${issueNumber}/comments?per_page=100&sort=created&direction=desc`;
+
+  try {
+    const response = await fetch(listUrl, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+      },
+    });
+
+    if (!response.ok) return undefined;
+
+    const comments = await response.json() as Array<{ body?: string; html_url?: string }>;
+    for (const comment of comments) {
+      if (comment.body?.includes(marker) && comment.html_url) {
+        return comment.html_url;
+      }
+    }
+  } catch {
+    // If we can't check, proceed with posting.
+  }
+
+  return undefined;
+}
+
+function extractIssueNumber(issueUrl: string): string | undefined {
+  const match = issueUrl.match(/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/);
+  return match?.[1];
+}
+
+function extractOwnerRepo(issueUrl: string): string | undefined {
+  const match = issueUrl.match(/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/issues\/\d+/);
+  return match?.[1];
+}
 
 /**
  * Collect structured GitHub evidence after a runner task completes.
@@ -55,6 +192,12 @@ export async function collectGitHubEvidence(
       console.error(`[github-evidence] done-comment failed: ${msg}`);
     }
   }
+
+  // Build the GitHub comment evidence ledger from any posted comments.
+  // Comments are evidence ledger entries only — not ACK, read-receipt,
+  // or operator-approval proof.
+  // Parent: a2a-plane#204
+  evidence.commentLedger = buildCommentLedger(evidence, task);
 
   evidence.outcome = classifyGitHubEvidenceOutcome(result, evidence);
   const validationErrors = validateReleaseGateEvidence(evidence);
@@ -239,6 +382,52 @@ function extractFirstMatch(result: RunnerResult, patterns: RegExp[]): string | u
   return undefined;
 }
 
+/**
+ * Build a GitHub comment evidence ledger from the current evidence state.
+ *
+ * Comments are evidence ledger entries only — not ACK, read-receipt,
+ * or operator-approval proof.  The ledger is explicitly separate from
+ * Terminal Brief ACK/read/visibility decisions.
+ *
+ * Parent: a2a-plane#204
+ */
+export function buildCommentLedger(evidence: GitHubEvidence, task: NormalizedRunnerTask): GitHubCommentLedger {
+  const entries: GitHubCommentLedger["entries"] = [];
+
+  if (evidence.startCommentUrl) {
+    entries.push({
+      dedupeKey: buildStartCommentDedupeKey(task),
+      url: evidence.startCommentUrl,
+      kind: "start",
+      postedAt: new Date().toISOString(),
+    });
+  }
+
+  if (evidence.blockCommentUrl) {
+    entries.push({
+      dedupeKey: `block:${task.id}`,
+      url: evidence.blockCommentUrl,
+      kind: "block",
+      postedAt: new Date().toISOString(),
+    });
+  }
+
+  if (evidence.doneCommentUrl) {
+    entries.push({
+      dedupeKey: `done:${task.id}`,
+      url: evidence.doneCommentUrl,
+      kind: "done",
+      postedAt: new Date().toISOString(),
+    });
+  }
+
+  return {
+    schemaVersion: "a2a.runner.github-comment-ledger.v1",
+    entries,
+    disclaimer: "GitHub comments are evidence ledger entries, not ACK/read/visibility proof and not approval.",
+  };
+}
+
 function isMissingPatchCommand(result: RunnerResult): boolean {
   return [result.stdout, result.stderr]
     .flatMap((text) => text.split(/\r?\n/).map((line) => line.trim()))
@@ -407,6 +596,64 @@ function parseIssueCommentApiUrl(issueUrl: string | undefined): string | undefin
   );
   if (!match) return undefined;
   return `https://api.github.com/repos/${match[1]}/issues/${match[2]}/comments`;
+}
+
+/**
+ * Build a Start comment body.
+ *
+ * The Start comment marks the beginning of an evidence round.
+ * It is an evidence ledger entry, not ACK/read/visibility proof and not approval.
+ *
+ * Parent: a2a-plane#204
+ */
+export function buildStartCommentBody(task: NormalizedRunnerTask): string {
+  const lang = task.reportLanguage ?? "ko";
+  const requestedBy = task.requestedBy ?? "a2a-broker";
+  const issueUrl = normalizeIssueUrl(task) ?? "N/A";
+
+  const disclaimerLine = lang === "ko"
+    ? "> 이 코멘트는 증거 원장(evidence ledger) 항목입니다. ACK/읽음 확인/운영자 승인 증거가 아닙니다."
+    : "> This comment is an evidence ledger entry. It is not ACK, read-receipt, or operator-approval proof.";
+
+  if (lang === "ko") {
+    return [
+      "## 🟢 Start",
+      "",
+      `**요청 노드**: ${requestedBy}`,
+      `**Task ID**: \`${task.id}\``,
+      `**Issue URL**: ${issueUrl}`,
+      `**의도**: ${task.intent}`,
+      `**모드**: ${task.mode ?? "N/A"}`,
+      ...(task.issueTitle ? [`**이슈 제목**: ${task.issueTitle}`] : []),
+      ...(task.taskBrief ? [`**작업 요약**: ${task.taskBrief}`] : []),
+      ...(task.runId ? [`**Run ID**: \`${task.runId}\``] : []),
+      "",
+      "작업을 시작합니다. 저장소를 검사하고 필요한 코드/문서/테스트 변경을 진행합니다.",
+      "",
+      disclaimerLine,
+      "",
+      "> 자동 생성된 Start 코멘트 — A2A Docker Runner",
+    ].join("\n");
+  }
+
+  return [
+    "## 🟢 Start",
+    "",
+    `**Requested by**: ${requestedBy}`,
+    `**Task ID**: \`${task.id}\``,
+    `**Issue URL**: ${issueUrl}`,
+    `**Intent**: ${task.intent}`,
+    `**Mode**: ${task.mode ?? "N/A"}`,
+    ...(task.issueTitle ? [`**Issue title**: ${task.issueTitle}`] : []),
+    ...(task.taskBrief ? [`**Task brief**: ${task.taskBrief}`] : []),
+    ...(task.runId ? [`**Run ID**: \`${task.runId}\``] : []),
+    "",
+    "Beginning work. Inspecting repository and making warranted code/docs/tests changes.",
+    "",
+    disclaimerLine,
+    "",
+    "> Auto-generated Start comment — A2A Docker Runner",
+  ].join("\n");
 }
 
 /**
