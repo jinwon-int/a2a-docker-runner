@@ -465,12 +465,27 @@ find_bootstrap_leaks() {
 }
 bootstrap_leaks="$(find_bootstrap_leaks . 2>/dev/null || true)"
 if [ -n "$bootstrap_leaks" ]; then
-  printf 'error=openclaw_workspace_bootstrap_leak\n' | tee -a /work/artifacts/summary.txt
-  printf 'OpenClaw workspace bootstrap artifacts appeared in the checkout; refusing to produce a PR with runtime context files.\n' | tee /work/artifacts/patch-command.log
-  printf 'Files detected (repo-relative):\n' | tee -a /work/artifacts/patch-command.log
-  printf '%s\n' "$bootstrap_leaks" | tee -a /work/artifacts/patch-command.log
-  printf '%s\n' "$bootstrap_leaks" | sed 's#^#bootstrap_leak=#' >> /work/artifacts/summary.txt
-  exit 4
+  unsafe_bootstrap_leaks=""
+  while IFS= read -r leak; do
+    [ -n "$leak" ] || continue
+    if [ -e "$leak" ] && [ -z "$(git ls-files -- "$leak")" ] && git check-ignore -q -- "$leak"; then
+      rm -rf -- "$leak"
+      printf 'notice=scrubbed_ignored_openclaw_bootstrap %s\n' "$leak" | tee -a /work/artifacts/summary.txt
+    else
+      unsafe_bootstrap_leaks="\${unsafe_bootstrap_leaks}\${leak}
+"
+    fi
+  done <<A2A_BOOTSTRAP_LEAKS
+$bootstrap_leaks
+A2A_BOOTSTRAP_LEAKS
+  if [ -n "$unsafe_bootstrap_leaks" ]; then
+    printf 'error=openclaw_workspace_bootstrap_leak\n' | tee -a /work/artifacts/summary.txt
+    printf 'OpenClaw workspace bootstrap artifacts appeared in the checkout and were not safe to scrub; refusing to produce a PR with runtime context files.\n' | tee /work/artifacts/patch-command.log
+    printf 'Files detected (repo-relative):\n' | tee -a /work/artifacts/patch-command.log
+    printf '%s\n' "$unsafe_bootstrap_leaks" | tee -a /work/artifacts/patch-command.log
+    printf '%s\n' "$unsafe_bootstrap_leaks" | sed '/^$/d; s#^#bootstrap_leak=#' >> /work/artifacts/summary.txt
+    exit 4
+  fi
 fi
 
 if [ -z "$(git status --porcelain)" ]; then
