@@ -372,16 +372,21 @@ A2A_GUARD_OPENCLAW_SESSION_STORE
 
 chmod -R u+rwX /root/.openclaw
 
-# Point embedded OpenClaw at the checked-out repository without mutating
-# /root/.openclaw/workspace. Host OpenClaw workspaces contain identity,
-# bootstrap, memory, and operator state; runner code must never delete or
-# recreate that path as a sandbox alignment mechanism.
-export OPENCLAW_WORKSPACE_DIR="$PWD"
+# Point embedded OpenClaw at a separate temp workspace directory so
+# identity/bootstrap files (AGENTS.md, SOUL.md, etc.) created during
+# OpenClaw initialization do not pollute the checked-out repository.
+# OpenClaw tools can still access and modify files anywhere in the
+# container filesystem; the workspace dir only holds agent runtime
+# state, not the repo checkout.
+# Ref: a2a-docker-runner#209 regression — agents created bootstrap
+# files in /work/repo, causing pre-PR guard false-block with exit 4.
+export OPENCLAW_WORKSPACE_DIR="/tmp/openclaw-agent-workspace"
+mkdir -p "$OPENCLAW_WORKSPACE_DIR"
 
-# Embedded OpenClaw resolves the active agent workspace from config, not only
-# from OPENCLAW_WORKSPACE_DIR. Point the disposable in-container config at the
-# checked-out repository so repo patch runs do not fall back to the host/default
-# agent workspace or its bootstrap files.
+# Point the disposable in-container config at the temp workspace so
+# OpenClaw does not fall back to cwd (/work/repo) or the host/default
+# agent workspace. Config workspace and OPENCLAW_WORKSPACE_DIR must
+# agree, otherwise the agent may reset cwd-derived workspace state.
 if [ -f /root/.openclaw/openclaw.json ]; then
   node <<'A2A_SET_OPENCLAW_WORKSPACE'
 const fs = require("node:fs");
@@ -408,7 +413,11 @@ printf 'openclaw_workspace=%s\n' "$OPENCLAW_WORKSPACE_DIR" | tee -a /work/artifa
 cat > /work/artifacts/openclaw-prompt.md <<'A2A_OPENCLAW_PROMPT_EOF'
 You are running inside the A2A Docker Runner on a checked-out GitHub repository.
 
-Use /work/artifacts/prompt.md as the assignment. Complete a minimal, safe patch in the current repository only.
+The repository is checked out at /work/repo (or /work/<repo-name> for named checkouts).
+Your OpenClaw workspace is a separate temp directory for agent state only.
+Make all code changes in the repository checkout, not your workspace.
+
+Use /work/artifacts/prompt.md as the assignment. Complete a minimal, safe patch in the repository only.
 
 Rules:
 - Use OpenClaw tools available inside this container.
