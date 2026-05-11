@@ -485,3 +485,71 @@ export interface RunnerResult {
   /** Structured GitHub evidence for propose_patch / github-propose-patch mode. */
   github?: GitHubEvidence;
 }
+
+// ---- Source-Public Approval Rehearsal ----
+// Parent: a2a-docker-runner#185
+// Parent: a2a-plane#211
+
+/** Source-public approval rehearsal decision vocabulary. */
+export type ApprovalRehearsalDecision =
+  | "GO_CANDIDATE"
+  | "NO_GO"
+  | "NEEDS_OPERATOR_APPROVAL";
+
+/** A single safety gate checked during an approval rehearsal. */
+export interface ApprovalRehearsalSafetyGate {
+  /** Gate identifier. */
+  id: string;
+  /** Human-readable label for operator review. */
+  label: string;
+  /** Whether the gate passed. */
+  passed: boolean;
+  /** Explanation when gate failed or is uncertain. */
+  reason?: string;
+}
+
+/** Idempotency proof: ensures the same rehearsal is never executed twice. */
+export interface ApprovalRehearsalIdempotencyProof {
+  /** Stable, deterministic dedupe key for this rehearsal. */
+  dedupeKey: string;
+  /** SHA-256-like hex fingerprint of the serialised input (deterministic). */
+  inputFingerprint: string;
+  /** Always false — this is a rehearsal, never an execution. */
+  wasExecuted: false;
+  /** Monotonic rehearsal counter; 0 for the first rehearsal of a given dedupeKey. */
+  replayIndex: number;
+}
+
+/** Replay-safe approval rehearsal packet produced before any real source-public change. */
+export interface ApprovalRehearsalPacket {
+  /** Canonical schema version. */
+  schemaVersion: "a2a.runner.approval-rehearsal.v1";
+  /** Deterministic generation timestamp. */
+  generatedAt: "1970-01-01T00:00:00.000Z";
+  /** Safe run identifier from the task payload. */
+  runId: string;
+  /** Safe distributed trace identifier. */
+  traceId?: string;
+  /** Target repository (owner/repo). */
+  repo: string;
+  /** Target branch. */
+  branch?: string;
+  /** Short operator-facing description of the proposed change. */
+  proposedChange: string;
+  /** Safety gate inventory — every gate in this list must pass for GO_CANDIDATE. */
+  safetyGates: ApprovalRehearsalSafetyGate[];
+  /** Idempotency proof for replay/no-duplicate guards. */
+  idempotencyProof: ApprovalRehearsalIdempotencyProof;
+  /** Decision output: GO_CANDIDATE, NO_GO, or NEEDS_OPERATOR_APPROVAL. */
+  decision: ApprovalRehearsalDecision;
+  /** Summary of why the decision was reached. */
+  decisionReason: string;
+  /** Abort/rollback paths documented for operator reference. */
+  abortPaths: string[];
+  /** Rollback paths documented for operator reference. */
+  rollbackPaths: string[];
+  /** Path to the integrated evidence bundle (manifest-relative). */
+  evidenceBundlePath: string;
+  /** Structured evidence hints for broker/operator recovery. */
+  evidenceHints?: RunnerEvidenceHints;
+}
