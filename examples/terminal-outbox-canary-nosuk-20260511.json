@@ -1,0 +1,271 @@
+{
+  "$schema": "a2a-runner-terminal-outbox-canary-nosuk-v1",
+  "description": "Team1/nosuk terminal-outbox canary smoke test + receipt evidence guard. Validates terminal-outbox canary task submission/receipt/completion and broker receipt event confirmation. Synthetic only: no live broker, Docker, Telegram, Gateway, GitHub writes, deploys, restarts, tokens, raw logs, or private paths.",
+  "run": "terminal-brief-activation-20260511T080211Z",
+  "issue": "https://github.com/jinwon-int/a2a-docker-runner/issues/204",
+  "parent": "https://github.com/jinwon-int/a2a-plane/issues/241",
+  "worker": "nosuk",
+  "emittedAt": "2026-05-11T08:02:11.000Z",
+  "canaryContract": {
+    "round": "Terminal Brief 실전 활성화",
+    "objectives": [
+      "terminal-outbox canary task submission verification",
+      "terminal-outbox canary task receipt verification",
+      "terminal-outbox canary task completion verification",
+      "broker receipt event confirmation"
+    ],
+    "noLiveProviderSend": true,
+    "terminalAckRequiresOperatorVisibleReceipt": true,
+    "providerSendSuccessIsReceiptEvidence": false,
+    "terminalOutboxAckPerformed": false,
+    "allowedEvidenceKinds": ["PR", "Done", "Block"],
+    "liveProviderSendLimit": "canary task 최초 1회로 제한"
+  },
+  "cases": [
+    {
+      "name": "terminal-outbox canary: PR submission → receipt → completion verified",
+      "handlerTask": {
+        "id": "terminal-outbox-canary-pr-204",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "204",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/204",
+          "title": "Team1/nosuk terminal-outbox canary PR evidence",
+          "focus": "terminal-outbox canary task PR submission, receipt, completion cycle",
+          "requestedBy": "nosuk",
+          "runId": "terminal-brief-activation-20260511T080211Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "terminal-outbox-canary-pr-204",
+        "status": "completed",
+        "workDir": "/synthetic/terminal-outbox/not-forwarded/pr",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "synthetic PR stdout omitted from terminal-outbox canary evidence",
+        "stderr": "",
+        "artifacts": ["artifacts/summary.txt"],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "terminal-outbox canary PR smoke: ok",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 1,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/204"
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-sse",
+        "receiptId": "receipt-terminal-outbox-canary-pr-204",
+        "url": "https://broker.example.invalid/receipts/receipt-terminal-outbox-canary-pr-204",
+        "deliveredAt": "2026-05-11T08:02:12.000Z"
+      },
+      "expected": {
+        "evidenceKind": "PR",
+        "status": "succeeded",
+        "acknowledged": true,
+        "cursorComplete": true
+      },
+      "terminalOutboxId": "terminal-outbox-canary-pr-204"
+    },
+    {
+      "name": "terminal-outbox canary: Done (no-change) submission → receipt → completion verified",
+      "handlerTask": {
+        "id": "terminal-outbox-canary-done-204",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "204",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/204",
+          "title": "Team1/nosuk terminal-outbox canary Done evidence",
+          "focus": "terminal-outbox canary task Done evidence (no PR needed)",
+          "commentOnly": true,
+          "evidenceOnly": true,
+          "requestedBy": "nosuk",
+          "runId": "terminal-brief-activation-20260511T080211Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "terminal-outbox-canary-done-204",
+        "status": "completed",
+        "workDir": "/synthetic/terminal-outbox/not-forwarded/done",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "synthetic Done stdout omitted from terminal-outbox canary evidence",
+        "stderr": "",
+        "artifacts": [],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "terminal-outbox canary Done: no code change needed",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 0,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "doneCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/204#issuecomment-canary-done"
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-webhook",
+        "receiptId": "receipt-terminal-outbox-canary-done-204",
+        "url": "https://broker.example.invalid/receipts/receipt-terminal-outbox-canary-done-204",
+        "deliveredAt": "2026-05-11T08:02:12.000Z"
+      },
+      "expected": {
+        "evidenceKind": "Done",
+        "status": "succeeded",
+        "acknowledged": true,
+        "cursorComplete": true
+      },
+      "terminalOutboxId": "terminal-outbox-canary-done-204"
+    },
+    {
+      "name": "terminal-outbox canary: Block submission → receipt → completion verified",
+      "handlerTask": {
+        "id": "terminal-outbox-canary-block-204",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "204",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/204",
+          "title": "Team1/nosuk terminal-outbox canary Block evidence",
+          "focus": "terminal-outbox canary task Block evidence (unsafe or impossible)",
+          "requestedBy": "nosuk",
+          "runId": "terminal-brief-activation-20260511T080211Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": false,
+        "taskId": "terminal-outbox-canary-block-204",
+        "status": "failed",
+        "workDir": "/synthetic/terminal-outbox/not-forwarded/block",
+        "exitCode": 1,
+        "signal": null,
+        "stdout": "",
+        "stderr": "terminal-outbox canary Block: assignment is unsafe or impossible",
+        "artifacts": ["artifacts/block.txt"],
+        "resultSummary": {
+          "exitCode": 1,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "",
+          "stderr": "terminal-outbox canary Block: assignment is unsafe or impossible",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 1,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "blockCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/204#issuecomment-canary-block"
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-sse",
+        "receiptId": "receipt-terminal-outbox-canary-block-204",
+        "deliveredAt": "2026-05-11T08:02:12.000Z"
+      },
+      "expected": {
+        "evidenceKind": "Block",
+        "status": "blocked",
+        "acknowledged": true,
+        "cursorComplete": true
+      },
+      "terminalOutboxId": "terminal-outbox-canary-block-204"
+    },
+    {
+      "name": "terminal-outbox canary: provider send success alone is not receipt evidence",
+      "providerSendSuccessOnly": true,
+      "handlerTask": {
+        "id": "terminal-outbox-canary-send-only-204",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "204",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/204",
+          "title": "Team1/nosuk terminal-outbox canary: provider-send-only rejection",
+          "focus": "terminal-outbox canary: prove provider send alone does not advance broker cursor",
+          "requestedBy": "nosuk",
+          "runId": "terminal-brief-activation-20260511T080211Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "terminal-outbox-canary-send-only-204",
+        "status": "completed",
+        "workDir": "/synthetic/terminal-outbox/not-forwarded/send-only",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "provider send ok, no operator-visible receipt",
+        "stderr": "",
+        "artifacts": [],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "provider send ok only",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 0,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/204"
+        }
+      },
+      "receipt": {
+        "operatorVisible": false,
+        "channel": "telegram"
+      },
+      "expected": {
+        "evidenceKind": "PR",
+        "status": "succeeded",
+        "acknowledged": false,
+        "cursorComplete": false
+      },
+      "terminalOutboxId": "terminal-outbox-canary-send-only-204"
+    }
+  ],
+  "operatorChecklist": [
+    "1. Validate terminal-outbox canary fixture: node scripts/terminal-outbox-canary-smoke.mjs",
+    "2. Run integration tests: node --test dist/integration.test.js",
+    "3. Verify npm build/check all pass",
+    "4. Confirm broker receipt event shape matches terminal-outbox canonical evidence",
+    "5. Live provider send: canary task 최초 1회만 허용; operator approval required before send"
+  ],
+  "mustNotContain": [
+    "Authorization",
+    "Bearer",
+    "x-access-token",
+    "ghp_",
+    "github_pat_",
+    "/root/",
+    "/home/",
+    "/synthetic/terminal-outbox/not-forwarded",
+    "synthetic PR stdout",
+    "synthetic Done stdout",
+    "synthetic blocked stderr",
+    "password",
+    "secret:"
+  ]
+}

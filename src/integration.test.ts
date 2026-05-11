@@ -1484,6 +1484,30 @@ test("R4 canonical Terminal Brief receipt smoke script emits safe artifacts", ()
   assert.ok(result.artifacts.every((entry) => entry.taskId && entry.terminalOutboxId && entry.runId && entry.status && entry.testSummary));
 });
 
+test("R4+ terminal-outbox canary nosuk smoke script emits safe evidence for terminal-brief-activation run", () => {
+  const output = execFileSync(process.execPath, ["scripts/terminal-outbox-canary-smoke.mjs"], {
+    cwd: new URL("..", import.meta.url),
+    encoding: "utf8",
+  });
+  const result = JSON.parse(output) as {
+    ok: boolean;
+    run: string;
+    worker: string;
+    issue: string;
+    terminalOutboxAckPerformed: boolean;
+    artifacts: Array<{ name: string; taskId: string; terminalOutboxId: string; evidenceKind: string; status: string; acknowledged: boolean; cursorComplete: boolean }>;
+  };
+  assert.equal(result.ok, true);
+  assert.equal(result.run, "terminal-brief-activation-20260511T080211Z");
+  assert.equal(result.worker, "nosuk");
+  assert.equal(result.issue, "https://github.com/jinwon-int/a2a-docker-runner/issues/204");
+  assert.equal(result.terminalOutboxAckPerformed, false);
+  assert.equal(result.artifacts.length, 4);
+  assert.ok(result.artifacts.every((entry) => entry.name && entry.taskId && entry.terminalOutboxId && entry.evidenceKind));
+  assert.ok(result.artifacts.some((a) => a.acknowledged === false), "must have provider-send-only rejection");
+  assert.ok(result.artifacts.some((a) => a.acknowledged === true), "must have receipt-confirmed ack");
+});
+
 test("public demo artifact fixtures pass the no-live safety audit", () => {
   const output = execFileSync(process.execPath, ["scripts/public-demo-safety-audit.mjs"], {
     cwd: new URL("..", import.meta.url),
