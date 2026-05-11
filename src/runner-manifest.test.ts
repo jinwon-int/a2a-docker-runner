@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { buildArtifactManifest, buildResultSummary, buildRunnerEvidenceHints, redactAndBound, RESULT_STREAM_LIMIT, sanitizeReceiptTrace, sanitizeTaskArtifactPayload } from "./runner.js";
+import { buildArtifactManifest, buildGitHubCommentProjection, buildResultSummary, buildRunnerEvidenceHints, redactAndBound, RESULT_STREAM_LIMIT, sanitizeReceiptTrace, sanitizeTaskArtifactPayload } from "./runner.js";
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -287,4 +287,60 @@ test("artifact manifest schema and dummy sample stay aligned", async () => {
   }
   assert.equal(sample.receiptTrace.schemaVersion, "a2a.runner.receipt-trace.v1");
   assert.match(sample.receiptTrace.status, /^(pending|accepted|started|produced|provider_sent|operator_visible|operator_confirmed|provider_delivery_receipt|timed_out|stale|failed|receipt_confirmed)$/);
+});
+
+test("buildGitHubCommentProjection and manifest carry replay-safe ledger-only metadata", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "a2a-github-projection-"));
+  try {
+    await mkdir(join(dir, "artifacts"), { recursive: true });
+    const artifact = join(dir, "artifacts", "summary.txt");
+    await writeFile(artifact, "Done: https://github.com/jinwon-int/repo/issues/5#issuecomment-123");
+    const task = {
+      id: "task-5",
+      intent: "propose_patch",
+      mode: "github-propose-patch",
+      repo: "jinwon-int/repo",
+      repos: [],
+      commands: ["npm test"],
+      issueUrl: "https://github.com/jinwon-int/repo/issues/5",
+    };
+    const projection = buildGitHubCommentProjection(task, {
+      ok: true,
+      taskId: "task-5",
+      status: "completed",
+      workDir: dir,
+      exitCode: 0,
+      signal: null,
+      stdout: "",
+      stderr: "",
+      artifacts: [artifact],
+      artifactManifest: { artifactVersion: 1, schemaVersion: 1, manifestPath: "artifacts/manifest.json", generatedAt: "1970-01-01T00:00:00.000Z", status: "done", summary: "ok", evidence: [], artifacts: [] },
+      github: {
+        schemaVersion: "a2a.runner.github-evidence.v1",
+        outcome: "done",
+        doneCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-123",
+        issueUrl: "https://github.com/jinwon-int/repo/issues/5",
+      },
+    });
+
+    assert.deepEqual(projection, {
+      schemaVersion: "a2a.runner.github-comment-projection.v1",
+      kind: "done",
+      url: "https://github.com/jinwon-int/repo/issues/5#issuecomment-123",
+      issueUrl: "https://github.com/jinwon-int/repo/issues/5",
+      manifestPath: "artifacts/manifest.json",
+      dedupeKey: "a2a-github-comment:task-5:done:https://github.com/jinwon-int/repo/issues/5#issuecomment-123",
+      commentIsTerminalAck: false,
+      commentIsVisibilityReceipt: false,
+      commentIsOperatorApproval: false,
+    });
+
+    const manifest = await buildArtifactManifest(dir, [artifact], { status: "done", githubCommentProjection: projection });
+    const summary = buildResultSummary({ code: 0, signal: null, stdout: "ok", stderr: "", timedOut: false }, "ok", "", [artifact], manifest);
+    assert.deepEqual(manifest.githubCommentProjection, projection);
+    assert.deepEqual(summary.githubCommentProjection, projection);
+    assert.ok(!JSON.stringify(projection).includes("/tmp/"));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

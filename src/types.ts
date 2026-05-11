@@ -194,6 +194,25 @@ export interface RunnerEvidenceHints {
   failureCategory?: GitHubEvidenceOutcome | "failed" | "exit_nonzero" | "no_changes_allowed";
 }
 
+export type GitHubCommentProjectionKind = "pr" | "done" | "block";
+
+/**
+ * Terminal Brief extension that projects GitHub issue/PR comments as a
+ * replay-safe evidence ledger entry. This is intentionally not ACK/read/
+ * visibility evidence and never represents operator approval.
+ */
+export interface GitHubCommentProjection {
+  schemaVersion: "a2a.runner.github-comment-projection.v1";
+  kind: GitHubCommentProjectionKind;
+  url: string;
+  issueUrl?: string;
+  manifestPath: string;
+  dedupeKey: string;
+  commentIsTerminalAck: false;
+  commentIsVisibilityReceipt: false;
+  commentIsOperatorApproval: false;
+}
+
 export interface RunnerTask {
   id: string;
   intent: string;
@@ -362,6 +381,8 @@ export interface ArtifactManifest {
   continuation?: RunnerContinuationEvidence;
   /** Compact structured evidence URLs for broker task-report recovery. */
   evidenceHints?: RunnerEvidenceHints;
+  /** First-class Terminal Brief extension for GitHub comment ledger evidence. */
+  githubCommentProjection?: GitHubCommentProjection;
 }
 
 export interface ResultSummary {
@@ -382,6 +403,7 @@ export interface ResultSummary {
   receiptTrace?: RunnerReceiptTrace;
   continuation?: RunnerContinuationEvidence;
   evidenceHints?: RunnerEvidenceHints;
+  githubCommentProjection?: GitHubCommentProjection;
 }
 
 export interface RunnerResult {

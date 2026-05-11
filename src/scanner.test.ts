@@ -537,3 +537,116 @@ test("fail-closed: scanner handles null bytes in task metadata", async () => {
     rmSync(rootDir, { recursive: true, force: true });
   }
 });
+
+test("scanHistory projects GitHub comment evidence with scanner parity flags", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-scanner-github-projection-"));
+  try {
+    const runDir = createMinimalRun(rootDir, "projection-task", "run1", {
+      issueUrl: "https://github.com/jinwon-int/test/issues/5",
+      status: "done",
+    });
+    const manifestPath = join(runDir, "artifacts", "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.evidenceHints = {
+      schemaVersion: "a2a.runner.evidence-hints.v1",
+      issueUrl: "https://github.com/jinwon-int/test/issues/5",
+      doneUrl: "https://github.com/jinwon-int/test/issues/5#issuecomment-123",
+      failureCategory: "no_changes_allowed",
+    };
+    manifest.githubCommentProjection = {
+      schemaVersion: "a2a.runner.github-comment-projection.v1",
+      kind: "done",
+      url: "https://github.com/jinwon-int/test/issues/5#issuecomment-123",
+      issueUrl: "https://github.com/jinwon-int/test/issues/5",
+      manifestPath: "artifacts/manifest.json",
+      dedupeKey: "a2a-github-comment:projection-task:done:https://github.com/jinwon-int/test/issues/5#issuecomment-123",
+      commentIsTerminalAck: false,
+      commentIsVisibilityReceipt: false,
+      commentIsOperatorApproval: false,
+    };
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+
+    const profile = await scanHistory({ rootDir });
+    const entry = profile.runs[0]!;
+    assert.equal(entry.doneUrl, "https://github.com/jinwon-int/test/issues/5#issuecomment-123");
+    assert.deepEqual(entry.githubCommentProjection, {
+      kind: "done",
+      url: "https://github.com/jinwon-int/test/issues/5#issuecomment-123",
+      dedupeKey: "a2a-github-comment:projection-task:done:https://github.com/jinwon-int/test/issues/5#issuecomment-123",
+      commentIsTerminalAck: false,
+      commentIsVisibilityReceipt: false,
+      commentIsOperatorApproval: false,
+    });
+    assert.ok(!JSON.stringify(entry).includes("/tmp/"));
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("artifact bundle sanitizes GitHub projection and evidence hints before preserving them", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-scanner-bundle-projection-"));
+  const outputDir = mkdtempSync(join(tmpdir(), "a2a-scanner-bundle-projection-out-"));
+  try {
+    const runDir = createMinimalRun(rootDir, "bundle-projection-task", "run1", {
+      issueUrl: "https://github.com/jinwon-int/test/issues/6",
+      status: "done",
+    });
+    const manifestPath = join(runDir, "artifacts", "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.evidenceHints = {
+      schemaVersion: "a2a.runner.evidence-hints.v1",
+      issueUrl: "https://github.com/jinwon-int/test/issues/6",
+      doneUrl: "https://github.com/jinwon-int/test/issues/6#issuecomment-456",
+      branch: "feature-ghp_1234567890abcdef1234567890_leak",
+    };
+    manifest.githubCommentProjection = {
+      schemaVersion: "a2a.runner.github-comment-projection.v1",
+      kind: "done",
+      url: "https://github.com/jinwon-int/test/issues/6#issuecomment-456",
+      issueUrl: "https://github.com/jinwon-int/test/issues/6",
+      manifestPath: "/tmp/private/artifacts/manifest.json",
+      dedupeKey: "a2a:ghp_1234567890abcdef1234567890_leak:projection",
+      commentIsTerminalAck: false,
+      commentIsVisibilityReceipt: false,
+      commentIsOperatorApproval: false,
+    };
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+
+    const bundle = await createArtifactBundle({ workDir: runDir, outputPath: outputDir });
+    assert.equal(bundle.evidenceHints?.doneUrl, "https://github.com/jinwon-int/test/issues/6#issuecomment-456");
+    assert.ok(!JSON.stringify(bundle.evidenceHints).includes("ghp_"));
+    assert.equal(bundle.githubCommentProjection?.url, "https://github.com/jinwon-int/test/issues/6#issuecomment-456");
+    assert.equal(bundle.githubCommentProjection?.commentIsTerminalAck, false);
+    assert.equal(bundle.githubCommentProjection?.manifestPath, "artifacts/manifest.json");
+    assert.ok(!JSON.stringify(bundle.githubCommentProjection).includes("ghp_"));
+    assert.ok(!JSON.stringify(bundle.githubCommentProjection).includes("/tmp/private"));
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+    rmSync(outputDir, { recursive: true, force: true });
+  }
+});
+
+test("scanHistory omits unsafe GitHub projection flags instead of converting them to receipts", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-scanner-unsafe-projection-"));
+  try {
+    const runDir = createMinimalRun(rootDir, "unsafe-projection-task", "run1");
+    const manifestPath = join(runDir, "artifacts", "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.githubCommentProjection = {
+      schemaVersion: "a2a.runner.github-comment-projection.v1",
+      kind: "done",
+      url: "https://github.com/jinwon-int/test/issues/1#issuecomment-789",
+      manifestPath: "artifacts/manifest.json",
+      dedupeKey: "unsafe",
+      commentIsTerminalAck: true,
+      commentIsVisibilityReceipt: false,
+      commentIsOperatorApproval: false,
+    };
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+
+    const profile = await scanHistory({ rootDir });
+    assert.equal(profile.runs[0]!.githubCommentProjection, undefined);
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});

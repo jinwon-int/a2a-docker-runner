@@ -22,6 +22,8 @@ Sample: [`examples/artifact-manifest.dummy-task.json`](../examples/artifact-mani
 - `budget`: bounded, redacted budget-stop metadata (`limitKind`, optional `limit`/`used`/`reason`) when `status=budget_limited`.
 - `receiptTrace`: optional bounded notification/receipt correlation metadata for broker/plugin receipt-gap reports. It may carry safe identifiers such as `outboxId`, `notificationId`, `dedupeKey`, `channel`, `status`, `evidence`, `receiptId`, `attemptCount`, `staleAfterMs`, and bounded `reason`; it must not contain raw prompts, raw command output, message bodies, tokens, or private host paths.
 - `continuation`: optional approval-gated follow-up recommendation; `requiresApproval` must be `true`.
+- `evidenceHints`: compact PR/Done/Block URL hints for broker task-report recovery.
+- `githubCommentProjection`: first-class Terminal Brief extension for GitHub issue/PR comment ledger evidence. It is manifest-bound (`manifestPath`), replay-safe (`dedupeKey`), and explicitly flags `commentIsTerminalAck=false`, `commentIsVisibilityReceipt=false`, and `commentIsOperatorApproval=false`.
 
 ## Evidence parts
 
@@ -39,4 +41,4 @@ Each `evidence[]` entry has:
 
 The runner only copies explicitly supplied receipt trace metadata from `task.receiptTrace` or JSON in `task.env.A2A_RUNNER_RECEIPT_TRACE` / `A2A_RECEIPT_TRACE`, and it bounds/redacts string fields before writing `manifest.json` or `resultSummary`.
 
-GitHub evidence remains fail-closed: `github-propose-patch` tasks still fail when no PR/Done/Block URL is produced. The artifact manifest is additive evidence for rendering and public demos, not a replacement for canonical GitHub closeout evidence.
+GitHub evidence remains fail-closed: `github-propose-patch` tasks still fail when no PR/Done/Block URL is produced. GitHub comments are ledger entries only: they do not prove Terminal Brief ACK/read/visibility and do not grant operator approval. The artifact manifest is additive evidence for rendering and public demos, not a replacement for canonical GitHub closeout evidence.

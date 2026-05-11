@@ -710,3 +710,27 @@ test("comment ledger disclaimer is identical across all invocations", () => {
   assert.equal(ledger2.disclaimer, expected);
   assert.equal(ledger3.disclaimer, expected);
 });
+
+test("Done/Block comment bodies include idempotent GitHub projection safety marker", () => {
+  const result = {
+    ok: false,
+    taskId: "t1",
+    status: "failed" as const,
+    workDir: "/tmp/a2a/task/run-1",
+    exitCode: 1,
+    signal: null,
+    stdout: "",
+    stderr: "",
+    artifacts: [],
+  };
+
+  const block = buildBlockCommentBody({ ...baseTask, reportLanguage: "en" }, result);
+  assert.match(block, /<!-- a2a:github-evidence:v1 task=test-task issue=jinwon-int\/test-repo#1 outcome=block -->/);
+  assert.match(block, /GitHub comment evidence projection: `ledger-only`/);
+  assert.match(block, /commentIsTerminalAck: `false`/);
+  assert.match(block, /commentIsOperatorApproval: `false`/);
+
+  const done = buildDoneCommentBody({ ...baseTask, reportLanguage: "en" }, { ...result, ok: true, status: "completed", exitCode: 0 });
+  assert.match(done, /outcome=done/);
+  assert.match(done, /manifest binding: `artifacts\/manifest\.json` \/ `resultSummary\.evidenceHints`/);
+});

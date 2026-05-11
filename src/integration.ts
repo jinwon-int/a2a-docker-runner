@@ -8,7 +8,7 @@
  * Broker claim/heartbeat logic is NOT touched by this module.
  */
 
-import type { ArtifactManifest, GitHubEvidence, ResultSummary, RunnerBuildMetadata, RunnerTask } from "./types.js";
+import type { ArtifactManifest, GitHubCommentProjection, GitHubEvidence, ResultSummary, RunnerBuildMetadata, RunnerTask } from "./types.js";
 
 // ── Handler payload shape (what the broker sends to the worker) ────────────
 
@@ -150,6 +150,8 @@ export interface TerminalEvidenceEvent {
     stdoutTruncated?: boolean;
     stderrTruncated?: boolean;
   };
+  /** First-class GitHub comment ledger projection. Not ACK/read/visibility proof or approval. */
+  githubCommentProjection?: GitHubCommentProjection;
   /** Explicit no-live/no-ACK state; provider send success is not receipt evidence. */
   safetyState: {
     noLiveProviderSend: true;
@@ -484,6 +486,10 @@ export function buildTerminalEvidenceEvent(
     stderrTruncated: summary?.stderrTruncated,
   };
   const eventId = stableEventId(taskId, status, evidenceKind, url ?? "none");
+  const githubCommentProjection = safeGitHubCommentProjection(
+    result.resultSummary?.githubCommentProjection ?? result.artifactManifest?.githubCommentProjection,
+    eventId,
+  );
 
   return {
     schemaVersion: "a2a.runner.terminal-evidence.v1",
@@ -506,6 +512,7 @@ export function buildTerminalEvidenceEvent(
     alert: buildTerminalAlert({ taskId, status, evidenceKind, worker, repo, issue, issueTitle, taskBrief, url, result, testSummary }),
     reason: buildTerminalReason(result, evidenceKind),
     testSummary,
+    ...(githubCommentProjection ? { githubCommentProjection } : {}),
     safetyState: {
       noLiveProviderSend: true,
       terminalAck: "requires_operator_receipt",
@@ -607,6 +614,41 @@ export function buildTerminalAckDecision(
 }
 
 // ── Internal helpers ───────────────────────────────────────────────────────
+
+function safeGitHubCommentProjection(
+  projection: GitHubCommentProjection | undefined,
+  fallbackDedupeKey: string,
+): GitHubCommentProjection | undefined {
+  if (!projection || !isGitHubCommentProjectionKind(projection.kind) || !isSafeTerminalGitHubUrl(projection.url)) return undefined;
+  if (projection.issueUrl && !isSafeTerminalGitHubUrl(projection.issueUrl)) return undefined;
+  if (projection.commentIsTerminalAck !== false || projection.commentIsVisibilityReceipt !== false || projection.commentIsOperatorApproval !== false) return undefined;
+  const manifestPath = "artifacts/manifest.json";
+  const dedupeKey = safeEvidenceText(projection.dedupeKey, 300) ?? fallbackDedupeKey;
+  return {
+    schemaVersion: "a2a.runner.github-comment-projection.v1",
+    kind: projection.kind,
+    url: projection.url,
+    ...(projection.issueUrl ? { issueUrl: projection.issueUrl } : {}),
+    manifestPath,
+    dedupeKey,
+    commentIsTerminalAck: false,
+    commentIsVisibilityReceipt: false,
+    commentIsOperatorApproval: false,
+  };
+}
+
+function isGitHubCommentProjectionKind(value: unknown): value is "pr" | "done" | "block" {
+  return value === "pr" || value === "done" || value === "block";
+}
+
+function isSafeTerminalGitHubUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === "github.com" && /^\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/(?:issues|pull)\/\d+/.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
 
 function resultFilesChanged(result: RawRunnerOutput): string[] {
   const manifestArtifacts = result.artifactManifest?.artifacts;
