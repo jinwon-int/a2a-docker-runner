@@ -1,0 +1,62 @@
+name: release-gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semver version to tag (e.g. 0.1.0)"
+        required: true
+        type: string
+      dry_run:
+        description: "Run gates without creating tag"
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Type-check
+        run: npm run check
+
+      - name: Build
+        run: npm run build
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Pre-PR bootstrap guard (fail closed)
+        run: node scripts/pre-pr-bootstrap-guard.mjs --repo-dir .
+
+      - name: Chaos E2E gate (mock)
+        run: npm run chaos:e2e
+
+      - name: Release candidate tag
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          node scripts/tag-release-candidate.mjs --version "${{ inputs.version }}" --message "CI gate capsule pass for ${{ inputs.version }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release candidate dry-run
+        if: ${{ inputs.dry_run == true }}
+        run: |
+          node scripts/tag-release-candidate.mjs --version "${{ inputs.version }}" --dry-run
