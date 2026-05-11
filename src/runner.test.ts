@@ -165,7 +165,8 @@ test("collects artifacts from workDir/artifacts", async () => {
   } catch {
     // Docker not available; skip validation.
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    // Use execFileSync fallback for permission/ownership resilience (CI sandbox)
+    try { rmSync(dir, { recursive: true, force: true }); } catch { execFileSync("rm", ["-rf", dir]); }
   }
 });
 
@@ -448,7 +449,8 @@ test("buildContainerScript output is valid bash syntax with post-bootstrap guard
     writeFileSync(scriptPath, buildContainerScript(task));
     execFileSync("bash", ["-n", scriptPath]);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    // rmSync + execFileSync fallback for permission resilience
+    try { rmSync(dir, { recursive: true, force: true }); } catch { execFileSync("rm", ["-rf", dir]); }
   }
 });
 
