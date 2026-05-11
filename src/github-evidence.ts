@@ -290,24 +290,9 @@ async function postBlockComment(
     return undefined;
   }
 
+  const marker = buildEvidenceMarker(task, "block");
   const body = buildBlockCommentBody(task, result);
-  const response = await fetch(issueCommentUrl, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ body }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`GitHub API ${response.status}: ${text.slice(0, 200)}`);
-  }
-
-  const data = await response.json() as { html_url?: string };
-  return data.html_url;
+  return postIdempotentEvidenceComment(token, issueCommentUrl, marker, body);
 }
 
 /**
@@ -333,7 +318,26 @@ async function postDoneComment(
     return undefined;
   }
 
+  const marker = buildEvidenceMarker(task, "done");
   const body = buildDoneCommentBody(task, result);
+  return postIdempotentEvidenceComment(token, issueCommentUrl, marker, body);
+}
+
+/**
+ * Parse a GitHub issue URL into the API endpoint for issue comments.
+ *
+ * Input:  https://github.com/jinwon-int/a2a-docker-runner/issues/5
+ * Output: https://api.github.com/repos/jinwon-int/a2a-docker-runner/issues/5/comments
+ */
+async function postIdempotentEvidenceComment(
+  token: string,
+  issueCommentUrl: string,
+  marker: string,
+  body: string,
+): Promise<string | undefined> {
+  const existingUrl = await findExistingEvidenceComment(token, issueCommentUrl, marker);
+  if (existingUrl) return existingUrl;
+
   const response = await fetch(issueCommentUrl, {
     method: "POST",
     headers: {
@@ -353,12 +357,49 @@ async function postDoneComment(
   return data.html_url;
 }
 
-/**
- * Parse a GitHub issue URL into the API endpoint for issue comments.
- *
- * Input:  https://github.com/jinwon-int/a2a-docker-runner/issues/5
- * Output: https://api.github.com/repos/jinwon-int/a2a-docker-runner/issues/5/comments
- */
+async function findExistingEvidenceComment(
+  token: string,
+  issueCommentUrl: string,
+  marker: string,
+): Promise<string | undefined> {
+  const url = new URL(issueCommentUrl);
+  url.searchParams.set("per_page", "100");
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+    },
+  });
+  if (!response.ok) return undefined;
+  const comments = await response.json().catch(() => []) as Array<{ body?: string; html_url?: string }>;
+  const match = comments.find((comment) => comment.body?.includes(marker) && isSafeGitHubEvidenceUrl(comment.html_url));
+  return match?.html_url;
+}
+
+function buildEvidenceMarker(task: NormalizedRunnerTask, outcome: "done" | "block"): string {
+  const taskId = (task.id || "task").replace(/[^A-Za-z0-9_.-]+/g, "_").slice(0, 120);
+  const issue = (normalizeIssue(task) ?? "issue").replace(/[^A-Za-z0-9_.#/-]+/g, "_").slice(0, 160);
+  return `<!-- a2a:github-evidence:v1 task=${taskId} issue=${issue} outcome=${outcome} -->`;
+}
+
+function buildGitHubProjectionSafetyLines(lang: string): string[] {
+  if (lang === "ko") {
+    return [
+      "- GitHub comment evidence projection: `ledger-only` (Terminal Brief 확장)",
+      "- commentIsTerminalAck: `false` (ACK/read/visibility 증거 아님)",
+      "- commentIsOperatorApproval: `false` (operator approval 아님)",
+      "- manifest binding: `artifacts/manifest.json` / `resultSummary.evidenceHints`",
+    ];
+  }
+  return [
+    "- GitHub comment evidence projection: `ledger-only` (Terminal Brief extension)",
+    "- commentIsTerminalAck: `false` (not ACK/read/visibility evidence)",
+    "- commentIsOperatorApproval: `false` (not operator approval)",
+    "- manifest binding: `artifacts/manifest.json` / `resultSummary.evidenceHints`",
+  ];
+}
+
 function parseIssueCommentApiUrl(issueUrl: string | undefined): string | undefined {
   if (!issueUrl) return undefined;
   const match = issueUrl.match(
@@ -384,9 +425,12 @@ export function buildBlockCommentBody(task: NormalizedRunnerTask, result: Runner
   const issueUrl = normalizeIssueUrl(task) ?? "N/A";
   const validationLines = buildValidationSummaryLines(result, lang);
   const safetyLines = buildNoLiveNoAckSafetyLines(lang);
+  const projectionLines = buildGitHubProjectionSafetyLines(lang);
+  const marker = buildEvidenceMarker(task, "block");
 
   if (lang === "ko") {
     return [
+      marker,
       "## 🚫 Block",
       "",
       `**요청 노드**: ${requestedBy}`,
@@ -407,6 +451,7 @@ export function buildBlockCommentBody(task: NormalizedRunnerTask, result: Runner
       "",
       "### 안전 상태",
       ...safetyLines,
+      ...projectionLines,
       "",
       "### 아티팩트 manifest 요약",
       ...artifactLines,
@@ -422,6 +467,7 @@ export function buildBlockCommentBody(task: NormalizedRunnerTask, result: Runner
   }
 
   return [
+    marker,
     "## 🚫 Block",
     "",
     `**Requested by**: ${requestedBy}`,
@@ -442,6 +488,7 @@ export function buildBlockCommentBody(task: NormalizedRunnerTask, result: Runner
     "",
     "### Safety state",
     ...safetyLines,
+    ...projectionLines,
     "",
     "### Artifact manifest summary",
     ...artifactLines,
@@ -469,9 +516,12 @@ export function buildDoneCommentBody(task: NormalizedRunnerTask, result: RunnerR
   const issueUrl = normalizeIssueUrl(task) ?? "N/A";
   const validationLines = buildValidationSummaryLines(result, lang);
   const safetyLines = buildNoLiveNoAckSafetyLines(lang);
+  const projectionLines = buildGitHubProjectionSafetyLines(lang);
+  const marker = buildEvidenceMarker(task, "done");
 
   if (lang === "ko") {
     return [
+      marker,
       "## ✅ Done",
       "",
       `**요청 노드**: ${requestedBy}`,
@@ -491,6 +541,7 @@ export function buildDoneCommentBody(task: NormalizedRunnerTask, result: RunnerR
       "",
       "### 안전 상태",
       ...safetyLines,
+      ...projectionLines,
       "",
       "### 아티팩트 manifest 요약",
       ...artifactLines,
@@ -506,6 +557,7 @@ export function buildDoneCommentBody(task: NormalizedRunnerTask, result: RunnerR
   }
 
   return [
+    marker,
     "## ✅ Done",
     "",
     `**Requested by**: ${requestedBy}`,
@@ -525,6 +577,7 @@ export function buildDoneCommentBody(task: NormalizedRunnerTask, result: RunnerR
     "",
     "### Safety state",
     ...safetyLines,
+    ...projectionLines,
     "",
     "### Artifact manifest summary",
     ...artifactLines,

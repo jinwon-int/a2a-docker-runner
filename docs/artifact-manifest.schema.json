@@ -98,7 +98,23 @@
         "blockUrl": { "type": "string", "format": "uri" },
         "branch": { "type": "string", "minLength": 1, "maxLength": 160 },
         "branchUrl": { "type": "string", "format": "uri" },
-        "failureCategory": { "enum": ["pr", "done", "block", "budget_limited", "timed_out", "missing_evidence", "failed", "exit_nonzero"] }
+        "failureCategory": { "enum": ["pr", "done", "block", "budget_limited", "timed_out", "missing_evidence", "succeeded_no_changes_with_done_evidence", "blocked_no_changes_with_evidence", "failed_infrastructure", "failed", "exit_nonzero", "no_changes_allowed"] }
+      }
+    },
+    "githubCommentProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "kind", "url", "manifestPath", "dedupeKey", "commentIsTerminalAck", "commentIsVisibilityReceipt", "commentIsOperatorApproval"],
+      "properties": {
+        "schemaVersion": { "const": "a2a.runner.github-comment-projection.v1" },
+        "kind": { "enum": ["pr", "done", "block"] },
+        "url": { "type": "string", "format": "uri" },
+        "issueUrl": { "type": "string", "format": "uri" },
+        "manifestPath": { "type": "string", "const": "artifacts/manifest.json" },
+        "dedupeKey": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "commentIsTerminalAck": { "const": false },
+        "commentIsVisibilityReceipt": { "const": false },
+        "commentIsOperatorApproval": { "const": false }
       }
     }
   }
