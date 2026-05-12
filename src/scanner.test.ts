@@ -387,6 +387,33 @@ test("createArtifactBundle produces deterministic generatedAt", async () => {
   }
 });
 
+test("createArtifactBundle validates prUrl and issueUrl in bundle manifest", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-bundle-urlval-"));
+  const outputDir = mkdtempSync(join(tmpdir(), "a2a-bundle-urlval-out-"));
+  try {
+    // Safe URLs should be preserved.
+    const safeDir = createMinimalRun(rootDir, "url-safe", "run-safe", {
+      prUrl: "https://github.com/jinwon-int/a2a-docker-runner/pull/211",
+      issueUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/208",
+    });
+    const safeBundle = await createArtifactBundle({ workDir: safeDir, outputPath: join(outputDir, "safe") });
+    assert.equal(safeBundle.prUrl, "https://github.com/jinwon-int/a2a-docker-runner/pull/211");
+    assert.equal(safeBundle.issueUrl, "https://github.com/jinwon-int/a2a-docker-runner/issues/208");
+
+    // Unsafe URLs must be stripped from the bundle manifest.
+    const unsafeDir = createMinimalRun(rootDir, "url-unsafe", "run-unsafe", {
+      prUrl: "javascript:alert(1)",
+      issueUrl: "http://evil.com/phish",
+    });
+    const unsafeBundle = await createArtifactBundle({ workDir: unsafeDir, outputPath: join(outputDir, "unsafe") });
+    assert.equal(unsafeBundle.prUrl, undefined, "unsafe prUrl must be stripped");
+    assert.equal(unsafeBundle.issueUrl, undefined, "unsafe issueUrl must be stripped");
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+    rmSync(outputDir, { recursive: true, force: true });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // ScanProfile schema contract
 // ---------------------------------------------------------------------------
