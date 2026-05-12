@@ -360,13 +360,13 @@ async function runAgeMs(runDir: string, nowMs: number, mtimeMsFallback: number):
     if (parsed && typeof parsed.createdAt === "string") {
       const createdAtMs = new Date(parsed.createdAt).getTime();
       if (!isNaN(createdAtMs)) {
-        return nowMs - createdAtMs;
+        return Math.max(0, nowMs - createdAtMs);
       }
     }
   } catch {
     // fall through to mtime fallback.
   }
-  return nowMs - mtimeMsFallback;
+  return Math.max(0, nowMs - mtimeMsFallback);
 }
 
 function sanitizeScanText(value: string, maxLen: number): string {
