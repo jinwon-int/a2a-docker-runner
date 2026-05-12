@@ -21,7 +21,7 @@ export async function loadConfig(env = process.env): Promise<RunnerConfig> {
   const profile = normalizePatchCommandProfile(env.A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE);
   const image = env.A2A_DOCKER_RUNNER_IMAGE || DEFAULT_IMAGE;
 
-  return {
+  const config: RunnerConfig = {
     rootDir: env.A2A_DOCKER_RUNNER_ROOT || DEFAULT_ROOT,
     engine,
     image,
@@ -34,6 +34,49 @@ export async function loadConfig(env = process.env): Promise<RunnerConfig> {
     extraMounts,
     ...patchCommand,
   };
+
+  validateRunnerConfig(config);
+
+  return config;
+}
+
+/**
+ * Pre-deploy config validation: fail-fast on schema/config mismatch before the
+ * runner starts executing tasks. Catches operator misconfiguration early so a
+ * bad deploy never reaches Gateway restart or container launch.
+ *
+ * Parent: a2a-plane#249
+ */
+export function validateRunnerConfig(config: RunnerConfig): void {
+  const errors: string[] = [];
+
+  if (!config.image || typeof config.image !== "string" || !config.image.trim()) {
+    errors.push("image must be a non-empty string");
+  }
+
+  if (!config.rootDir || !config.rootDir.startsWith("/")) {
+    errors.push("rootDir must be a non-empty absolute path starting with /");
+  }
+
+  if (config.network && !/^(bridge|host|none)$/.test(config.network)) {
+    errors.push(`unsupported network mode: ${JSON.stringify(config.network)} (expected bridge, host, or none)`);
+  }
+
+  if (config.memory && !/^\d+[bkmgtpe]?$/i.test(config.memory)) {
+    errors.push(`invalid memory limit: ${JSON.stringify(config.memory)} (expected format like "2g" or "512m")`);
+  }
+
+  if (config.cpus && !/^\d+(\.\d+)?$/.test(config.cpus)) {
+    errors.push(`invalid cpus: ${JSON.stringify(config.cpus)} (expected format like "2" or "1.5")`);
+  }
+
+  if (!Number.isFinite(config.defaultTimeoutMs) || config.defaultTimeoutMs <= 0) {
+    errors.push(`invalid defaultTimeoutMs: ${config.defaultTimeoutMs} (expected positive number)`);
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`runner pre-deploy config validation failed:\n${errors.map((e) => `  - ${e}`).join("\n")}`);
+  }
 }
 
 function loadBuildMetadata(env: NodeJS.ProcessEnv, runtimeImage: string): RunnerBuildMetadata | undefined {
