@@ -344,6 +344,21 @@ test("buildContainerScript provisions latest-capable gh and update-branch fallba
   assert.ok(script.includes("warning=gh_pr_update_branch_failed_using_git_fallback"), "Expected git fallback marker");
 });
 
+test("buildContainerScript restores host ownership of mounted workdir on exit", () => {
+  const task: NormalizedRunnerTask = {
+    id: "ownership-restore",
+    intent: "propose_patch",
+    repos: [],
+    commands: [],
+  };
+
+  const script = buildContainerScript(task);
+  assert.ok(script.includes("restore_work_ownership()"), "Expected ownership restore helper");
+  assert.ok(script.includes("stat -c '%u' /work"), "Expected host uid discovery from /work");
+  assert.ok(script.includes("chown -R \"$owner:$group\" /work"), "Expected best-effort recursive chown before container exit");
+  assert.ok(script.includes("trap restore_work_ownership EXIT"), "Expected ownership restore EXIT trap");
+});
+
 test("task artifact shell redactor includes API-key and prompt secret parity patterns", () => {
   const task: NormalizedRunnerTask = {
     id: "redaction-parity",

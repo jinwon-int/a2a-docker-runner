@@ -336,6 +336,15 @@ function buildMetadataEnv(config: RunnerConfig): Record<string, string> {
 export function buildContainerScript(task: NormalizedRunnerTask): string {
   return `#!/usr/bin/env bash
 set -euo pipefail
+restore_work_ownership() {
+  local owner group
+  owner="$(stat -c '%u' /work 2>/dev/null || true)"
+  group="$(stat -c '%g' /work 2>/dev/null || true)"
+  if [ -n "$owner" ] && [ -n "$group" ]; then
+    chown -R "$owner:$group" /work 2>/dev/null || true
+  fi
+}
+trap restore_work_ownership EXIT
 mkdir -p /work/artifacts
 printf 'A2A Docker Runner task %s\n' ${shellQuote(task.id)} | tee /work/artifacts/summary.txt
 printf 'intent=%s\n' ${shellQuote(task.intent)} | tee -a /work/artifacts/summary.txt
