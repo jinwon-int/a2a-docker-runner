@@ -36,6 +36,53 @@ test("guard script passes on clean repo dir", () => {
   }
 });
 
+test("guard script ignores untracked bootstrap paths when gitignore excludes them", () => {
+  const dir = mkdtempSync(join(tmpdir(), "guard-ignored-"));
+  try {
+    spawnSync("git", ["init"], { cwd: dir, encoding: "utf8", timeout: 5000 });
+    writeFileSync(join(dir, ".gitignore"), "AGENTS.md\n.openclaw/\n");
+    writeFileSync(join(dir, "AGENTS.md"), "# ignored agent context");
+    mkdirSync(join(dir, ".openclaw"), { recursive: true });
+    writeFileSync(join(dir, ".openclaw", "workspace-state.json"), "{}");
+
+    const result = spawnSync(process.execPath, [GUARD_SCRIPT, "--repo-dir", dir], {
+      encoding: "utf8",
+      timeout: 5000,
+    });
+
+    assert.equal(result.status, 0, `Expected exit 0 for ignored untracked paths, got ${result.status}: ${result.stderr}`);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.ok, true);
+    assert.equal(output.offendingPaths, undefined);
+    assert.ok(!result.stdout.includes(dir), "guard evidence must not leak host-specific repo paths");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("guard script blocks ignored bootstrap paths once they are staged", () => {
+  const dir = mkdtempSync(join(tmpdir(), "guard-staged-"));
+  try {
+    spawnSync("git", ["init"], { cwd: dir, encoding: "utf8", timeout: 5000 });
+    writeFileSync(join(dir, ".gitignore"), "AGENTS.md\n");
+    writeFileSync(join(dir, "AGENTS.md"), "# staged agent context");
+    const add = spawnSync("git", ["add", "-f", "AGENTS.md"], { cwd: dir, encoding: "utf8", timeout: 5000 });
+    assert.equal(add.status, 0, add.stderr);
+
+    const result = spawnSync(process.execPath, [GUARD_SCRIPT, "--repo-dir", dir], {
+      encoding: "utf8",
+      timeout: 5000,
+    });
+
+    assert.equal(result.status, 1, `Expected exit 1, got ${result.status}`);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.ok, false);
+    assert.ok(output.offendingPaths.includes("AGENTS.md"), `Expected AGENTS.md in offending paths, got: ${JSON.stringify(output.offendingPaths)}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("guard script blocks on AGENTS.md", () => {
   const dir = mkdtempSync(join(tmpdir(), "guard-agents-"));
   try {

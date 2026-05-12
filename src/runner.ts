@@ -487,7 +487,7 @@ git clone --depth=1 --branch ${shellQuote(repo.branch ?? "main")} ${shellQuote(r
 
 /**
  * Pre-command bootstrap guard that fails closed if OpenClaw runtime/bootstrap
- * context files are present in any checked-out repository.
+ * context files would be included in any checked-out repository branch.
  *
  * Parent: a2a-broker#446
  */
@@ -497,9 +497,9 @@ function bootstrapGuardScript(task: NormalizedRunnerTask): string {
   const repoPaths = task.repos.map((repo) => shellQuote(`/work/${repo.path ?? "repo"}`));
   const repoList = repoPaths.join(" ");
 
-  return `# Pre-PR bootstrap guard: fail closed if OpenClaw bootstrap files are present
-# in the checked-out repository.  These files are runtime/persona context, not
-# repository artifacts, and must never enter a PR branch.
+  return `# Pre-PR bootstrap guard: fail closed if OpenClaw bootstrap files would
+# enter the checked-out repository branch.  These files are runtime/persona
+# context, not repository artifacts.
 # Parent: a2a-broker#446
 BOOTSTRAP_BANNED="AGENTS.md BOOTSTRAP.md HEARTBEAT.md IDENTITY.md MEMORY.md SOUL.md TOOLS.md USER.md"
 BOOTSTRAP_BANNED_DIRS=".openclaw memory"
@@ -526,8 +526,21 @@ find_bootstrap_leaks() {
     done
   )
 }
+filter_branch_bootstrap_leaks() {
+  repo_dir="$1"
+  if ! git -C "$repo_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    cat
+    return
+  fi
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    if [ -n "$(git -C "$repo_dir" ls-files -- "$path")" ] || [ -n "$(git -C "$repo_dir" status --porcelain -- "$path")" ]; then
+      printf '%s\\n' "$path"
+    fi
+  done
+}
 for repo_dir in ${repoList}; do
-  bootstrap_leaks_pre="$(find_bootstrap_leaks "$repo_dir")"
+  bootstrap_leaks_pre="$(find_bootstrap_leaks "$repo_dir" | filter_branch_bootstrap_leaks "$repo_dir")"
   if [ -n "$bootstrap_leaks_pre" ]; then
     printf 'error=pre_pr_bootstrap_guard_blocked\\n' | tee -a /work/artifacts/summary.txt
     printf 'PR blocked: OpenClaw bootstrap context files found in repository checkout.\\n' | tee /work/artifacts/patch-command.log
@@ -549,8 +562,8 @@ printf 'bootstrap_guard=ok\\n' | tee -a /work/artifacts/summary.txt
  * Post-command bootstrap guard: verify no bootstrap files leaked into the
  * repository checkout during patch execution.
  *
- * Unlike the pre-check this runs after the patch command and checks every
- * configured checkout path, including ignored files that git status may hide.
+ * Like the pre-check this runs after the patch command and checks every
+ * configured checkout path for tracked, staged, or unignored bootstrap paths.
  */
 function bootstrapPostGuardScript(task: NormalizedRunnerTask): string {
   const repoPaths = task.repos.length
@@ -588,9 +601,24 @@ if ! command -v find_bootstrap_leaks >/dev/null 2>&1; then
     )
   }
 fi
+if ! command -v filter_branch_bootstrap_leaks >/dev/null 2>&1; then
+  filter_branch_bootstrap_leaks() {
+    repo_dir="$1"
+    if ! git -C "$repo_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      cat
+      return
+    fi
+    while IFS= read -r path; do
+      [ -n "$path" ] || continue
+      if [ -n "$(git -C "$repo_dir" ls-files -- "$path")" ] || [ -n "$(git -C "$repo_dir" status --porcelain -- "$path")" ]; then
+        printf '%s\\n' "$path"
+      fi
+    done
+  }
+fi
 for repo_dir in ${repoList}; do
   if [ -d "$repo_dir/.git" ]; then
-    bootstrap_leaks_post="$(find_bootstrap_leaks "$repo_dir")"
+    bootstrap_leaks_post="$(find_bootstrap_leaks "$repo_dir" | filter_branch_bootstrap_leaks "$repo_dir")"
     if [ -n "$bootstrap_leaks_post" ]; then
       printf 'error=post_pr_bootstrap_guard_leak\\n' | tee -a /work/artifacts/summary.txt
       printf 'PR blocked: OpenClaw bootstrap context files leaked into repository during patch execution.\\n' | tee -a /work/artifacts/patch-command.log
