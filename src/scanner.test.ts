@@ -3,7 +3,7 @@ import test from "node:test";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { scanHistory, createArtifactBundle, readinessScan, type ScanProfile, type ScanRunEntry, type ReadinessReport } from "./scanner.js";
+import { scanHistory, createArtifactBundle, readinessScan, buildCleanupDryRunPlan, type ScanProfile, type ScanRunEntry, type ReadinessReport, type CleanupDryRunPlan } from "./scanner.js";
 import { buildSourcePublicApprovalRehearsal, buildArtifactManifest } from "./runner.js";
 import { buildSourcePublicExecutionPreflight } from "./source-public-preflight.js";
 
@@ -1446,4 +1446,301 @@ test("readinessScan run with terminal exitCode but no manifest is classified cor
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Cleanup dry-run plan: buildCleanupDryRunPlan (a2a-docker-runner#223 / a2a-broker#519)
+// ---------------------------------------------------------------------------
+
+test("buildCleanupDryRunPlan produces valid plan for empty readiness report", () => {
+  const report: ReadinessReport = {
+    schemaVersion: "a2a.runner.readiness-report.v1",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    rootLabel: "runner-root:test",
+    totalTaskRoots: 0,
+    totalRunDirs: 0,
+    staleRuns: 0,
+    malformedRuns: 0,
+    orphanTaskRoots: 0,
+    runs: [],
+  };
+
+  const plan = buildCleanupDryRunPlan(report);
+  assert.equal(plan.schemaVersion, "a2a.runner.cleanup-dry-run-plan.v1");
+  assert.equal(plan.generatedAt, "1970-01-01T00:00:00.000Z");
+  assert.ok(typeof plan.planId === "string" && plan.planId.length > 0);
+  assert.equal(plan.summary.totalCandidates, 0);
+  assert.equal(plan.summary.byRiskClass.low, 0);
+  assert.equal(plan.summary.byRiskClass.medium, 0);
+  assert.equal(plan.summary.byRiskClass.high, 0);
+  assert.equal(plan.summary.byRiskClass.blocked, 0);
+  assert.deepEqual(plan.entries, []);
+  // Safety markers.
+  assert.equal(plan.safety.mutationPerformed, false);
+  assert.equal(plan.safety.operatorApprovalRequired, true);
+  assert.equal(plan.safety.backupRequired, true);
+  assert.equal(plan.safety.staleWorkerRowsMayBeValid, true);
+  assert.equal(plan.safety.liveProviderSendPerformed, false);
+  assert.equal(plan.safety.terminalAckSent, false);
+  assert.equal(plan.safety.dbMutationPerformed, false);
+  // Pre-execution checklist.
+  assert.ok(Array.isArray(plan.preExecutionChecklist));
+  assert.ok(plan.preExecutionChecklist.length >= 3);
+  // Rollback notes.
+  assert.ok(typeof plan.rollbackNotes === "string" && plan.rollbackNotes.length > 0);
+});
+
+test("buildCleanupDryRunPlan includes only non-ok entries", () => {
+  const report: ReadinessReport = {
+    schemaVersion: "a2a.runner.readiness-report.v1",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    rootLabel: "runner-root:test",
+    totalTaskRoots: 2,
+    totalRunDirs: 3,
+    staleRuns: 1,
+    malformedRuns: 1,
+    orphanTaskRoots: 0,
+    runs: [
+      { safeTaskId: "ok-task", runToken: "run-1", ageMs: 1000, status: "ok", terminal: true, runJsonMalformed: false, manifestMalformed: false, orphanTaskRoot: false },
+      { safeTaskId: "stale-task", runToken: "run-2", ageMs: 9000000, status: "stale", terminal: false, runJsonMalformed: false, manifestMalformed: false, orphanTaskRoot: false, reason: "stale run" },
+      { safeTaskId: "bad-task", runToken: "run-3", ageMs: 5000, status: "malformed", terminal: false, runJsonMalformed: true, manifestMalformed: false, orphanTaskRoot: false, reason: "bad run.json" },
+    ],
+  };
+
+  const plan = buildCleanupDryRunPlan(report);
+  assert.equal(plan.summary.totalCandidates, 2);
+  assert.equal(plan.entries.length, 2);
+  // Ok entry excluded.
+  assert.ok(!plan.entries.some((e) => e.safeTaskId === "ok-task"));
+  // Non-ok entries included.
+  assert.ok(plan.entries.some((e) => e.safeTaskId === "stale-task"));
+  assert.ok(plan.entries.some((e) => e.safeTaskId === "bad-task"));
+  // Bound report matches.
+  assert.equal(plan.boundReadinessReport.staleRuns, 1);
+  assert.equal(plan.boundReadinessReport.malformedRuns, 1);
+});
+
+test("buildCleanupDryRunPlan assigns correct risk classes", () => {
+  const report: ReadinessReport = {
+    schemaVersion: "a2a.runner.readiness-report.v1",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    rootLabel: "runner-root:test",
+    totalTaskRoots: 3,
+    totalRunDirs: 3,
+    staleRuns: 1,
+    malformedRuns: 1,
+    orphanTaskRoots: 1,
+    runs: [
+      {
+        safeTaskId: "stale-fresh", runToken: "run-s1", ageMs: 3_600_001,
+        status: "stale", terminal: false, runJsonMalformed: false, manifestMalformed: false,
+        orphanTaskRoot: false, reason: "stale fresh",
+      },
+      {
+        safeTaskId: "stale-old", runToken: "run-s2", ageMs: 8 * 24 * 3600_000 + 1,
+        status: "stale", terminal: false, runJsonMalformed: false, manifestMalformed: false,
+        orphanTaskRoot: false, reason: "stale old",
+      },
+      {
+        safeTaskId: "orphan-dir", runToken: "<no-runs>", ageMs: 0,
+        status: "orphan", terminal: false, runJsonMalformed: false, manifestMalformed: false,
+        orphanTaskRoot: true, reason: "orphan",
+      },
+    ],
+  };
+
+  const plan = buildCleanupDryRunPlan(report);
+  assert.equal(plan.entries.length, 3);
+
+  // stale < 7 days → medium.
+  const freshStale = plan.entries.find((e) => e.safeTaskId === "stale-fresh")!;
+  assert.equal(freshStale.riskClass, "medium");
+
+  // stale > 7 days → high.
+  const oldStale = plan.entries.find((e) => e.safeTaskId === "stale-old")!;
+  assert.equal(oldStale.riskClass, "high");
+
+  // orphan → low.
+  const orphan = plan.entries.find((e) => e.safeTaskId === "orphan-dir")!;
+  assert.equal(orphan.riskClass, "low");
+
+  // Verify byRiskClass totals.
+  assert.equal(plan.summary.byRiskClass.low, 1);
+  assert.equal(plan.summary.byRiskClass.medium, 1);
+  assert.equal(plan.summary.byRiskClass.high, 1);
+  assert.equal(plan.summary.byRiskClass.blocked, 0);
+});
+
+test("buildCleanupDryRunPlan generates deterministic output", () => {
+  const report: ReadinessReport = {
+    schemaVersion: "a2a.runner.readiness-report.v1",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    rootLabel: "runner-root:det",
+    totalTaskRoots: 1,
+    totalRunDirs: 2,
+    staleRuns: 1,
+    malformedRuns: 1,
+    orphanTaskRoots: 0,
+    runs: [
+      { safeTaskId: "task-a", runToken: "run-1", ageMs: 5000000, status: "stale", terminal: false, runJsonMalformed: false, manifestMalformed: false, orphanTaskRoot: false },
+      { safeTaskId: "task-a", runToken: "run-2", ageMs: 100000, status: "malformed", terminal: false, runJsonMalformed: true, manifestMalformed: false, orphanTaskRoot: false },
+    ],
+  };
+
+  const plan1 = buildCleanupDryRunPlan(report);
+  const plan2 = buildCleanupDryRunPlan(report);
+
+  assert.deepEqual(plan1.planId, plan2.planId);
+  assert.deepEqual(plan1.entries.map((e) => e.candidateId), plan2.entries.map((e) => e.candidateId));
+  assert.deepEqual(plan1.summary, plan2.summary);
+  assert.deepEqual(plan1.safety, plan2.safety);
+});
+
+test("buildCleanupDryRunPlan respects limit option", () => {
+  const runs: ReadinessReport["runs"] = [];
+  for (let i = 0; i < 10; i++) {
+    runs.push({
+      safeTaskId: `task-${i}`, runToken: `run-${i}`, ageMs: 10_000_000,
+      status: "stale" as const, terminal: false, runJsonMalformed: false,
+      manifestMalformed: false, orphanTaskRoot: false,
+    });
+  }
+
+  const report: ReadinessReport = {
+    schemaVersion: "a2a.runner.readiness-report.v1",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    rootLabel: "runner-root:limit",
+    totalTaskRoots: 10,
+    totalRunDirs: 10,
+    staleRuns: 10,
+    malformedRuns: 0,
+    orphanTaskRoots: 0,
+    runs,
+  };
+
+  const plan = buildCleanupDryRunPlan(report, { limit: 3 });
+  assert.equal(plan.entries.length, 3);
+  assert.equal(plan.summary.totalCandidates, 3);
+  assert.ok(plan.summary.byTrigger.stale <= 3);
+});
+
+test("buildCleanupDryRunPlan candidate IDs include prefix overrides", () => {
+  const report: ReadinessReport = {
+    schemaVersion: "a2a.runner.readiness-report.v1",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    rootLabel: "runner-root:prefix",
+    totalTaskRoots: 1,
+    totalRunDirs: 1,
+    staleRuns: 1,
+    malformedRuns: 0,
+    orphanTaskRoots: 0,
+    runs: [
+      { safeTaskId: "task-x", runToken: "run-x", ageMs: 10_000_000, status: "stale", terminal: false, runJsonMalformed: false, manifestMalformed: false, orphanTaskRoot: false },
+    ],
+  };
+
+  const plan = buildCleanupDryRunPlan(report, { candidateIdPrefix: "safe-prune" });
+  assert.equal(plan.entries.length, 1);
+  assert.ok(plan.entries[0]!.candidateId.startsWith("safe-prune:"));
+  assert.ok(plan.planId.startsWith("safe-prune-"));
+});
+
+test("buildCleanupDryRunPlan does not mutate its input report", () => {
+  const runs: ReadinessReport["runs"] = [
+    { safeTaskId: "immutable-task", runToken: "immutable-run", ageMs: 5000000, status: "stale", terminal: false, runJsonMalformed: false, manifestMalformed: false, orphanTaskRoot: false },
+  ];
+  const report: ReadinessReport = {
+    schemaVersion: "a2a.runner.readiness-report.v1",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    rootLabel: "runner-root:immutable",
+    totalTaskRoots: 1,
+    totalRunDirs: 1,
+    staleRuns: 1,
+    malformedRuns: 0,
+    orphanTaskRoots: 0,
+    runs,
+  };
+
+  const frozen = JSON.parse(JSON.stringify(report)) as ReadinessReport;
+  buildCleanupDryRunPlan(report);
+  assert.deepEqual(report, frozen, "buildCleanupDryRunPlan must not mutate its input");
+});
+
+test("buildCleanupDryRunPlan safety markers are immutable", () => {
+  const report: ReadinessReport = {
+    schemaVersion: "a2a.runner.readiness-report.v1",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    rootLabel: "runner-root:safety",
+    totalTaskRoots: 1,
+    totalRunDirs: 1,
+    staleRuns: 1,
+    malformedRuns: 0,
+    orphanTaskRoots: 0,
+    runs: [
+      { safeTaskId: "t", runToken: "r", ageMs: 10_000_000, status: "stale", terminal: false, runJsonMalformed: false, manifestMalformed: false, orphanTaskRoot: false },
+    ],
+  };
+
+  const plan = buildCleanupDryRunPlan(report);
+
+  // Every safety field must explicitly deny mutation/live-operation paths.
+  assert.strictEqual(plan.safety.mutationPerformed, false);
+  assert.strictEqual(plan.safety.operatorApprovalRequired, true);
+  assert.strictEqual(plan.safety.backupRequired, true);
+  assert.strictEqual(plan.safety.staleWorkerRowsMayBeValid, true);
+  assert.strictEqual(plan.safety.liveProviderSendPerformed, false);
+  assert.strictEqual(plan.safety.terminalAckSent, false);
+  assert.strictEqual(plan.safety.dbMutationPerformed, false);
+});
+
+test("buildCleanupDryRunPlan bound report reflects source readiness", () => {
+  const report: ReadinessReport = {
+    schemaVersion: "a2a.runner.readiness-report.v1",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    rootLabel: "runner-root:bound",
+    totalTaskRoots: 5,
+    totalRunDirs: 12,
+    staleRuns: 3,
+    malformedRuns: 2,
+    orphanTaskRoots: 1,
+    runs: [
+      { safeTaskId: "a", runToken: "1", ageMs: 1, status: "stale", terminal: false, runJsonMalformed: false, manifestMalformed: false, orphanTaskRoot: false },
+    ],
+  };
+
+  const plan = buildCleanupDryRunPlan(report);
+  assert.equal(plan.boundReadinessReport.rootLabel, "runner-root:bound");
+  assert.equal(plan.boundReadinessReport.totalTaskRoots, 5);
+  assert.equal(plan.boundReadinessReport.totalRunDirs, 12);
+  assert.equal(plan.boundReadinessReport.staleRuns, 3);
+  assert.equal(plan.boundReadinessReport.malformedRuns, 2);
+  assert.equal(plan.boundReadinessReport.orphanTaskRoots, 1);
+});
+
+test("buildCleanupDryRunPlan entries are sorted deterministically by candidateId", () => {
+  const report: ReadinessReport = {
+    schemaVersion: "a2a.runner.readiness-report.v1",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    rootLabel: "runner-root:sort",
+    totalTaskRoots: 3,
+    totalRunDirs: 3,
+    staleRuns: 3,
+    malformedRuns: 0,
+    orphanTaskRoots: 0,
+    runs: [
+      { safeTaskId: "zzz", runToken: "last", ageMs: 5000000, status: "stale", terminal: false, runJsonMalformed: false, manifestMalformed: false, orphanTaskRoot: false },
+      { safeTaskId: "aaa", runToken: "first", ageMs: 5000000, status: "stale", terminal: false, runJsonMalformed: false, manifestMalformed: false, orphanTaskRoot: false },
+      { safeTaskId: "mmm", runToken: "middle", ageMs: 5000000, status: "stale", terminal: false, runJsonMalformed: false, manifestMalformed: false, orphanTaskRoot: false },
+    ],
+  };
+
+  const plan = buildCleanupDryRunPlan(report);
+  assert.equal(plan.entries.length, 3);
+  // Should be sorted by candidateId (which starts with cleanup:safeTaskId:...).
+  const ids = plan.entries.map((e) => e.candidateId);
+  for (let i = 1; i < ids.length; i++) {
+    assert.ok(ids[i - 1]! < ids[i]!, `entries must be sorted: ${ids[i - 1]} >= ${ids[i]}`);
+  }
+  assert.ok(plan.entries[0]!.candidateId.includes("aaa"), "first entry should be aaa");
+  assert.ok(plan.entries[2]!.candidateId.includes("zzz"), "last entry should be zzz");
 });

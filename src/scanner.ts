@@ -625,6 +625,227 @@ const TERMINAL_STATUSES = new Set([
   "stale", "no_changes_allowed", "comment_only_done",
 ]);
 
+// ---------------------------------------------------------------------------
+// Cleanup dry-run plan (a2a-docker-runner#223 / a2a-broker#519)
+// ---------------------------------------------------------------------------
+
+/** Risk classification for a single cleanup candidate. */
+export type CleanupRiskClass = "low" | "medium" | "high" | "blocked";
+
+/** A single cleanup candidate entry in the dry-run plan. */
+export interface CleanupDryRunEntry {
+  /** Stable identifier derived from safeTaskId + runToken. */
+  candidateId: string;
+  safeTaskId: string;
+  runToken: string;
+  /** Age in ms at scan time. */
+  ageMs: number;
+  /** The readiness classification that triggered this candidate. */
+  trigger: ReadinessRunStatus;
+  /** Risk class for this specific entry. */
+  riskClass: CleanupRiskClass;
+  /** Redacted reason (max 200 chars). */
+  reason: string;
+  /** Terminal-status flag from the readiness report. */
+  terminal: boolean;
+}
+
+/**
+ * A deterministic, operator-gated dry-run cleanup plan.
+ *
+ * Produced from a readiness report.  Never mutates disk state.  Every plan
+ * includes explicit safety markers, backup requirements, an approval gate,
+ * and rollback notes.  Real cleanup execution requires a separate operator
+ * approval step after backup verification.
+ */
+export interface CleanupDryRunPlan {
+  schemaVersion: "a2a.runner.cleanup-dry-run-plan.v1";
+  /** Deterministic timestamp. */
+  generatedAt: "1970-01-01T00:00:00.000Z";
+  /** Stable plan id, derived from rootLabel + candidate digest. */
+  planId: string;
+  /** The readiness report summary this plan is bound to. */
+  boundReadinessReport: {
+    rootLabel: string;
+    totalTaskRoots: number;
+    totalRunDirs: number;
+    staleRuns: number;
+    malformedRuns: number;
+    orphanTaskRoots: number;
+  };
+  /** Aggregate counts. */
+  summary: {
+    totalCandidates: number;
+    byRiskClass: Record<CleanupRiskClass, number>;
+    byTrigger: Record<ReadinessRunStatus, number>;
+  };
+  /** Individual cleanup entries, sorted deterministically by candidateId. */
+  entries: CleanupDryRunEntry[];
+  /** Safety markers — all must be explicitly false/blocked for dry-run plans. */
+  safety: {
+    mutationPerformed: false;
+    operatorApprovalRequired: true;
+    backupRequired: true;
+    staleWorkerRowsMayBeValid: true;
+    liveProviderSendPerformed: false;
+    terminalAckSent: false;
+    dbMutationPerformed: false;
+  };
+  /** Operator pre-execution checklist. */
+  preExecutionChecklist: string[];
+  /** Rollback and abort notes. */
+  rollbackNotes: string;
+}
+
+/** Options for buildCleanupDryRunPlan. */
+export interface CleanupDryRunOptions {
+  /** Max entries in the plan. Defaults to 200. */
+  limit?: number;
+  /** Optional prefix for candidate IDs (defaults to "cleanup"). */
+  candidateIdPrefix?: string;
+}
+
+const DEFAULT_CLEANUP_LIMIT = 200;
+
+/** Risk-class assignment by readiness status. */
+function classifyRisk(status: ReadinessRunStatus, terminal: boolean, ageMs: number): CleanupRiskClass {
+  switch (status) {
+    case "orphan":
+      // Orphan task roots have no valid runs — lowest risk to clean up.
+      return "low";
+    case "stale":
+      // Stale but non-terminal runs may still be valid home-broker records.
+      // Escalate to high when older than 7 days to encourage manual review.
+      return ageMs > 7 * 24 * 3600_000 ? "high" : "medium";
+    case "malformed":
+      // Malformed runs are already corrupted — safe to clean but may need
+      // manual inspection if they contain partial evidence.
+      return terminal ? "low" : "medium";
+    default:
+      return "blocked";
+  }
+}
+
+/**
+ * Build a deterministic cleanup dry-run plan from a readiness report.
+ *
+ * This is a pure data-transformation function.  It never touches the
+ * filesystem, never mutates state, and never performs real cleanup.
+ *
+ * The produced plan:
+ * - Binds to the exact readiness report by rootLabel + stale/malformed/orphan counts.
+ * - Assigns risk classes per entry (low / medium / high / blocked).
+ * - Generates stable, deduplicable candidate IDs.
+ * - Includes operator pre-execution checklist and rollback notes.
+ * - Requires explicit operator approval before any mutation path.
+ *
+ * Safety constraints (parent: a2a-broker#519):
+ * - No production DB mutation / prune / migration.
+ * - No deploy / restart.
+ * - No live provider send.
+ * - No terminal ACK.
+ * - Fail closed for stale entries that may still be valid.
+ */
+export function buildCleanupDryRunPlan(
+  report: ReadinessReport,
+  options?: CleanupDryRunOptions,
+): CleanupDryRunPlan {
+  const limit = options?.limit && options.limit > 0 ? options.limit : DEFAULT_CLEANUP_LIMIT;
+  const candidateIdPrefix = options?.candidateIdPrefix ?? "cleanup";
+
+  // Only include non-ok entries as cleanup candidates.
+  const candidates = report.runs.filter((r) => r.status !== "ok");
+
+  // Build entries with risk classification.
+  const entries: CleanupDryRunEntry[] = candidates.map((r, i) => ({
+    candidateId: `${candidateIdPrefix}:${sanitizeScanText(r.safeTaskId, 60)}:${sanitizeScanText(r.runToken, 60)}:${String(i).padStart(4, "0")}`,
+    safeTaskId: r.safeTaskId,
+    runToken: sanitizeScanText(r.runToken, 200),
+    ageMs: r.ageMs,
+    trigger: r.status,
+    riskClass: classifyRisk(r.status, r.terminal, r.ageMs),
+    reason: r.reason ?? `Cleanup candidate: ${r.status}`,
+    terminal: r.terminal,
+  }));
+
+  // Deterministic sort by candidateId.
+  entries.sort((a, b) => a.candidateId.localeCompare(b.candidateId));
+
+  // Truncate to limit.
+  const limited = entries.slice(0, limit);
+
+  // Aggregate counts.
+  const byRiskClass: Record<CleanupRiskClass, number> = {
+    low: 0,
+    medium: 0,
+    high: 0,
+    blocked: 0,
+  };
+  const byTrigger: Record<ReadinessRunStatus, number> = {
+    ok: 0,
+    stale: 0,
+    malformed: 0,
+    orphan: 0,
+  };
+  for (const e of limited) {
+    byRiskClass[e.riskClass]++;
+    byTrigger[e.trigger]++;
+  }
+
+  // Stable plan ID: deterministic hash of root label + candidate counts.
+  const planId = [
+    candidateIdPrefix,
+    report.rootLabel,
+    `s${report.staleRuns}`,
+    `m${report.malformedRuns}`,
+    `o${report.orphanTaskRoots}`,
+  ].join("-");
+
+  const totalCandidates = limited.length;
+
+  return {
+    schemaVersion: "a2a.runner.cleanup-dry-run-plan.v1",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    planId: sanitizeScanText(planId, 300),
+    boundReadinessReport: {
+      rootLabel: report.rootLabel,
+      totalTaskRoots: report.totalTaskRoots,
+      totalRunDirs: report.totalRunDirs,
+      staleRuns: report.staleRuns,
+      malformedRuns: report.malformedRuns,
+      orphanTaskRoots: report.orphanTaskRoots,
+    },
+    summary: {
+      totalCandidates,
+      byRiskClass,
+      byTrigger,
+    },
+    entries: limited,
+    safety: {
+      mutationPerformed: false,
+      operatorApprovalRequired: true,
+      backupRequired: true,
+      staleWorkerRowsMayBeValid: true,
+      liveProviderSendPerformed: false,
+      terminalAckSent: false,
+      dbMutationPerformed: false,
+    },
+    preExecutionChecklist: [
+      "1. Verify backup of runner rootDir has been taken and validated.",
+      "2. Review all HIGH-risk entries manually before proceeding.",
+      "3. Confirm no active runs are in-progress for any candidate safeTaskId.",
+      "4. Obtain explicit operator approval token before executing any mutation.",
+      "5. Execute only against staging/test rootDir, not production.",
+      "6. Keep audit log of every removed directory with before/after evidence.",
+    ],
+    rollbackNotes:
+      "Rollback requires restoring from backup taken before cleanup execution. " +
+      "Individual run directories can be restored from backup by safeTaskId/runToken path. " +
+      "If the backup was not verified before execution, rollback is not guaranteed. " +
+      "Abort by stopping the cleanup process before the approval token is consumed.",
+  };
+}
+
 /**
  * Produce a readiness report over the runner history.
  *
