@@ -24,6 +24,7 @@ import {
   buildTerminalEvidenceEvent,
   decideTerminalEvidenceAck,
   buildTerminalAckDecision,
+  buildCanaryRecoveryAuditReport,
 } from "./integration.js";
 import type { HandlerTask, HandlerEnv, HandlerResult, RawRunnerOutput, TerminalAckDecision, TerminalEvidenceEvent, TerminalEvidenceKind, TerminalEvidenceStatus } from "./integration.js";
 
@@ -1506,6 +1507,91 @@ test("R4+ terminal-outbox canary nosuk smoke script emits safe evidence for term
   assert.ok(result.artifacts.every((entry) => entry.name && entry.taskId && entry.terminalOutboxId && entry.evidenceKind));
   assert.ok(result.artifacts.some((a) => a.acknowledged === false), "must have provider-send-only rejection");
   assert.ok(result.artifacts.some((a) => a.acknowledged === true), "must have receipt-confirmed ack");
+});
+
+test("buildCanaryRecoveryAuditReport: emits bounded recovery guidance without raw logs", () => {
+  const raw: RawRunnerOutput = {
+    ok: false,
+    taskId: "canary-recovery-block",
+    status: "failed",
+    workDir: "/work/private/canary-recovery-block",
+    stdout: "raw stdout token=secret ".repeat(200),
+    stderr: "raw stderr /root/private ".repeat(200),
+    artifacts: ["/work/private/canary-recovery-block/artifacts/summary.txt"],
+    resultSummary: {
+      exitCode: 1,
+      signal: null,
+      timedOut: false,
+      stdout: "bounded stdout",
+      stderr: "bounded stderr",
+      stdoutTruncated: true,
+      stderrTruncated: true,
+      artifactCount: 1,
+      manifestPath: "artifacts/manifest.json",
+    },
+    github: {
+      blockCommentUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/216#issuecomment-9001",
+      issueUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/216",
+    },
+  };
+
+  const report = buildCanaryRecoveryAuditReport(
+    raw,
+    { id: "canary-recovery-block", payload: { repo: "jinwon-int/a2a-docker-runner", issue: "216", title: "Canary recovery" } },
+    "jingun",
+    undefined,
+    "2026-05-12T04:30:00.000Z",
+  );
+
+  assert.equal(report.schemaVersion, "a2a.runner.canary-recovery-audit.v1");
+  assert.equal(report.evidenceKind, "Block");
+  assert.equal(report.status, "blocked");
+  assert.equal(report.evidenceUrl, "https://github.com/jinwon-int/a2a-docker-runner/issues/216#issuecomment-9001");
+  assert.equal(report.acknowledged, false);
+  assert.equal(report.cursorComplete, false);
+  assert.equal(report.operatorAction, "operator_visible_receipt_required");
+  assert.deepEqual(report.safetyState, { noLiveProviderSend: true, terminalAck: "requires_operator_receipt", providerSendIsReceiptEvidence: false });
+  assert.deepEqual(report.diagnostics, {
+    exitCode: 1,
+    timedOut: false,
+    artifactCount: 1,
+    stdoutTruncated: true,
+    stderrTruncated: true,
+    manifestPath: "artifacts/manifest.json",
+  });
+
+  const serialized = JSON.stringify(report);
+  assert.ok(!serialized.includes("raw stdout"));
+  assert.ok(!serialized.includes("raw stderr"));
+  assert.ok(!serialized.includes("/work/private"));
+  assert.ok(!serialized.includes("/root/private"));
+  assert.ok(!serialized.includes("token=secret"));
+  assert.ok(!serialized.includes("messageId"));
+});
+
+test("runner canary recovery audit smoke script emits no-live replay evidence", () => {
+  const output = execFileSync(process.execPath, ["scripts/runner-canary-recovery-audit-smoke.mjs"], {
+    cwd: new URL("..", import.meta.url),
+    encoding: "utf8",
+  });
+  const result = JSON.parse(output) as {
+    ok: boolean;
+    worker: string;
+    team: string;
+    noLiveProviderSend: boolean;
+    providerSendSuccessIsReceiptEvidence: boolean;
+    terminalOutboxAckPerformed: boolean;
+    reports: Array<{ operatorAction: string; acknowledged: boolean; cursorComplete: boolean }>;
+  };
+
+  assert.equal(result.ok, true);
+  assert.equal(result.worker, "jingun");
+  assert.equal(result.team, "team2");
+  assert.equal(result.noLiveProviderSend, true);
+  assert.equal(result.providerSendSuccessIsReceiptEvidence, false);
+  assert.equal(result.terminalOutboxAckPerformed, false);
+  assert.ok(result.reports.some((entry) => entry.operatorAction === "operator_visible_receipt_required"));
+  assert.ok(result.reports.some((entry) => entry.acknowledged === true && entry.cursorComplete === true));
 });
 
 test("public demo artifact fixtures pass the no-live safety audit", () => {
