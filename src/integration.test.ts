@@ -1581,7 +1581,17 @@ test("runner canary recovery audit smoke script emits no-live replay evidence", 
     noLiveProviderSend: boolean;
     providerSendSuccessIsReceiptEvidence: boolean;
     terminalOutboxAckPerformed: boolean;
-    reports: Array<{ operatorAction: string; acknowledged: boolean; cursorComplete: boolean }>;
+    replayProof: {
+      deterministic: boolean;
+      replayCount: number;
+      uniqueDedupeKeys: number;
+      providerSendOnlyDoesNotAck: boolean;
+      receiptConfirmedCompletesCursor: number;
+      terminalAckRequiresOperatorVisibleReceipt: boolean;
+      noLiveProviderSend: boolean;
+      terminalOutboxAckPerformed: boolean;
+    };
+    reports: Array<{ eventId: string; dedupeKey: string; operatorAction: string; acknowledged: boolean; cursorComplete: boolean }>;
   };
 
   assert.equal(result.ok, true);
@@ -1590,6 +1600,15 @@ test("runner canary recovery audit smoke script emits no-live replay evidence", 
   assert.equal(result.noLiveProviderSend, true);
   assert.equal(result.providerSendSuccessIsReceiptEvidence, false);
   assert.equal(result.terminalOutboxAckPerformed, false);
+  assert.equal(result.replayProof.deterministic, true);
+  assert.equal(result.replayProof.replayCount, result.reports.length);
+  assert.equal(result.replayProof.uniqueDedupeKeys, result.reports.length);
+  assert.equal(result.replayProof.providerSendOnlyDoesNotAck, true);
+  assert.ok(result.replayProof.receiptConfirmedCompletesCursor >= 3);
+  assert.equal(result.replayProof.terminalAckRequiresOperatorVisibleReceipt, true);
+  assert.equal(result.replayProof.noLiveProviderSend, true);
+  assert.equal(result.replayProof.terminalOutboxAckPerformed, false);
+  assert.ok(result.reports.every((entry) => entry.eventId === entry.dedupeKey));
   assert.ok(result.reports.some((entry) => entry.operatorAction === "operator_visible_receipt_required"));
   assert.ok(result.reports.some((entry) => entry.acknowledged === true && entry.cursorComplete === true));
 });

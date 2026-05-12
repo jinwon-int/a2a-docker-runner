@@ -19,13 +19,46 @@ assert.equal(fixture.canaryContract.noLiveProviderSend, true);
 assert.equal(fixture.canaryContract.providerSendSuccessIsReceiptEvidence, false);
 assert.equal(fixture.canaryContract.terminalOutboxAckPerformed, false);
 
-const reports = fixture.cases.map((entry) => buildCanaryRecoveryAuditReport(
-  parseRunnerOutput(JSON.stringify(entry.runnerOutput)),
-  entry.handlerTask,
-  fixture.worker,
-  entry.receipt,
-  fixture.emittedAt,
-));
+function buildReports() {
+  return fixture.cases.map((entry) => buildCanaryRecoveryAuditReport(
+    parseRunnerOutput(JSON.stringify(entry.runnerOutput)),
+    entry.handlerTask,
+    fixture.worker,
+    entry.receipt,
+    fixture.emittedAt,
+  ));
+}
+
+const reports = buildReports();
+const replayReports = buildReports();
+
+// Recovery proof must be replay-safe: identical bounded inputs and the same
+// emittedAt timestamp must produce identical event ids, dedupe keys, operator
+// actions, and cursor decisions. This stays entirely synthetic/no-live.
+assert.deepEqual(replayReports, reports);
+
+const dedupeKeys = new Set(reports.map((report) => report.dedupeKey));
+assert.equal(dedupeKeys.size, reports.length, "each terminal outcome must have a unique replay dedupe key");
+assert.ok(reports.every((report) => report.eventId === report.dedupeKey), "event id should be the adapter idempotency key");
+
+const expectedByTaskId = new Map(fixture.cases.map((entry) => [entry.handlerTask.id, entry.expected]));
+for (const report of reports) {
+  const expected = expectedByTaskId.get(report.taskId);
+  assert.ok(expected, `fixture missing expected matrix for ${report.taskId}`);
+  assert.equal(report.evidenceKind, expected.evidenceKind, report.taskId);
+  assert.equal(report.status, expected.status, report.taskId);
+  assert.equal(report.acknowledged, expected.acknowledged, report.taskId);
+  assert.equal(report.cursorComplete, expected.cursorComplete, report.taskId);
+}
+
+const providerSendOnly = reports.find((report) => report.taskId.includes("send-only"));
+assert.ok(providerSendOnly, "must include provider-send-only recovery case");
+assert.equal(providerSendOnly.acknowledged, false);
+assert.equal(providerSendOnly.cursorComplete, false);
+assert.equal(providerSendOnly.operatorAction, "operator_visible_receipt_required");
+
+const receiptConfirmed = reports.filter((report) => report.acknowledged === true && report.cursorComplete === true);
+assert.ok(receiptConfirmed.length >= 3, "PR/Done/Block receipt-confirmed cases should complete cursor");
 
 assert.equal(reports.length, fixture.cases.length);
 assert.ok(reports.some((report) => report.operatorAction === "operator_visible_receipt_required"), "must flag missing operator-visible receipt");
@@ -47,6 +80,16 @@ const artifactEvidence = {
   noLiveProviderSend: true,
   providerSendSuccessIsReceiptEvidence: false,
   terminalOutboxAckPerformed: false,
+  replayProof: {
+    deterministic: true,
+    replayCount: replayReports.length,
+    uniqueDedupeKeys: dedupeKeys.size,
+    providerSendOnlyDoesNotAck: providerSendOnly.acknowledged === false && providerSendOnly.cursorComplete === false,
+    receiptConfirmedCompletesCursor: receiptConfirmed.length,
+    terminalAckRequiresOperatorVisibleReceipt: true,
+    noLiveProviderSend: true,
+    terminalOutboxAckPerformed: false,
+  },
   reports,
 };
 
