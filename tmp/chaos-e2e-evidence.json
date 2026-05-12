@@ -2,15 +2,15 @@
   "schemaVersion": "a2a-docker-runner.chaos-e2e.v1",
   "ok": true,
   "mode": "mock",
-  "startedAt": "2026-05-11T16:12:29.579Z",
-  "finishedAt": "2026-05-11T16:12:29.582Z",
-  "durationMs": 3,
-  "workDir": "/tmp/a2a-chaos-e2e-dLfz31",
+  "startedAt": "2026-05-12T04:52:11.534Z",
+  "finishedAt": "2026-05-12T04:52:11.538Z",
+  "durationMs": 4,
+  "workDir": "/tmp/a2a-chaos-e2e-ExZ5N9",
   "environment": {
     "node": "v22.22.2",
     "platform": "linux",
     "ci": false,
-    "gitSha": "bef4fbb"
+    "gitSha": "c05515e"
   },
   "requiredCoverage": [
     "broker_restart",
@@ -23,33 +23,33 @@
     {
       "name": "broker_restart",
       "ok": true,
-      "durationMs": 0,
+      "durationMs": 1,
       "description": "submit work, restart broker, and verify the task still completes exactly once",
       "events": [
         {
-          "at": "2026-05-11T16:12:29.581Z",
+          "at": "2026-05-12T04:52:11.537Z",
           "type": "task_submitted",
           "taskId": "broker-restart-1"
         },
         {
-          "at": "2026-05-11T16:12:29.581Z",
+          "at": "2026-05-12T04:52:11.537Z",
           "type": "broker_restarted",
           "count": 1
         },
         {
-          "at": "2026-05-11T16:12:29.581Z",
+          "at": "2026-05-12T04:52:11.537Z",
           "type": "task_claimed",
           "taskId": "broker-restart-1",
           "worker": "worker-a"
         },
         {
-          "at": "2026-05-11T16:12:29.581Z",
+          "at": "2026-05-12T04:52:11.537Z",
           "type": "task_completed",
           "taskId": "broker-restart-1",
           "worker": "worker-a"
         },
         {
-          "at": "2026-05-11T16:12:29.581Z",
+          "at": "2026-05-12T04:52:11.537Z",
           "type": "assertion",
           "assertion": "completed_once",
           "taskId": "broker-restart-1",
@@ -60,33 +60,33 @@
     {
       "name": "worker_kill",
       "ok": true,
-      "durationMs": 1,
+      "durationMs": 0,
       "description": "kill the active worker during a claim and verify another worker can complete the task",
       "events": [
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.537Z",
           "type": "task_submitted",
           "taskId": "worker-kill-1"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.537Z",
           "type": "task_claimed",
           "taskId": "worker-kill-1",
           "worker": "worker-a"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.537Z",
           "type": "worker_killed",
           "worker": "worker-a"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.537Z",
           "type": "task_completed",
           "taskId": "worker-kill-1",
           "worker": "worker-b"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.537Z",
           "type": "assertion",
           "assertion": "completed_once",
           "taskId": "worker-kill-1",
@@ -101,40 +101,40 @@
       "description": "create a stale claim and verify the broker requeues it before completion",
       "events": [
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.537Z",
           "type": "task_submitted",
           "taskId": "stale-requeue-1"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.537Z",
           "type": "task_claimed",
           "taskId": "stale-requeue-1",
           "worker": "worker-a"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.537Z",
           "type": "task_marked_stale",
           "taskId": "stale-requeue-1"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.537Z",
           "type": "task_requeued_stale",
           "taskId": "stale-requeue-1"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.537Z",
           "type": "task_claimed",
           "taskId": "stale-requeue-1",
           "worker": "worker-b"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.537Z",
           "type": "task_completed",
           "taskId": "stale-requeue-1",
           "worker": "worker-b"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.537Z",
           "type": "assertion",
           "assertion": "event_present",
           "taskId": "stale-requeue-1",
@@ -146,46 +146,46 @@
     {
       "name": "duplicate_delivery_tolerance",
       "ok": true,
-      "durationMs": 0,
+      "durationMs": 1,
       "description": "inject duplicate delivery/completion attempts and verify idempotent task evidence",
       "events": [
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.538Z",
           "type": "task_submitted",
           "taskId": "duplicate-delivery-1"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.538Z",
           "type": "task_claimed",
           "taskId": "duplicate-delivery-1",
           "worker": "worker-a"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.538Z",
           "type": "duplicate_delivery_injected",
           "taskId": "duplicate-delivery-1"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.538Z",
           "type": "task_completed",
           "taskId": "duplicate-delivery-1",
           "worker": "worker-a"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.538Z",
           "type": "duplicate_completion_ignored",
           "taskId": "duplicate-delivery-1",
           "worker": "worker-b"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.538Z",
           "type": "assertion",
           "assertion": "completed_once",
           "taskId": "duplicate-delivery-1",
           "ok": true
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.538Z",
           "type": "assertion",
           "assertion": "event_present",
           "taskId": "duplicate-delivery-1",
@@ -201,45 +201,45 @@
       "description": "interrupt worker connectivity and verify reconnect/retry does not lose the task",
       "events": [
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.538Z",
           "type": "task_submitted",
           "taskId": "network-interrupt-1"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.538Z",
           "type": "network_interrupted"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.538Z",
           "type": "claim_deferred_network_down",
           "taskId": "network-interrupt-1",
           "worker": "worker-a"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.538Z",
           "type": "network_restored"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.538Z",
           "type": "task_claimed",
           "taskId": "network-interrupt-1",
           "worker": "worker-a"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.538Z",
           "type": "task_completed",
           "taskId": "network-interrupt-1",
           "worker": "worker-a"
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.538Z",
           "type": "assertion",
           "assertion": "completed_once",
           "taskId": "network-interrupt-1",
           "ok": true
         },
         {
-          "at": "2026-05-11T16:12:29.582Z",
+          "at": "2026-05-12T04:52:11.538Z",
           "type": "assertion",
           "assertion": "event_present",
           "taskId": "network-interrupt-1",

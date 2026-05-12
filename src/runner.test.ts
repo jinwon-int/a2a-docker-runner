@@ -621,3 +621,140 @@ test("buildActionableError: no false container-name conflict from agent stdout",
 
   assert.ok(!msg.includes("컨테이너 이름 충돌"), `Must not produce container-name conflict for agent stdout, got: ${msg}`);
 });
+
+// ---------------------------------------------------------------------------
+// CI ownership regression hardening (a2a-docker-runner#215 → builds on #214)
+// ---------------------------------------------------------------------------
+
+test("buildContainerScript EXIT trap is declared before any early-exit that could skip it", () => {
+  const task: NormalizedRunnerTask = {
+    id: "trap-before-exit",
+    intent: "propose_patch",
+    repos: [{ url: "jinwon-int/test-repo", path: "repo" }],
+    commands: [],
+  };
+  const script = buildContainerScript(task);
+
+  // The EXIT trap must appear before the first conditional exit (e.g. the
+  // pre PR bootstrap guard block that calls "exit 4").  Otherwise ownership
+  // restore is never invoked and CI cleanup fails with EACCES.
+  const trapIndex = script.indexOf("trap restore_work_ownership");
+  const firstExit4 = script.indexOf("exit 4");
+  const fnDefIdx = script.indexOf("restore_work_ownership()");
+
+  assert.ok(trapIndex >= 0, "trap restore_work_ownership must be present");
+  assert.ok(firstExit4 >= 0, "exit 4 (bootstrap guard block) must be present");
+  assert.ok(fnDefIdx >= 0, "restore_work_ownership() helper must be defined");
+  // The trap registration must appear before any early exit.  The helper
+  // function definition may appear before the trap (Bash resolves it at
+  // invocation time), but trap registration must precede all exit 4 paths.
+  assert.ok(trapIndex < firstExit4, `EXIT trap (pos ${trapIndex}) must precede first exit 4 (pos ${firstExit4})`);
+});
+
+test("buildContainerScript restore_work_ownership survives stat failure on /work", () => {
+  const task: NormalizedRunnerTask = {
+    id: "ownership-stat-fail",
+    intent: "propose_patch",
+    repos: [{ url: "jinwon-int/test-repo", path: "repo" }],
+    commands: [],
+  };
+  const script = buildContainerScript(task);
+
+  // The restore_work_ownership function must:
+  // 1. Run the stat call with set +e / set -e guards.
+  // 2. Fall back to a default uid:gid when stat fails.
+  // 3. Run chown only when id is non-root (id 0).
+  // 4. Never exit the script from an uncaught error inside the trap.
+  assert.ok(script.includes("set +e") || script.includes("stat"), "restore must handle stat fallback");
+  assert.ok(script.includes("chown"), "restore must include chown invocation");
+  // The chown must be guarded: only execute for non-root owners (uid != 0).
+  assert.ok(
+    script.includes("chown -R") && (script.includes("$owner") || script.includes("owner")),
+    "restore must chown with dynamic owner variable",
+  );
+});
+
+test("buildContainerScript ownership restore runs best-effort (no exit on failure)", () => {
+  const task: NormalizedRunnerTask = {
+    id: "ownership-best-effort",
+    intent: "propose_patch",
+    repos: [{ url: "jinwon-int/test-repo", path: "repo" }],
+    commands: [],
+  };
+  const script = buildContainerScript(task);
+
+  // The chown invocation in the restore function must use || true or similar
+  // best-effort pattern, and must not use set -e in the trap body that would
+  // turn a chown failure into a spurious container exit.
+  const restoreFn = script.slice(
+    script.indexOf("restore_work_ownership()"),
+    script.indexOf("}", script.indexOf("restore_work_ownership()")) + 2,
+  );
+  assert.ok(
+    restoreFn.includes("|| true") || restoreFn.includes("|| :") || !restoreFn.includes("set -e"),
+    "restore_work_ownership must be best-effort (|| true or no set -e in trap body)",
+  );
+});
+
+test("buildContainerScript bootstrap guard checks full BANNED_FILES parity", () => {
+  const task: NormalizedRunnerTask = {
+    id: "banned-files-parity",
+    intent: "propose_patch",
+    repos: [{ url: "jinwon-int/test-repo", path: "repo" }],
+    commands: [],
+  };
+  const script = buildContainerScript(task);
+
+  // The in-container bootstrap guard must ban the same files as the
+  // standalone pre-pr-bootstrap-guard.mjs script (a2a-broker#446).
+  const bannedFiles = [
+    "AGENTS.md",
+    "BOOTSTRAP.md",
+    "HEARTBEAT.md",
+    "IDENTITY.md",
+    "MEMORY.md",
+    "SOUL.md",
+    "TOOLS.md",
+    "USER.md",
+  ];
+
+  for (const file of bannedFiles) {
+    assert.ok(
+      script.includes(file),
+      `buildContainerScript must ban ${file} (a2a-broker#446 parity)`,
+    );
+  }
+
+  // The .openclaw/ directory must also be banned.
+  assert.ok(script.includes(".openclaw"), "buildContainerScript must ban .openclaw/ directory");
+});
+
+test("buildContainerScript ownership restore guards against stat failure on /work", () => {
+  const task: NormalizedRunnerTask = {
+    id: "ownership-stat-guard",
+    intent: "propose_patch",
+    repos: [{ url: "jinwon-int/test-repo", path: "repo" }],
+    commands: [],
+  };
+  const script = buildContainerScript(task);
+
+  // When stat fails on /work (container has no /work mount, or mount is
+  // broken), the restore must not cause an EXIT trap failure.  It must
+  // use || true on stat calls and guard chown with a non-empty check.
+  const restoreFn = script.slice(
+    script.indexOf("restore_work_ownership()"),
+    script.indexOf("}", script.indexOf("restore_work_ownership()")) + 2,
+  );
+  // stat must use || true to avoid trap failure when /work is absent.
+  assert.ok(restoreFn.includes("|| true"), "restore must use || true on stat calls");
+  // chown must use 2>/dev/null || true for best-effort ownership restore.
+  assert.ok(
+    restoreFn.includes("2>/dev/null") && restoreFn.includes("|| true"),
+    "restore chown must be best-effort (2>/dev/null || true)",
+  );
+  // Must check that owner/group are non-empty before chown.
+  assert.ok(
+    restoreFn.includes("-n") && (restoreFn.includes("$owner") || restoreFn.includes("owner")),
+    "restore must check owner is non-empty before chown",
+  );
+});

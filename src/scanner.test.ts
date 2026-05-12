@@ -877,3 +877,166 @@ test("createArtifactBundle preserves sanitized source-public execution preflight
     rmSync(outDir, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Readiness evidence: taskId slash sanitisation (a2a-docker-runner#215)
+// ---------------------------------------------------------------------------
+
+test("scanHistory handles task IDs containing slashes (Team1/nosuk pattern)", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-scanner-slash-id-"));
+  try {
+    // This simulates a real A2A round task where the worker ID contains a
+    // slash, e.g. "Team1/nosuk".  The runner safeId converts it to
+    // "Team1_nosuk" for the directory name, but the original id is kept in
+    // task.json metadata.  The scanner must produce both faithfully.
+    const taskId = "[Team1/nosuk] Runner scanner/readiness evidence and CI ownership regression hardening";
+    const safeTaskId = taskId.replace(/[^a-zA-Z0-9_.-]/g, "_");
+    const runDir = join(rootDir, safeTaskId, "20260512T030000Z-run1");
+    mkdirSync(runDir, { recursive: true });
+
+    writeFileSync(join(runDir, "run.json"), JSON.stringify({
+      taskId,
+      safeTaskId,
+      runToken: "20260512T030000Z-run1",
+      createdAt: "2026-05-12T03:00:00.000Z",
+    }));
+
+    mkdirSync(join(runDir, "artifacts"), { recursive: true });
+    writeFileSync(join(runDir, "artifacts", "task.json"), JSON.stringify({
+      id: taskId,
+      intent: "propose_patch",
+      issueUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/215",
+    }));
+    writeFileSync(join(runDir, "artifacts", "manifest.json"), JSON.stringify({
+      artifactVersion: 1,
+      schemaVersion: 1,
+      manifestPath: "artifacts/manifest.json",
+      generatedAt: "1970-01-01T00:00:00.000Z",
+      taskId,
+      repo: "jinwon-int/a2a-docker-runner",
+      status: "done",
+      summary: "Scanner readiness evidence: taskId contains slash.",
+      evidence: [],
+      artifacts: [],
+    }));
+
+    const profile = await scanHistory({ rootDir });
+    assert.equal(profile.totalRunDirs, 1);
+    assert.equal(profile.runs.length, 1);
+
+    const entry = profile.runs[0]!;
+    // The original taskId (with slash) must appear in the scan entry.
+    assert.ok(entry.taskId.includes("Team1"), `Expected taskId to include Team1, got: ${entry.taskId}`);
+    // The safeTaskId must use underscore instead of slash (filesystem-safe).
+    assert.equal(entry.safeTaskId, safeTaskId);
+    assert.ok(!entry.safeTaskId.includes("/"), "safeTaskId must not contain slash");
+    assert.ok(entry.safeTaskId.includes("Team1_nosuk"), `Expected safeTaskId to contain Team1_nosuk, got: ${entry.safeTaskId}`);
+
+    // The profile JSON must not contain raw slashes in safeTaskId field.
+    const profileJson = JSON.stringify(profile);
+    assert.ok(profileJson.includes("Team1_nosuk"), "safeTaskId should use underscore");
+    assert.ok(!/safeTaskId[^"]*\/[^"]*nosuk/.test(profileJson), "safeTaskId must not contain slash");
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("scanHistory readiness evidence: all required fields populated for slash-containing task IDs", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-scanner-readiness-"));
+  try {
+    const taskId = "[Team1/nosuk] A2A round task";
+    const safeTaskId = taskId.replace(/[^a-zA-Z0-9_.-]/g, "_");
+    // Create multiple runs to exercise sort/dedupe readiness.
+    for (const runToken of ["run-B", "run-A", "run-C"]) {
+      const runDir = join(rootDir, safeTaskId, runToken);
+      mkdirSync(runDir, { recursive: true });
+      writeFileSync(join(runDir, "run.json"), JSON.stringify({
+        taskId,
+        safeTaskId,
+        runToken,
+        createdAt: "2026-05-12T03:00:00.000Z",
+      }));
+      mkdirSync(join(runDir, "artifacts"), { recursive: true });
+      writeFileSync(join(runDir, "artifacts", "task.json"), JSON.stringify({
+        id: taskId,
+        intent: "propose_patch",
+      }));
+      writeFileSync(join(runDir, "artifacts", "manifest.json"), JSON.stringify({
+        artifactVersion: 1,
+        schemaVersion: 1,
+        manifestPath: "artifacts/manifest.json",
+        generatedAt: "1970-01-01T00:00:00.000Z",
+        taskId,
+        repo: "jinwon-int/a2a-docker-runner",
+        status: "done",
+        summary: `Run ${runToken}`,
+        evidence: [],
+        artifacts: [],
+      }));
+    }
+
+    const profile = await scanHistory({ rootDir });
+    assert.equal(profile.totalRunDirs, 3);
+    assert.equal(profile.runs.length, 3);
+
+    // Runs must be sorted deterministically by runToken.
+    assert.equal(profile.runs[0]!.runToken, "run-A");
+    assert.equal(profile.runs[1]!.runToken, "run-B");
+    assert.equal(profile.runs[2]!.runToken, "run-C");
+
+    // All entries must have required fields.
+    for (const entry of profile.runs) {
+      assert.ok(typeof entry.taskId === "string" && entry.taskId.length > 0, "taskId required");
+      assert.ok(typeof entry.safeTaskId === "string" && entry.safeTaskId.length > 0, "safeTaskId required");
+      assert.ok(typeof entry.runToken === "string" && entry.runToken.length > 0, "runToken required");
+      assert.ok(typeof entry.createdAt === "string" && entry.createdAt.length > 0, "createdAt required");
+      assert.ok(typeof entry.status === "string" && entry.status.length > 0, "status required");
+      assert.ok(typeof entry.artifactCount === "number" && entry.artifactCount >= 0, "artifactCount required");
+      assert.ok(!entry.safeTaskId.includes("/"), "safeTaskId must never contain slash");
+    }
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("scanHistory readiness evidence: handles non-ISO8601 createdAt in run.json", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-scanner-baddate-"));
+  try {
+    const safeTaskId = "readiness-date-task";
+    const runDir = join(rootDir, safeTaskId, "run1");
+    mkdirSync(runDir, { recursive: true });
+
+    // Malformed createdAt: not parseable as ISO date.
+    writeFileSync(join(runDir, "run.json"), JSON.stringify({
+      taskId: "readiness-date-task",
+      safeTaskId,
+      runToken: "run1",
+      createdAt: "not-a-date",
+    }));
+    mkdirSync(join(runDir, "artifacts"), { recursive: true });
+    writeFileSync(join(runDir, "artifacts", "task.json"), JSON.stringify({
+      id: "readiness-date-task",
+      intent: "propose_patch",
+    }));
+    writeFileSync(join(runDir, "artifacts", "manifest.json"), JSON.stringify({
+      artifactVersion: 1,
+      schemaVersion: 1,
+      manifestPath: "artifacts/manifest.json",
+      generatedAt: "1970-01-01T00:00:00.000Z",
+      taskId: "readiness-date-task",
+      status: "done",
+      summary: "ok",
+      evidence: [],
+      artifacts: [],
+    }));
+
+    const profile = await scanHistory({ rootDir });
+    assert.equal(profile.totalRunDirs, 1);
+    assert.equal(profile.runs.length, 1);
+    // createdAt should fall back gracefully — either the raw value or
+    // whatever the scanner produces (must not throw).
+    assert.ok(typeof profile.runs[0]!.createdAt === "string");
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
