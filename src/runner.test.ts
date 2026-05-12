@@ -390,6 +390,9 @@ test("bootstrap guard blocks when banned files are present (pre-check)", () => {
   const script = buildContainerScript(task);
   assert.ok(script.includes("exit 4"), "Expected exit 4 on bootstrap leak detection");
   assert.ok(script.includes("error=pre_pr_bootstrap_guard_blocked"), "Expected blocked error marker");
+  assert.ok(script.includes("filter_branch_bootstrap_leaks"), "Expected ignored-file-aware branch-entry filter");
+  assert.ok(script.includes("git -C \"$repo_dir\" ls-files -- \"$path\""), "Expected tracked bootstrap paths to block");
+  assert.ok(script.includes("git -C \"$repo_dir\" status --porcelain -- \"$path\""), "Expected unignored/staged bootstrap paths to block");
   assert.ok(script.includes("Files detected (repo-relative):"), "Expected repo-relative offending paths report");
   assert.ok(script.includes("Repository checkout: %s"), "Expected non-absolute checkout label report");
   assert.ok(!script.includes("Files detected in %s"), "Guard evidence must not include absolute checkout paths in headings");
