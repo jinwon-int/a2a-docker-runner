@@ -11,7 +11,7 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "node --test dist/**/*.test.js",
-    "lint": "node --check dist/cli.js && node --check scripts/chaos-e2e-gate.mjs && node --check scripts/telegram-terminal-notification-smoke.mjs && node --check scripts/terminal-brief-receipt-r4-smoke.mjs && node --check scripts/rollout-receipt-evidence-guard.mjs && node --check scripts/public-demo-safety-audit.mjs && node --check scripts/pre-pr-bootstrap-guard.mjs && node --check scripts/release-candidate-parity-audit.mjs && node --check scripts/runner-canary-parity-smoke.mjs",
+    "lint": "node --check dist/cli.js && node --check scripts/chaos-e2e-gate.mjs && node --check scripts/telegram-terminal-notification-smoke.mjs && node --check scripts/terminal-brief-receipt-r4-smoke.mjs && node --check scripts/rollout-receipt-evidence-guard.mjs && node --check scripts/public-demo-safety-audit.mjs && node --check scripts/pre-pr-bootstrap-guard.mjs && node --check scripts/release-candidate-parity-audit.mjs && node --check scripts/runner-canary-parity-smoke.mjs && node --check scripts/runner-canary-recovery-audit-smoke.mjs",
     "smoke:telegram-terminal-ack": "npm run build && node scripts/telegram-terminal-notification-smoke.mjs",
     "smoke:terminal-brief-receipt-r4": "npm run build && node scripts/terminal-brief-receipt-r4-smoke.mjs",
     "smoke:public-demo-safety": "node scripts/public-demo-safety-audit.mjs",
@@ -19,7 +19,8 @@
     "pretest": "npm run build",
     "rollout:receipt-evidence": "node scripts/rollout-receipt-evidence-guard.mjs",
     "audit:release-candidate": "node scripts/release-candidate-parity-audit.mjs",
-    "smoke:runner-canary-parity": "npm run build && node scripts/runner-canary-parity-smoke.mjs"
+    "smoke:runner-canary-parity": "npm run build && node scripts/runner-canary-parity-smoke.mjs",
+    "smoke:runner-canary-recovery-audit": "npm run build && node scripts/runner-canary-recovery-audit-smoke.mjs"
   },
   "engines": {
     "node": ">=22"

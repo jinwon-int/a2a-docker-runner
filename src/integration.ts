@@ -101,6 +101,43 @@ export interface OperatorTaskReportEvidence {
   dedupeKey: string;
 }
 
+export type CanaryRecoveryOperatorAction =
+  | "monitor_pr"
+  | "review_done_evidence"
+  | "review_block_evidence"
+  | "approve_bounded_continuation"
+  | "retry_or_block_recovery"
+  | "operator_visible_receipt_required";
+
+export interface CanaryRecoveryAuditReport {
+  schemaVersion: "a2a.runner.canary-recovery-audit.v1";
+  /** Stable replay key inherited from terminal evidence, safe for broker recovery dedupe. */
+  eventId: string;
+  dedupeKey: string;
+  taskId: string;
+  worker: string;
+  repo?: string;
+  issueUrl?: string;
+  evidenceKind: TerminalEvidenceKind;
+  status: TerminalEvidenceStatus;
+  evidenceUrl?: string;
+  acknowledged: boolean;
+  cursorComplete: boolean;
+  operatorAction: CanaryRecoveryOperatorAction;
+  reason: string;
+  diagnostics: {
+    exitCode?: number | null;
+    timedOut?: boolean;
+    artifactCount?: number;
+    stdoutTruncated?: boolean;
+    stderrTruncated?: boolean;
+    manifestPath?: string;
+  };
+  safetyState: TerminalEvidenceEvent["safetyState"];
+  runnerBuild?: RunnerBuildMetadata;
+  timestamps: TerminalEvidenceEvent["timestamps"];
+}
+
 export type TerminalEvidenceStatus = "succeeded" | "failed" | "cancelled" | "blocked";
 export type TerminalEvidenceKind = "PR" | "Done" | "Block" | "BudgetLimited" | "TimedOut" | "MissingEvidence";
 
@@ -611,6 +648,71 @@ export function buildTerminalAckDecision(
   };
   if (safeReceipt) decision.receipt = omitUndefined(safeReceipt) as TerminalAckDecision["receipt"];
   return decision;
+}
+
+/**
+ * Build a compact post-action audit report for canary/recovery lanes.
+ *
+ * The report deliberately projects only bounded, replay-safe fields from the
+ * runner result and terminal-ack decision. It omits raw stdout/stderr, workDir,
+ * provider-send metadata, and terminal message bodies so broker recovery and
+ * operator dashboards can summarize PR/Done/Block outcomes without leaking host
+ * paths or accidentally treating provider send success as terminal ACK.
+ */
+export function buildCanaryRecoveryAuditReport(
+  result: RawRunnerOutput,
+  task: HandlerTask,
+  nodeId: string,
+  receipt?: TerminalAckReceipt,
+  emittedAt = new Date().toISOString(),
+): CanaryRecoveryAuditReport {
+  const event = buildTerminalEvidenceEvent(result, task, nodeId, emittedAt);
+  const ack = buildTerminalAckDecision(event, receipt);
+  const diagnostics = omitUndefined({
+    exitCode: event.testSummary.exitCode,
+    timedOut: event.testSummary.timedOut,
+    artifactCount: event.testSummary.artifactCount,
+    stdoutTruncated: event.testSummary.stdoutTruncated,
+    stderrTruncated: event.testSummary.stderrTruncated,
+    manifestPath: result.resultSummary?.manifestPath ?? result.artifactManifest?.manifestPath,
+  }) as CanaryRecoveryAuditReport["diagnostics"];
+
+  const report: CanaryRecoveryAuditReport = {
+    schemaVersion: "a2a.runner.canary-recovery-audit.v1",
+    eventId: event.eventId,
+    dedupeKey: event.dedupeKey,
+    taskId: event.taskId,
+    worker: event.worker,
+    evidenceKind: event.evidenceKind,
+    status: event.status,
+    acknowledged: ack.acknowledged,
+    cursorComplete: ack.cursorComplete,
+    operatorAction: selectCanaryRecoveryOperatorAction(event, ack),
+    reason: boundReason(!ack.acknowledged ? ack.reason : event.reason ?? ack.reason),
+    diagnostics,
+    safetyState: event.safetyState,
+    timestamps: event.timestamps,
+  };
+  if (event.repo) report.repo = event.repo;
+  if (event.issueUrl) report.issueUrl = event.issueUrl;
+  const evidenceUrl = event.prUrl ?? event.doneUrl ?? event.blockUrl;
+  if (evidenceUrl) report.evidenceUrl = evidenceUrl;
+  if (event.runnerBuild) report.runnerBuild = event.runnerBuild;
+  return report;
+}
+
+function selectCanaryRecoveryOperatorAction(
+  event: TerminalEvidenceEvent,
+  ack: TerminalAckDecision,
+): CanaryRecoveryOperatorAction {
+  if (!ack.acknowledged && (event.evidenceKind === "PR" || event.evidenceKind === "Done" || event.evidenceKind === "Block")) {
+    return "operator_visible_receipt_required";
+  }
+  if (event.evidenceKind === "PR") return "monitor_pr";
+  if (event.evidenceKind === "Done") return "review_done_evidence";
+  if (event.evidenceKind === "Block") return "review_block_evidence";
+  if (event.evidenceKind === "BudgetLimited") return "approve_bounded_continuation";
+  return "retry_or_block_recovery";
 }
 
 // ── Internal helpers ───────────────────────────────────────────────────────
