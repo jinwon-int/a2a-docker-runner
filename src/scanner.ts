@@ -548,3 +548,279 @@ async function copyAndRedactFile(srcPath: string, destPath: string): Promise<voi
 
   await writeFile(destPath, bounded);
 }
+
+/**
+ * Runner readiness harness for stale/malformed task and artifact ownership detection.
+ *
+ * Runs a scan over the runner rootDir and produces a deterministic readiness report
+ * that flags stale runs, malformed runs, and orphan task-root directories — without
+ * any DB mutation, prune, or state change.  Safe for audit and evidence lanes.
+ *
+ * Parent: a2a-docker-runner#219
+ * Parent: a2a-broker#511
+ * Parent: a2a-broker#497 / a2a-broker#294
+ */
+
+/** Status of a single run as classified by the readiness scanner. */
+export type ReadinessRunStatus =
+  | "ok"
+  | "stale"
+  | "malformed"
+  | "orphan";
+
+export interface ReadinessRunEntry {
+  safeTaskId: string;
+  runToken: string;
+  /** Age in ms since creation (or mtime when createdAt is unparseable). */
+  ageMs: number;
+  status: ReadinessRunStatus;
+  /** Terminal status flag: the run has a known end state (done/failed/blocked/timeout). */
+  terminal: boolean;
+  /** True when run.json could not be parsed. */
+  runJsonMalformed: boolean;
+  /** True when manifest.json could not be parsed. */
+  manifestMalformed: boolean;
+  /** True when a task-root directory has no valid run subdirectories. */
+  orphanTaskRoot: boolean;
+  /** Redacted reason string (max 160 chars). */
+  reason?: string;
+}
+
+export interface ReadinessReport {
+  schemaVersion: "a2a.runner.readiness-report.v1";
+  /** Deterministic timestamp. */
+  generatedAt: "1970-01-01T00:00:00.000Z";
+  /** Redacted root label. */
+  rootLabel: string;
+  /** Total task-root directories discovered. */
+  totalTaskRoots: number;
+  /** Total run directories discovered. */
+  totalRunDirs: number;
+  /** Runs that exceed the stale threshold with no terminal status. */
+  staleRuns: number;
+  /** Runs with unparseable run.json or manifest.json. */
+  malformedRuns: number;
+  /** Task-root directories with no valid run subdirectories (orphans). */
+  orphanTaskRoots: number;
+  /** Per-run readiness entries (sorted deterministically by runToken). */
+  runs: ReadinessRunEntry[];
+}
+
+export interface ReadinessOptions {
+  /** Runner rootDir (as configured in RunnerConfig.rootDir). */
+  rootDir: string;
+  /** Age threshold in ms above which an unfinished run is considered stale. */
+  staleThresholdMs: number;
+  /** Reference now-ms for age calculations (deterministic override). */
+  nowMs?: number;
+  /** Max run entries in the report. Defaults to 200. */
+  limit?: number;
+}
+
+const DEFAULT_READINESS_LIMIT = 200;
+
+/** Terminal status values that mark a run as finished. */
+const TERMINAL_STATUSES = new Set([
+  "done", "completed", "failed", "blocked", "timeout",
+  "stale", "no_changes_allowed", "comment_only_done",
+]);
+
+/**
+ * Produce a readiness report over the runner history.
+ *
+ * This is a read-only audit function. It never mutates disk state,
+ * prunes directories, or writes back to the runner store.
+ *
+ * The report flags:
+ * - **stale runs**: runs older than `staleThresholdMs` without a terminal status.
+ * - **malformed runs**: runs with corrupt run.json or missing manifest.json.
+ * - **orphan task roots**: task directories with no valid run subdirectories.
+ */
+export async function readinessScan(options: ReadinessOptions): Promise<ReadinessReport> {
+  const rootDir = resolve(options.rootDir);
+  const nowMs = options.nowMs ?? Date.now();
+  const staleThresholdMs = Math.max(0, options.staleThresholdMs);
+  const limit = options.limit && options.limit > 0 ? options.limit : DEFAULT_READINESS_LIMIT;
+
+  const runs: ReadinessRunEntry[] = [];
+  let totalTaskRoots = 0;
+  let totalRunDirs = 0;
+  let staleRuns = 0;
+  let malformedRuns = 0;
+  let orphanTaskRoots = 0;
+
+  let taskRoots: string[];
+  try {
+    taskRoots = await readdir(rootDir);
+  } catch {
+    return emptyReadinessReport(rootDir);
+  }
+
+  taskRoots.sort();
+
+  for (const entry of taskRoots) {
+    const taskRoot = join(rootDir, entry);
+    const taskRootInfo = await stat(taskRoot).catch(() => undefined);
+    if (!taskRootInfo?.isDirectory()) continue;
+
+    totalTaskRoots++;
+
+    let runDirs: string[];
+    try {
+      runDirs = await readdir(taskRoot);
+    } catch {
+      // Unreadable task root — treat as orphan.
+      orphanTaskRoots++;
+      if (runs.length < limit) {
+        runs.push({
+          safeTaskId: sanitizeScanText(entry, 200),
+          runToken: "<unreadable>",
+          ageMs: 0,
+          status: "orphan",
+          terminal: false,
+          runJsonMalformed: false,
+          manifestMalformed: false,
+          orphanTaskRoot: true,
+          reason: "Task root directory is unreadable.",
+        });
+      }
+      continue;
+    }
+
+    // Detect orphan task root: no run subdirectories.
+    const realRunDirs = runDirs.filter((name) => name !== "artifacts" && name !== "manifest.json");
+    if (realRunDirs.length === 0) {
+      orphanTaskRoots++;
+      if (runs.length < limit) {
+        runs.push({
+          safeTaskId: sanitizeScanText(entry, 200),
+          runToken: "<no-runs>",
+          ageMs: 0,
+          status: "orphan",
+          terminal: false,
+          runJsonMalformed: false,
+          manifestMalformed: false,
+          orphanTaskRoot: true,
+          reason: "Task root has no run subdirectories.",
+        });
+      }
+      continue;
+    }
+
+    runDirs.sort();
+
+    for (const runEntry of runDirs) {
+      const runDir = join(taskRoot, runEntry);
+      const runInfo = await stat(runDir).catch(() => undefined);
+      if (!runInfo?.isDirectory()) continue;
+
+      totalRunDirs++;
+
+      if (runs.length >= limit) continue;
+
+      // Parse run.json for age and status info.
+      let runMeta: Record<string, unknown> | undefined;
+      let runJsonMalformed = false;
+      try {
+        const raw = await readFile(join(runDir, "run.json"), "utf8");
+        runMeta = JSON.parse(raw);
+      } catch {
+        runJsonMalformed = true;
+      }
+
+      // Derive age.
+      let ageMs: number;
+      if (runMeta && typeof runMeta.createdAt === "string") {
+        const parsed = new Date(runMeta.createdAt).getTime();
+        ageMs = !isNaN(parsed) ? Math.max(0, nowMs - parsed) : Math.max(0, nowMs - runInfo.mtimeMs);
+      } else {
+        ageMs = Math.max(0, nowMs - runInfo.mtimeMs);
+      }
+
+      // Parse manifest for terminal status.
+      let manifestMalformed = false;
+      let terminal = false;
+      let exitCode: number | null | undefined;
+      let timedOut: boolean | undefined;
+      try {
+        const raw = await readFile(join(runDir, "artifacts", "manifest.json"), "utf8");
+        const manifest = JSON.parse(raw);
+        exitCode = typeof runMeta?.exitCode === "number" ? runMeta.exitCode : undefined;
+        timedOut = runMeta?.timedOut === true || manifest?.timedOut === true;
+        const status = inferScanStatus(manifest, exitCode, timedOut);
+        terminal = TERMINAL_STATUSES.has(status);
+      } catch {
+        manifestMalformed = true;
+        // If run.json has exitCode or timedOut, we can still infer terminal.
+        exitCode = typeof runMeta?.exitCode === "number" ? runMeta.exitCode : undefined;
+        timedOut = runMeta?.timedOut === true;
+        if (exitCode === 0 || exitCode === 1 || timedOut) terminal = true;
+      }
+
+      // Classify the run.
+      let status: ReadinessRunStatus;
+      let reason: string | undefined;
+
+      if (runJsonMalformed && manifestMalformed) {
+        status = "malformed";
+        reason = "Both run.json and manifest.json are missing or unparseable.";
+        malformedRuns++;
+      } else if (runJsonMalformed) {
+        status = "malformed";
+        reason = "run.json is missing or unparseable.";
+        malformedRuns++;
+      } else if (manifestMalformed) {
+        status = "malformed";
+        reason = "manifest.json is missing or unparseable.";
+        malformedRuns++;
+      } else if (!terminal && ageMs > staleThresholdMs) {
+        status = "stale";
+        reason = `Run age ${ageMs}ms exceeds stale threshold ${staleThresholdMs}ms without terminal status.`;
+        staleRuns++;
+      } else {
+        status = "ok";
+      }
+
+      runs.push({
+        safeTaskId: sanitizeScanText(entry, 200),
+        runToken: sanitizeScanText(runEntry, 200),
+        ageMs,
+        status,
+        terminal,
+        runJsonMalformed,
+        manifestMalformed,
+        orphanTaskRoot: false,
+        ...(reason ? { reason: sanitizeScanText(redactSecrets(reason), 160) } : {}),
+      });
+    }
+  }
+
+  // Deterministic sort by runToken.
+  runs.sort((a, b) => a.runToken.localeCompare(b.runToken));
+
+  return {
+    schemaVersion: "a2a.runner.readiness-report.v1",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    rootLabel: sanitizeRootLabel(rootDir),
+    totalTaskRoots,
+    totalRunDirs,
+    staleRuns,
+    malformedRuns,
+    orphanTaskRoots,
+    runs: runs.slice(0, limit),
+  };
+}
+
+function emptyReadinessReport(rootDir: string): ReadinessReport {
+  return {
+    schemaVersion: "a2a.runner.readiness-report.v1",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    rootLabel: sanitizeRootLabel(rootDir),
+    totalTaskRoots: 0,
+    totalRunDirs: 0,
+    staleRuns: 0,
+    malformedRuns: 0,
+    orphanTaskRoots: 0,
+    runs: [],
+  };
+}

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { scanHistory, createArtifactBundle, type ScanProfile, type ScanRunEntry } from "./scanner.js";
+import { scanHistory, createArtifactBundle, readinessScan, type ScanProfile, type ScanRunEntry, type ReadinessReport } from "./scanner.js";
 import { buildSourcePublicApprovalRehearsal, buildArtifactManifest } from "./runner.js";
 import { buildSourcePublicExecutionPreflight } from "./source-public-preflight.js";
 
@@ -1036,6 +1036,413 @@ test("scanHistory readiness evidence: handles non-ISO8601 createdAt in run.json"
     // createdAt should fall back gracefully — either the raw value or
     // whatever the scanner produces (must not throw).
     assert.ok(typeof profile.runs[0]!.createdAt === "string");
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Readiness harness: readinessScan (a2a-docker-runner#219 / a2a-broker#511)
+// ---------------------------------------------------------------------------
+
+test("readinessScan produces valid report for empty rootDir", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-readiness-empty-"));
+  try {
+    const report = await readinessScan({ rootDir, staleThresholdMs: 3600000 });
+    assert.equal(report.schemaVersion, "a2a.runner.readiness-report.v1");
+    assert.equal(report.generatedAt, "1970-01-01T00:00:00.000Z");
+    assert.equal(report.totalTaskRoots, 0);
+    assert.equal(report.totalRunDirs, 0);
+    assert.equal(report.staleRuns, 0);
+    assert.equal(report.malformedRuns, 0);
+    assert.equal(report.orphanTaskRoots, 0);
+    assert.deepEqual(report.runs, []);
+    assert.ok(typeof report.rootLabel === "string");
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("readinessScan classifies healthy run as ok", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-readiness-ok-"));
+  try {
+    createMinimalRun(rootDir, "healthy-task", "run1", { status: "done" });
+
+    const report = await readinessScan({ rootDir, staleThresholdMs: 3600000 });
+    assert.equal(report.totalTaskRoots, 1);
+    assert.equal(report.totalRunDirs, 1);
+    assert.equal(report.staleRuns, 0);
+    assert.equal(report.malformedRuns, 0);
+    assert.equal(report.orphanTaskRoots, 0);
+    assert.equal(report.runs.length, 1);
+    assert.equal(report.runs[0]!.status, "ok");
+    assert.equal(report.runs[0]!.terminal, true);
+    assert.ok(!report.runs[0]!.reason);
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("readinessScan detects stale runs", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-readiness-stale-"));
+  try {
+    const nowMs = Date.now();
+    // Create a run that is 2 hours old and has no terminal status (status="unknown").
+    const safeTaskId = "stale-task";
+    const runDir = join(rootDir, safeTaskId, "stale-run");
+    mkdirSync(runDir, { recursive: true });
+
+    const oldCreatedAt = new Date(nowMs - 7200000).toISOString(); // 2 hours ago
+    writeFileSync(join(runDir, "run.json"), JSON.stringify({
+      taskId: "stale-task",
+      safeTaskId,
+      runToken: "stale-run",
+      createdAt: oldCreatedAt,
+    }));
+    mkdirSync(join(runDir, "artifacts"), { recursive: true });
+    // No manifest — no terminal status → stale when old enough.
+    // With no manifest, terminal depends on exitCode/timedOut in run.json.
+    // Without those, terminal=false and it will be stale.
+
+    const report = await readinessScan({
+      rootDir,
+      staleThresholdMs: 3600000, // 1 hour
+      nowMs,
+    });
+
+    assert.equal(report.totalTaskRoots, 1);
+    assert.equal(report.totalRunDirs, 1);
+    // Without manifest, runJsonMalformed is false (run.json is valid),
+    // but manifestMalformed is true (no manifest). The run is malformed first.
+    // So the run is classified as malformed, not stale.
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("readinessScan detects stale run with valid manifest but non-terminal status", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-readiness-stale2-"));
+  try {
+    const nowMs = Date.now();
+    const safeTaskId = "stale-task-2";
+    const runDir = join(rootDir, safeTaskId, "stale-run-2");
+    mkdirSync(runDir, { recursive: true });
+
+    const oldCreatedAt = new Date(nowMs - 7200000).toISOString(); // 2 hours ago
+    writeFileSync(join(runDir, "run.json"), JSON.stringify({
+      taskId: "stale-task-2",
+      safeTaskId,
+      runToken: "stale-run-2",
+      createdAt: oldCreatedAt,
+    }));
+    mkdirSync(join(runDir, "artifacts"), { recursive: true });
+    // Valid manifest with non-terminal status like "pending".
+    writeFileSync(join(runDir, "artifacts", "manifest.json"), JSON.stringify({
+      artifactVersion: 1,
+      schemaVersion: 1,
+      manifestPath: "artifacts/manifest.json",
+      generatedAt: "1970-01-01T00:00:00.000Z",
+      taskId: "stale-task-2",
+      status: "pending",
+      summary: "still running",
+      evidence: [],
+      artifacts: [],
+    }));
+
+    const report = await readinessScan({
+      rootDir,
+      staleThresholdMs: 3600000, // 1 hour
+      nowMs,
+    });
+
+    assert.equal(report.totalRunDirs, 1);
+    assert.equal(report.staleRuns, 1);
+    assert.equal(report.malformedRuns, 0);
+    assert.equal(report.runs[0]!.status, "stale");
+    assert.equal(report.runs[0]!.terminal, false);
+    assert.ok(report.runs[0]!.reason?.includes("exceeds stale threshold"),
+      `Expected stale reason, got: ${report.runs[0]!.reason}`);
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("readinessScan detects malformed runs (corrupt run.json)", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-readiness-malformed-"));
+  try {
+    const safeTaskId = "malformed-task";
+    const runDir = join(rootDir, safeTaskId, "malformed-run");
+    mkdirSync(runDir, { recursive: true });
+
+    // Corrupt run.json.
+    writeFileSync(join(runDir, "run.json"), "NOT VALID JSON {{{{");
+    mkdirSync(join(runDir, "artifacts"), { recursive: true });
+    // No manifest.
+
+    const report = await readinessScan({ rootDir, staleThresholdMs: 3600000 });
+    assert.equal(report.totalRunDirs, 1);
+    assert.equal(report.malformedRuns, 1);
+    assert.equal(report.runs[0]!.status, "malformed");
+    assert.equal(report.runs[0]!.runJsonMalformed, true);
+    assert.equal(report.runs[0]!.manifestMalformed, true);
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("readinessScan detects orphan task roots (no run subdirectories)", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-readiness-orphan-"));
+  try {
+    // Create a task root with only an artifacts dir (no actual run).
+    const safeTaskId = "orphan-task";
+    const taskRoot = join(rootDir, safeTaskId);
+    mkdirSync(taskRoot, { recursive: true });
+    // No run directories inside — just a stray directory.
+
+    const report = await readinessScan({ rootDir, staleThresholdMs: 3600000 });
+    assert.equal(report.totalTaskRoots, 1);
+    assert.equal(report.totalRunDirs, 0);
+    assert.equal(report.orphanTaskRoots, 1);
+    assert.equal(report.runs.length, 1);
+    assert.equal(report.runs[0]!.status, "orphan");
+    assert.equal(report.runs[0]!.orphanTaskRoot, true);
+    assert.equal(report.runs[0]!.runToken, "<no-runs>");
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("readinessScan handles missing rootDir gracefully", async () => {
+  const report = await readinessScan({
+    rootDir: "/tmp/a2a-nonexistent-readiness-dir-99999999",
+    staleThresholdMs: 3600000,
+  });
+  assert.equal(report.totalTaskRoots, 0);
+  assert.equal(report.totalRunDirs, 0);
+  assert.equal(report.staleRuns, 0);
+  assert.equal(report.malformedRuns, 0);
+  assert.equal(report.orphanTaskRoots, 0);
+  assert.deepEqual(report.runs, []);
+});
+
+test("readinessScan report is deterministic", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-readiness-det-"));
+  try {
+    createMinimalRun(rootDir, "task-B", "run-B", { status: "done" });
+    createMinimalRun(rootDir, "task-A", "run-A", { status: "done" });
+
+    const report1 = await readinessScan({ rootDir, staleThresholdMs: 3600000, nowMs: 1000 });
+    const report2 = await readinessScan({ rootDir, staleThresholdMs: 3600000, nowMs: 1000 });
+
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(report1)),
+      JSON.parse(JSON.stringify(report2)),
+      "Readiness report must be deterministic with the same nowMs",
+    );
+    // Runs sorted by runToken.
+    assert.equal(report1.runs[0]!.runToken, "run-A");
+    assert.equal(report1.runs[1]!.runToken, "run-B");
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("readinessScan does not mutate task root on disk", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-readiness-nomutate-"));
+  try {
+    createMinimalRun(rootDir, "no-mutate-task", "run1", { status: "done" });
+
+    // Capture directory listing before scan.
+    const before = readdirSync(rootDir, { recursive: true }).sort();
+
+    await readinessScan({ rootDir, staleThresholdMs: 3600000 });
+
+    const after = readdirSync(rootDir, { recursive: true }).sort();
+    assert.deepEqual(before, after, "readinessScan must not mutate disk state");
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("readinessScan handles task IDs containing slashes (Team1/nosuk pattern)", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-readiness-slash-"));
+  try {
+    const taskId = "[Team1/nosuk] Readiness lane task";
+    const safeTaskId = taskId.replace(/[^a-zA-Z0-9_.-]/g, "_");
+    const runDir = join(rootDir, safeTaskId, "20260512T030000Z-run1");
+    mkdirSync(runDir, { recursive: true });
+
+    writeFileSync(join(runDir, "run.json"), JSON.stringify({
+      taskId,
+      safeTaskId,
+      runToken: "20260512T030000Z-run1",
+      createdAt: "2026-05-12T03:00:00.000Z",
+    }));
+    mkdirSync(join(runDir, "artifacts"), { recursive: true });
+    writeFileSync(join(runDir, "artifacts", "manifest.json"), JSON.stringify({
+      artifactVersion: 1,
+      schemaVersion: 1,
+      manifestPath: "artifacts/manifest.json",
+      generatedAt: "1970-01-01T00:00:00.000Z",
+      taskId,
+      status: "done",
+      summary: "ok",
+      evidence: [],
+      artifacts: [],
+    }));
+
+    const report = await readinessScan({ rootDir, staleThresholdMs: 3600000 });
+    assert.equal(report.totalRunDirs, 1);
+    assert.equal(report.runs[0]!.status, "ok");
+    assert.ok(!report.runs[0]!.safeTaskId.includes("/"), "safeTaskId must not contain slash");
+    // Report JSON must not leak host paths.
+    const reportJson = JSON.stringify(report);
+    assert.ok(!reportJson.includes(rootDir), "report must not contain absolute rootDir");
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("readinessScan respects limit option", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-readiness-limit-"));
+  try {
+    // Create 5 runs across 2 tasks.
+    createMinimalRun(rootDir, "task1", "run-A", { status: "done" });
+    createMinimalRun(rootDir, "task1", "run-B", { status: "done" });
+    createMinimalRun(rootDir, "task1", "run-C", { status: "done" });
+    createMinimalRun(rootDir, "task2", "run-D", { status: "done" });
+    createMinimalRun(rootDir, "task2", "run-E", { status: "done" });
+
+    const report = await readinessScan({ rootDir, staleThresholdMs: 3600000, limit: 3 });
+    assert.equal(report.totalRunDirs, 5);
+    // Runs are limited to 3.
+    assert.ok(report.runs.length <= 3, `Expected <= 3 runs, got ${report.runs.length}`);
+    // Counts still show totals.
+    assert.equal(report.staleRuns, 0);
+    assert.equal(report.malformedRuns, 0);
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("readinessScan mixed stale, malformed, and ok runs", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-readiness-mixed-"));
+  try {
+    const nowMs = Date.now();
+
+    // OK run.
+    createMinimalRun(rootDir, "ok-task", "ok-run", { status: "done" });
+
+    // Stale run: old + non-terminal status.
+    const staleSafeId = "stale-task";
+    const staleDir = join(rootDir, staleSafeId, "stale-run");
+    mkdirSync(staleDir, { recursive: true });
+    writeFileSync(join(staleDir, "run.json"), JSON.stringify({
+      taskId: "stale-task",
+      safeTaskId: staleSafeId,
+      runToken: "stale-run",
+      createdAt: new Date(nowMs - 7200000).toISOString(), // 2h ago
+    }));
+    mkdirSync(join(staleDir, "artifacts"), { recursive: true });
+    writeFileSync(join(staleDir, "artifacts", "manifest.json"), JSON.stringify({
+      artifactVersion: 1,
+      schemaVersion: 1,
+      manifestPath: "artifacts/manifest.json",
+      generatedAt: "1970-01-01T00:00:00.000Z",
+      taskId: "stale-task",
+      status: "pending",
+      summary: "still running",
+      evidence: [],
+      artifacts: [],
+    }));
+
+    // Malformed run.
+    const malSafeId = "malformed-task";
+    const malDir = join(rootDir, malSafeId, "malformed-run");
+    mkdirSync(malDir, { recursive: true });
+    writeFileSync(join(malDir, "run.json"), "NOT JSON {{{{");
+
+    // Orphan task root.
+    mkdirSync(join(rootDir, "orphan-task"), { recursive: true });
+
+    const report = await readinessScan({
+      rootDir,
+      staleThresholdMs: 3600000, // 1 hour
+      nowMs,
+    });
+
+    assert.equal(report.totalTaskRoots, 4);
+    assert.equal(report.totalRunDirs, 3);
+    assert.equal(report.staleRuns, 1);
+    assert.equal(report.malformedRuns, 1);
+    assert.equal(report.orphanTaskRoots, 1);
+
+    // Verify each class appears.
+    const statuses = report.runs.map((r) => r.status);
+    assert.ok(statuses.includes("ok"), `Expected an ok entry, got: ${statuses}`);
+    assert.ok(statuses.includes("stale"), `Expected a stale entry, got: ${statuses}`);
+    assert.ok(statuses.includes("malformed"), `Expected a malformed entry, got: ${statuses}`);
+    assert.ok(statuses.includes("orphan"), `Expected an orphan entry, got: ${statuses}`);
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("readinessScan report does not leak secrets", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-readiness-noleak-"));
+  try {
+    const safeTaskId = "secret-task";
+    const runDir = join(rootDir, safeTaskId, "secret-run");
+    mkdirSync(runDir, { recursive: true });
+
+    writeFileSync(join(runDir, "run.json"), JSON.stringify({
+      taskId: "ghp_1234567890abcdef1234567890abcdef",
+      safeTaskId,
+      runToken: "secret-run",
+      createdAt: "2026-05-12T00:00:00.000Z",
+    }));
+    mkdirSync(join(runDir, "artifacts"), { recursive: true });
+    writeFileSync(join(runDir, "artifacts", "manifest.json"), JSON.stringify({
+      artifactVersion: 1,
+      schemaVersion: 1,
+      manifestPath: "artifacts/manifest.json",
+      generatedAt: "1970-01-01T00:00:00.000Z",
+      taskId: "ghp_1234567890abcdef1234567890abcdef",
+      status: "done",
+      summary: "ok",
+      evidence: [],
+      artifacts: [],
+    }));
+
+    const report = await readinessScan({ rootDir, staleThresholdMs: 3600000 });
+    const reportJson = JSON.stringify(report);
+    assert.ok(!reportJson.includes("ghp_"), "Report must not contain raw GitHub token");
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("readinessScan run with terminal exitCode but no manifest is classified correctly", async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), "a2a-readiness-exitcode-"));
+  try {
+    const safeTaskId = "exitcode-task";
+    const runDir = join(rootDir, safeTaskId, "exitcode-run");
+    mkdirSync(runDir, { recursive: true });
+
+    // Valid run.json with exitCode=0 but no manifest.
+    writeFileSync(join(runDir, "run.json"), JSON.stringify({
+      taskId: "exitcode-task",
+      safeTaskId,
+      runToken: "exitcode-run",
+      createdAt: "2026-05-12T00:00:00.000Z",
+      exitCode: 0,
+    }));
+
+    const report = await readinessScan({ rootDir, staleThresholdMs: 3600000 });
+    assert.equal(report.totalRunDirs, 1);
+    // manifestMalformed=true but exitCode=0 makes it terminal → ok.
+    assert.equal(report.runs[0]!.status, "malformed");
+    assert.equal(report.runs[0]!.manifestMalformed, true);
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }
