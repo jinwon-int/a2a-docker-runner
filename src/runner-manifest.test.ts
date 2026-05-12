@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { buildArtifactManifest, buildGitHubCommentProjection, buildResultSummary, buildRunnerEvidenceHints, buildSourcePublicApprovalRehearsal, redactAndBound, RESULT_STREAM_LIMIT, sanitizeReceiptTrace, sanitizeSourcePublicApprovalRehearsal, sanitizeTaskArtifactPayload } from "./runner.js";
+import { buildArtifactManifest, buildGitHubCommentProjection, buildResultSummary, buildRunnerEvidenceHints, buildSourcePublicApprovalRehearsal, redactAndBound, sanitizeCleanupRehearsal, RESULT_STREAM_LIMIT, sanitizeReceiptTrace, sanitizeSourcePublicApprovalRehearsal, sanitizeTaskArtifactPayload } from "./runner.js";
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -343,6 +343,109 @@ test("buildGitHubCommentProjection and manifest carry replay-safe ledger-only me
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("cleanup rehearsal is preserved only as no-live backup and rollback evidence", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "a2a-cleanup-rehearsal-"));
+  try {
+    await mkdir(join(dir, "artifacts"), { recursive: true });
+    const artifact = join(dir, "artifacts", "cleanup-rehearsal.json");
+    await writeFile(artifact, "synthetic cleanup dry-run rehearsal only");
+    const cleanupRehearsal = sanitizeCleanupRehearsal({
+      schemaVersion: "a2a.runner.cleanup-rehearsal.v1",
+      generatedAt: "1970-01-01T00:00:00.000Z",
+      runId: "a2a-cleanup-20260512-1810r2-jingun",
+      target: "broker_db",
+      mode: "simulate",
+      status: "ready_for_operator_approval",
+      planId: "cleanup-rehearsal-jingun",
+      candidateCounts: { total: 4, highRisk: 1, staleWorkerRows: 2, terminalOutboxRows: 2 },
+      checkpoint: {
+        requiredBeforeExecution: true,
+        rehearsalOnly: true,
+        evidenceBundlePath: "artifacts/manifest.json",
+        checkpointId: "checkpoint-required-before-safe-prune",
+        backupVerified: false,
+      },
+      rollback: {
+        rehearsed: true,
+        rollbackPlanPath: "rollback/cleanup-safe-prune.md",
+        abortPlanPath: "abort/cleanup-safe-prune.md",
+        restoreVerificationRequired: true,
+      },
+      failClosedReasons: [],
+      safetyGates: {
+        explicitOperatorApprovalRequired: true,
+        backupCheckpointRequired: true,
+        dryRunOnly: true,
+        liveExecutionBlocked: true,
+        dbMutationPerformed: false,
+        prunePerformed: false,
+        migrationPerformed: false,
+        deployOrRestartPerformed: false,
+        liveProviderSendPerformed: false,
+        terminalAckSent: false,
+      },
+    });
+    assert.ok(cleanupRehearsal);
+
+    const manifest = await buildArtifactManifest(dir, [artifact], { status: "done", cleanupRehearsal });
+    const summary = buildResultSummary({ code: 0, signal: null, stdout: "ok", stderr: "", timedOut: false }, "ok", "", [artifact], manifest);
+
+    assert.equal(manifest.cleanupRehearsal?.schemaVersion, "a2a.runner.cleanup-rehearsal.v1");
+    assert.equal(manifest.cleanupRehearsal?.checkpoint.requiredBeforeExecution, true);
+    assert.equal(manifest.cleanupRehearsal?.checkpoint.backupVerified, false);
+    assert.equal(manifest.cleanupRehearsal?.rollback.restoreVerificationRequired, true);
+    assert.equal(manifest.cleanupRehearsal?.safetyGates.dbMutationPerformed, false);
+    assert.equal(manifest.cleanupRehearsal?.safetyGates.prunePerformed, false);
+    assert.equal(manifest.cleanupRehearsal?.safetyGates.migrationPerformed, false);
+    assert.equal(manifest.cleanupRehearsal?.safetyGates.deployOrRestartPerformed, false);
+    assert.equal(manifest.cleanupRehearsal?.safetyGates.liveProviderSendPerformed, false);
+    assert.equal(manifest.cleanupRehearsal?.safetyGates.terminalAckSent, false);
+    assert.deepEqual(summary.cleanupRehearsal, manifest.cleanupRehearsal);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("cleanup rehearsal fails closed when live cleanup flags appear", () => {
+  const unsafe = sanitizeCleanupRehearsal({
+    schemaVersion: "a2a.runner.cleanup-rehearsal.v1",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    target: "broker_db",
+    mode: "dry_run",
+    status: "blocked",
+    planId: "unsafe-cleanup",
+    candidateCounts: { total: 1, highRisk: 1 },
+    checkpoint: {
+      requiredBeforeExecution: true,
+      rehearsalOnly: true,
+      evidenceBundlePath: "artifacts/manifest.json",
+      checkpointId: "checkpoint-required-before-safe-prune",
+      backupVerified: false,
+    },
+    rollback: {
+      rehearsed: true,
+      rollbackPlanPath: "rollback/cleanup-safe-prune.md",
+      abortPlanPath: "abort/cleanup-safe-prune.md",
+      restoreVerificationRequired: true,
+    },
+    failClosedReasons: ["unsafe live mutation flag present"],
+    safetyGates: {
+      explicitOperatorApprovalRequired: true,
+      backupCheckpointRequired: true,
+      dryRunOnly: true,
+      liveExecutionBlocked: true,
+      dbMutationPerformed: true,
+      prunePerformed: false,
+      migrationPerformed: false,
+      deployOrRestartPerformed: false,
+      liveProviderSendPerformed: false,
+      terminalAckSent: false,
+    },
+  });
+
+  assert.equal(unsafe, undefined);
 });
 
 test("source-public approval rehearsal is preserved only as no-live deterministic evidence", async () => {

@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { normalizeTask } from "./task-normalizer.js";
 import { collectGitHubEvidence } from "./github-evidence.js";
 import { sanitizeSourcePublicExecutionPreflight } from "./source-public-preflight.js";
-import type { ArtifactEvidencePart, ArtifactManifest, ArtifactManifestEntry, ArtifactManifestStatus, GitHubCommentProjection, GitHubCommentProjectionKind, NormalizedRunnerTask, ResultSummary, RunnerBudgetEvidence, RunnerConfig, RunnerContinuationEvidence, RunnerEvidenceHints, RunnerReceiptTrace, RunnerResult, RunnerTask, SourcePublicApprovalDecision, SourcePublicApprovalPacket, SourcePublicApprovalRehearsal, SourcePublicExecutionPreflight } from "./types.js";
+import type { ArtifactEvidencePart, ArtifactManifest, ArtifactManifestEntry, ArtifactManifestStatus, CleanupRehearsalEvidence, GitHubCommentProjection, GitHubCommentProjectionKind, NormalizedRunnerTask, ResultSummary, RunnerBudgetEvidence, RunnerConfig, RunnerContinuationEvidence, RunnerEvidenceHints, RunnerReceiptTrace, RunnerResult, RunnerTask, SourcePublicApprovalDecision, SourcePublicApprovalPacket, SourcePublicApprovalRehearsal, SourcePublicExecutionPreflight } from "./types.js";
 
 export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<RunnerResult> {
   validateTask(task);
@@ -791,6 +791,7 @@ export function buildResultSummary(
     ...(manifest.budget ? { budget: manifest.budget } : {}),
     ...(manifest.receiptTrace ? { receiptTrace: manifest.receiptTrace } : {}),
     ...(manifest.continuation ? { continuation: manifest.continuation } : {}),
+    ...(manifest.cleanupRehearsal ? { cleanupRehearsal: manifest.cleanupRehearsal } : {}),
     ...(manifest.evidenceHints ? { evidenceHints: manifest.evidenceHints } : {}),
     ...(manifest.githubCommentProjection ? { githubCommentProjection: manifest.githubCommentProjection } : {}),
     ...(manifest.sourcePublicApprovalRehearsal ? { sourcePublicApprovalRehearsal: manifest.sourcePublicApprovalRehearsal } : {}),
@@ -808,6 +809,7 @@ export interface ArtifactManifestContext {
   budget?: RunnerBudgetEvidence;
   receiptTrace?: RunnerReceiptTrace;
   continuation?: RunnerContinuationEvidence;
+  cleanupRehearsal?: CleanupRehearsalEvidence;
   evidenceHints?: RunnerEvidenceHints;
   githubCommentProjection?: GitHubCommentProjection;
   sourcePublicApprovalRehearsal?: SourcePublicApprovalRehearsal;
@@ -831,6 +833,7 @@ export async function buildArtifactManifest(workDir: string, artifacts: string[]
   const summary = buildArtifactManifestSummary(context, evidence.length);
   const sourcePublicApprovalRehearsal = sanitizeSourcePublicApprovalRehearsal(context.sourcePublicApprovalRehearsal);
   const sourcePublicExecutionPreflight = sanitizeSourcePublicExecutionPreflight(context.sourcePublicExecutionPreflight);
+  const cleanupRehearsal = sanitizeCleanupRehearsal(context.cleanupRehearsal);
   return {
     artifactVersion: 1,
     schemaVersion: 1,
@@ -848,6 +851,7 @@ export async function buildArtifactManifest(workDir: string, artifacts: string[]
     ...(context.budget ? { budget: context.budget } : {}),
     ...(context.receiptTrace ? { receiptTrace: context.receiptTrace } : {}),
     ...(context.continuation ? { continuation: context.continuation } : {}),
+    ...(cleanupRehearsal ? { cleanupRehearsal } : {}),
     ...(context.evidenceHints ? { evidenceHints: context.evidenceHints } : {}),
     ...(context.githubCommentProjection ? { githubCommentProjection: context.githubCommentProjection } : {}),
     ...(sourcePublicApprovalRehearsal ? { sourcePublicApprovalRehearsal } : {}),
@@ -888,6 +892,124 @@ function parseReceiptTraceEnv(env: Record<string, string> | undefined): unknown 
   } catch {
     return { status: "failed", reason: "invalid receipt trace metadata" };
   }
+}
+
+export function sanitizeCleanupRehearsal(input: unknown): CleanupRehearsalEvidence | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const value = input as Record<string, unknown>;
+  if (value.schemaVersion !== "a2a.runner.cleanup-rehearsal.v1") return undefined;
+  if (value.generatedAt !== "1970-01-01T00:00:00.000Z") return undefined;
+  if (!isCleanupRehearsalTarget(value.target) || !isCleanupRehearsalMode(value.mode) || !isCleanupRehearsalStatus(value.status)) return undefined;
+
+  const planId = safeBudgetText(typeof value.planId === "string" ? value.planId : undefined, 120);
+  const runId = safeBudgetText(typeof value.runId === "string" ? value.runId : undefined, 160);
+  const candidateCounts = sanitizeCleanupCandidateCounts(value.candidateCounts);
+  const checkpoint = sanitizeCleanupCheckpoint(value.checkpoint);
+  const rollback = sanitizeCleanupRollback(value.rollback);
+  const safetyGates = value.safetyGates as Record<string, unknown> | undefined;
+  if (!planId || !candidateCounts || !checkpoint || !rollback || !hasSafeCleanupRehearsalGates(safetyGates)) return undefined;
+
+  const failClosedReasons = Array.isArray(value.failClosedReasons)
+    ? value.failClosedReasons
+      .filter((reason): reason is string => typeof reason === "string")
+      .map((reason) => safeBudgetText(reason, 220))
+      .filter((reason): reason is string => Boolean(reason))
+      .slice(0, 10)
+    : [];
+
+  return {
+    schemaVersion: "a2a.runner.cleanup-rehearsal.v1",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    ...(runId ? { runId } : {}),
+    target: value.target,
+    mode: value.mode,
+    status: value.status,
+    planId,
+    candidateCounts,
+    checkpoint,
+    rollback,
+    failClosedReasons,
+    safetyGates: {
+      explicitOperatorApprovalRequired: true,
+      backupCheckpointRequired: true,
+      dryRunOnly: true,
+      liveExecutionBlocked: true,
+      dbMutationPerformed: false,
+      prunePerformed: false,
+      migrationPerformed: false,
+      deployOrRestartPerformed: false,
+      liveProviderSendPerformed: false,
+      terminalAckSent: false,
+    },
+  };
+}
+
+function isCleanupRehearsalTarget(value: unknown): value is CleanupRehearsalEvidence["target"] {
+  return value === "broker_db" || value === "runner_artifacts";
+}
+
+function isCleanupRehearsalMode(value: unknown): value is CleanupRehearsalEvidence["mode"] {
+  return value === "dry_run" || value === "simulate";
+}
+
+function isCleanupRehearsalStatus(value: unknown): value is CleanupRehearsalEvidence["status"] {
+  return value === "ready_for_operator_approval" || value === "blocked";
+}
+
+function sanitizeCleanupCandidateCounts(input: unknown): CleanupRehearsalEvidence["candidateCounts"] | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const value = input as Record<string, unknown>;
+  const total = safeNonNegativeInt(value.total);
+  const highRisk = safeNonNegativeInt(value.highRisk);
+  if (total === undefined || highRisk === undefined) return undefined;
+  const counts: CleanupRehearsalEvidence["candidateCounts"] = { total, highRisk };
+  for (const key of ["staleWorkerRows", "terminalOutboxRows", "artifactDirs"] as const) {
+    const count = safeNonNegativeInt(value[key]);
+    if (count !== undefined) counts[key] = count;
+  }
+  return counts;
+}
+
+function sanitizeCleanupCheckpoint(input: unknown): CleanupRehearsalEvidence["checkpoint"] | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const value = input as Record<string, unknown>;
+  if (value.requiredBeforeExecution !== true || value.rehearsalOnly !== true || value.evidenceBundlePath !== "artifacts/manifest.json" || value.backupVerified !== false) return undefined;
+  const checkpointId = safeBudgetText(typeof value.checkpointId === "string" ? value.checkpointId : undefined, 120);
+  if (!checkpointId) return undefined;
+  return {
+    requiredBeforeExecution: true,
+    rehearsalOnly: true,
+    evidenceBundlePath: "artifacts/manifest.json",
+    checkpointId,
+    backupVerified: false,
+  };
+}
+
+function sanitizeCleanupRollback(input: unknown): CleanupRehearsalEvidence["rollback"] | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const value = input as Record<string, unknown>;
+  if (value.rehearsed !== true || value.restoreVerificationRequired !== true) return undefined;
+  const rollbackPlanPath = safeRehearsalPath(typeof value.rollbackPlanPath === "string" ? value.rollbackPlanPath : undefined);
+  const abortPlanPath = safeRehearsalPath(typeof value.abortPlanPath === "string" ? value.abortPlanPath : undefined);
+  if (!rollbackPlanPath || !abortPlanPath) return undefined;
+  return { rehearsed: true, rollbackPlanPath, abortPlanPath, restoreVerificationRequired: true };
+}
+
+function hasSafeCleanupRehearsalGates(value: Record<string, unknown> | undefined): boolean {
+  return value?.explicitOperatorApprovalRequired === true
+    && value.backupCheckpointRequired === true
+    && value.dryRunOnly === true
+    && value.liveExecutionBlocked === true
+    && value.dbMutationPerformed === false
+    && value.prunePerformed === false
+    && value.migrationPerformed === false
+    && value.deployOrRestartPerformed === false
+    && value.liveProviderSendPerformed === false
+    && value.terminalAckSent === false;
+}
+
+function safeNonNegativeInt(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 }
 
 export interface SourcePublicApprovalRehearsalInput {
