@@ -117,6 +117,73 @@
         "commentIsOperatorApproval": { "const": false }
       }
     },
+    "cleanupRehearsal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "generatedAt", "target", "mode", "status", "planId", "candidateCounts", "checkpoint", "rollback", "failClosedReasons", "safetyGates"],
+      "properties": {
+        "schemaVersion": { "const": "a2a.runner.cleanup-rehearsal.v1" },
+        "generatedAt": { "const": "1970-01-01T00:00:00.000Z" },
+        "runId": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "target": { "enum": ["broker_db", "runner_artifacts"] },
+        "mode": { "enum": ["dry_run", "simulate"] },
+        "status": { "enum": ["ready_for_operator_approval", "blocked"] },
+        "planId": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "candidateCounts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "highRisk"],
+          "properties": {
+            "total": { "type": "integer", "minimum": 0 },
+            "highRisk": { "type": "integer", "minimum": 0 },
+            "staleWorkerRows": { "type": "integer", "minimum": 0 },
+            "terminalOutboxRows": { "type": "integer", "minimum": 0 },
+            "artifactDirs": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "checkpoint": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["requiredBeforeExecution", "rehearsalOnly", "evidenceBundlePath", "checkpointId", "backupVerified"],
+          "properties": {
+            "requiredBeforeExecution": { "const": true },
+            "rehearsalOnly": { "const": true },
+            "evidenceBundlePath": { "const": "artifacts/manifest.json" },
+            "checkpointId": { "type": "string", "minLength": 1, "maxLength": 120 },
+            "backupVerified": { "const": false }
+          }
+        },
+        "rollback": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rehearsed", "rollbackPlanPath", "abortPlanPath", "restoreVerificationRequired"],
+          "properties": {
+            "rehearsed": { "const": true },
+            "rollbackPlanPath": { "type": "string", "minLength": 1, "maxLength": 160 },
+            "abortPlanPath": { "type": "string", "minLength": 1, "maxLength": 160 },
+            "restoreVerificationRequired": { "const": true }
+          }
+        },
+        "failClosedReasons": { "type": "array", "maxItems": 10, "items": { "type": "string", "minLength": 1, "maxLength": 220 } },
+        "safetyGates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["explicitOperatorApprovalRequired", "backupCheckpointRequired", "dryRunOnly", "liveExecutionBlocked", "dbMutationPerformed", "prunePerformed", "migrationPerformed", "deployOrRestartPerformed", "liveProviderSendPerformed", "terminalAckSent"],
+          "properties": {
+            "explicitOperatorApprovalRequired": { "const": true },
+            "backupCheckpointRequired": { "const": true },
+            "dryRunOnly": { "const": true },
+            "liveExecutionBlocked": { "const": true },
+            "dbMutationPerformed": { "const": false },
+            "prunePerformed": { "const": false },
+            "migrationPerformed": { "const": false },
+            "deployOrRestartPerformed": { "const": false },
+            "liveProviderSendPerformed": { "const": false },
+            "terminalAckSent": { "const": false }
+          }
+        }
+      }
+    },
     "sourcePublicApprovalRehearsal": {
       "type": "object",
       "additionalProperties": false,

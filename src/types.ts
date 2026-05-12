@@ -478,6 +478,61 @@ export interface RunnerContinuationEvidence {
   requiresApproval: true;
 }
 
+export type CleanupRehearsalTarget = "broker_db" | "runner_artifacts";
+export type CleanupRehearsalMode = "dry_run" | "simulate";
+export type CleanupRehearsalStatus = "ready_for_operator_approval" | "blocked";
+
+/**
+ * No-live cleanup backup/checkpoint and rollback rehearsal evidence.
+ *
+ * This is an artifact-bundle capsule for DB lifecycle/safe-prune planning. It
+ * must never perform production DB mutation, pruning, migration, deploy/restart,
+ * live provider send, or Terminal Brief ACK. Real cleanup execution remains
+ * separately operator-approved after checkpoint evidence exists.
+ */
+export interface CleanupRehearsalEvidence {
+  schemaVersion: "a2a.runner.cleanup-rehearsal.v1";
+  generatedAt: "1970-01-01T00:00:00.000Z";
+  runId?: string;
+  target: CleanupRehearsalTarget;
+  mode: CleanupRehearsalMode;
+  status: CleanupRehearsalStatus;
+  planId: string;
+  candidateCounts: {
+    total: number;
+    highRisk: number;
+    staleWorkerRows?: number;
+    terminalOutboxRows?: number;
+    artifactDirs?: number;
+  };
+  checkpoint: {
+    requiredBeforeExecution: true;
+    rehearsalOnly: true;
+    evidenceBundlePath: "artifacts/manifest.json";
+    checkpointId: string;
+    backupVerified: false;
+  };
+  rollback: {
+    rehearsed: true;
+    rollbackPlanPath: string;
+    abortPlanPath: string;
+    restoreVerificationRequired: true;
+  };
+  failClosedReasons: string[];
+  safetyGates: {
+    explicitOperatorApprovalRequired: true;
+    backupCheckpointRequired: true;
+    dryRunOnly: true;
+    liveExecutionBlocked: true;
+    dbMutationPerformed: false;
+    prunePerformed: false;
+    migrationPerformed: false;
+    deployOrRestartPerformed: false;
+    liveProviderSendPerformed: false;
+    terminalAckSent: false;
+  };
+}
+
 export interface ArtifactEvidencePart {
   /** Protocol-friendly Part kind for rendering summaries without reading raw logs. */
   kind: ArtifactEvidenceKind;
@@ -518,6 +573,8 @@ export interface ArtifactManifest {
   receiptTrace?: RunnerReceiptTrace;
   /** Optional sanitized recommendation for a bounded, approval-gated continuation. */
   continuation?: RunnerContinuationEvidence;
+  /** Optional no-live cleanup backup/checkpoint and rollback rehearsal capsule. */
+  cleanupRehearsal?: CleanupRehearsalEvidence;
   /** Compact structured evidence URLs for broker task-report recovery. */
   evidenceHints?: RunnerEvidenceHints;
   /** First-class Terminal Brief extension for GitHub comment ledger evidence. */
@@ -545,6 +602,7 @@ export interface ResultSummary {
   budget?: RunnerBudgetEvidence;
   receiptTrace?: RunnerReceiptTrace;
   continuation?: RunnerContinuationEvidence;
+  cleanupRehearsal?: CleanupRehearsalEvidence;
   evidenceHints?: RunnerEvidenceHints;
   githubCommentProjection?: GitHubCommentProjection;
   sourcePublicApprovalRehearsal?: SourcePublicApprovalRehearsal;
