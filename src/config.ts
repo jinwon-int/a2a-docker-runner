@@ -21,7 +21,7 @@ export async function loadConfig(env = process.env): Promise<RunnerConfig> {
   const profile = normalizePatchCommandProfile(env.A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE);
   const image = env.A2A_DOCKER_RUNNER_IMAGE || DEFAULT_IMAGE;
 
-  return {
+  const config: RunnerConfig = {
     rootDir: env.A2A_DOCKER_RUNNER_ROOT || DEFAULT_ROOT,
     engine,
     image,
@@ -34,6 +34,49 @@ export async function loadConfig(env = process.env): Promise<RunnerConfig> {
     extraMounts,
     ...patchCommand,
   };
+
+  validateRunnerConfig(config);
+
+  return config;
+}
+
+/**
+ * Pre-deploy config validation: fail-fast on schema/config mismatch before the
+ * runner starts executing tasks. Catches operator misconfiguration early so a
+ * bad deploy never reaches Gateway restart or container launch.
+ *
+ * Parent: a2a-plane#249
+ */
+export function validateRunnerConfig(config: RunnerConfig): void {
+  const errors: string[] = [];
+
+  if (!config.image || typeof config.image !== "string" || !config.image.trim()) {
+    errors.push("image must be a non-empty string");
+  }
+
+  if (!config.rootDir || !config.rootDir.startsWith("/")) {
+    errors.push("rootDir must be a non-empty absolute path starting with /");
+  }
+
+  if (config.network && !/^(bridge|host|none)$/.test(config.network)) {
+    errors.push(`unsupported network mode: ${JSON.stringify(config.network)} (expected bridge, host, or none)`);
+  }
+
+  if (config.memory && !/^\d+[bkmgtpe]?$/i.test(config.memory)) {
+    errors.push(`invalid memory limit: ${JSON.stringify(config.memory)} (expected format like "2g" or "512m")`);
+  }
+
+  if (config.cpus && !/^\d+(\.\d+)?$/.test(config.cpus)) {
+    errors.push(`invalid cpus: ${JSON.stringify(config.cpus)} (expected format like "2" or "1.5")`);
+  }
+
+  if (!Number.isFinite(config.defaultTimeoutMs) || config.defaultTimeoutMs <= 0) {
+    errors.push(`invalid defaultTimeoutMs: ${config.defaultTimeoutMs} (expected positive number)`);
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`runner pre-deploy config validation failed:\n${errors.map((e) => `  - ${e}`).join("\n")}`);
+  }
 }
 
 function loadBuildMetadata(env: NodeJS.ProcessEnv, runtimeImage: string): RunnerBuildMetadata | undefined {
@@ -372,16 +415,21 @@ A2A_GUARD_OPENCLAW_SESSION_STORE
 
 chmod -R u+rwX /root/.openclaw
 
-# Point embedded OpenClaw at the checked-out repository without mutating
-# /root/.openclaw/workspace. Host OpenClaw workspaces contain identity,
-# bootstrap, memory, and operator state; runner code must never delete or
-# recreate that path as a sandbox alignment mechanism.
-export OPENCLAW_WORKSPACE_DIR="$PWD"
+# Point embedded OpenClaw at a separate temp workspace directory so
+# identity/bootstrap files (AGENTS.md, SOUL.md, etc.) created during
+# OpenClaw initialization do not pollute the checked-out repository.
+# OpenClaw tools can still access and modify files anywhere in the
+# container filesystem; the workspace dir only holds agent runtime
+# state, not the repo checkout.
+# Ref: a2a-docker-runner#209 regression — agents created bootstrap
+# files in /work/repo, causing pre-PR guard false-block with exit 4.
+export OPENCLAW_WORKSPACE_DIR="/tmp/openclaw-agent-workspace"
+mkdir -p "$OPENCLAW_WORKSPACE_DIR"
 
-# Embedded OpenClaw resolves the active agent workspace from config, not only
-# from OPENCLAW_WORKSPACE_DIR. Point the disposable in-container config at the
-# checked-out repository so repo patch runs do not fall back to the host/default
-# agent workspace or its bootstrap files.
+# Point the disposable in-container config at the temp workspace so
+# OpenClaw does not fall back to cwd (/work/repo) or the host/default
+# agent workspace. Config workspace and OPENCLAW_WORKSPACE_DIR must
+# agree, otherwise the agent may reset cwd-derived workspace state.
 if [ -f /root/.openclaw/openclaw.json ]; then
   node <<'A2A_SET_OPENCLAW_WORKSPACE'
 const fs = require("node:fs");
@@ -408,7 +456,11 @@ printf 'openclaw_workspace=%s\n' "$OPENCLAW_WORKSPACE_DIR" | tee -a /work/artifa
 cat > /work/artifacts/openclaw-prompt.md <<'A2A_OPENCLAW_PROMPT_EOF'
 You are running inside the A2A Docker Runner on a checked-out GitHub repository.
 
-Use /work/artifacts/prompt.md as the assignment. Complete a minimal, safe patch in the current repository only.
+The repository is checked out at /work/repo (or /work/<repo-name> for named checkouts).
+Your OpenClaw workspace is a separate temp directory for agent state only.
+Make all code changes in the repository checkout, not your workspace.
+
+Use /work/artifacts/prompt.md as the assignment. Complete a minimal, safe patch in the repository only.
 
 Rules:
 - Use OpenClaw tools available inside this container.
