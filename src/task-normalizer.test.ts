@@ -74,9 +74,10 @@ test("passes through mode, issueUrl, reportLanguage, and requestedBy", () => {
 // isPatchMode
 // ---------------------------------------------------------------------------
 
-test("isPatchMode recognises github-propose-patch and propose_patch", () => {
+test("isPatchMode recognises github-propose-patch, propose_patch, and github-verify", () => {
   assert.equal(isPatchMode("github-propose-patch"), true);
   assert.equal(isPatchMode("propose_patch"), true);
+  assert.equal(isPatchMode("github-verify"), true);
   assert.equal(isPatchMode("chat"), false);
   assert.equal(isPatchMode(undefined), false);
   assert.equal(isPatchMode(""), false);
@@ -556,6 +557,43 @@ test("allowNoChanges: explicit commands are not overridden", () => {
 
   // Explicit commands pass through; the default pipeline is NOT synthesized.
   assert.deepStrictEqual(task.commands, ["echo 'custom'", "printf 'done\\n'"]);
+});
+
+// github-verify mode (a2a-docker-runner#231)
+
+test("github-verify: isPatchMode recognises the mode and generates patch pipeline with no-change guard", () => {
+  const task = normalizeTask({
+    id: "verify-lane",
+    intent: "verify",
+    mode: "github-verify",
+    repo: "jinwon-int/a2a-docker-runner",
+    baseBranch: "main",
+    allowNoChanges: true,
+    forbidNewPr: true,
+    commands: [],
+  });
+
+  // Mode is preserved.
+  assert.equal(task.mode, "github-verify");
+
+  // Should generate patch pipeline (isPatchMode returns true for github-verify).
+  assert.ok(task.commands.length >= 2, "Expected patch pipeline commands");
+  const pipeline = task.commands[1] ?? "";
+
+  // allowNoChanges=true → no-changes branch uses status=no_changes_allowed, not exit 2.
+  assert.ok(pipeline.includes("status=no_changes_allowed"), "Expected no_changes_allowed for verify mode");
+  assert.ok(!pipeline.includes("error=no_changes_after_patch_command"), "Must not emit no-changes error for verify mode");
+
+  // forbidNewPr=true → changes trigger new_pr_forbidden, not PR creation.
+  assert.ok(pipeline.includes("error=new_pr_forbidden"), "Expected new_pr_forbidden when verify lane produces changes");
+  assert.ok(!pipeline.includes("gh pr create"), "Must not create PR in verify lane");
+
+  // Still includes create-branch + patch command execution.
+  assert.ok(pipeline.includes("git checkout -b"), "Expected branch creation");
+  assert.ok(
+    pipeline.includes("/work/patch-command.sh") || pipeline.includes("A2A_PATCH_COMMAND"),
+    "Expected patch command execution",
+  );
 });
 
 test("allowNoChanges: flag is preserved through normalization", () => {

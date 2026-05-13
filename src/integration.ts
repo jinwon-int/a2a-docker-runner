@@ -41,6 +41,10 @@ export interface HandlerTaskPayload {
   noNewPr?: boolean;
   commentOnly?: boolean;
   evidenceOnly?: boolean;
+  /** When true, the no-changes guard must not fail the task.
+   *  The runner accepts terminal evidence without PR for audit/preflight/libero lanes.
+   *  Auto-set by github-verify mode. */
+  allowNoChanges?: boolean;
   baseBranch?: string;
   title?: string;
   focus?: string;
@@ -305,12 +309,15 @@ export function buildRunnerTaskFromHandlerPayload(
     task?.payload?.runnerPreset ?? env.A2A_DOCKER_RUNNER_PRESET,
   );
 
+  const requestedMode = normalizeString(task?.payload?.mode) ?? "github-propose-patch";
+  const isVerifyMode = requestedMode === "github-verify";
+
   const envTimeoutMs =
     env.A2A_DOCKER_RUNNER_TASK_TIMEOUT_MS != null ? Number(env.A2A_DOCKER_RUNNER_TASK_TIMEOUT_MS) : NaN;
   const runnerTask: RunnerTask = {
     id: normalizeString(task?.id) ?? `task-${Date.now()}`,
     intent: normalizeString(task?.intent) ?? "propose_patch",
-    mode: "github-propose-patch",
+    mode: requestedMode,
     prompt: normalizeString(task?.message ?? task?.payload?.prompt) ?? "",
     issueUrl: normalizeString(task?.payload?.issueUrl) ?? undefined,
     issueTitle: safeEvidenceText(task?.payload?.title, 160),
@@ -321,8 +328,9 @@ export function buildRunnerTaskFromHandlerPayload(
     traceId: safeEvidenceText(task?.payload?.traceId, 120),
     existingPrUrl: normalizeExistingPrUrl(task, repo),
     existingPrNumber: task?.payload?.existingPrNumber ?? task?.payload?.prNumber,
-    forbidNewPr: Boolean(task?.payload?.forbidNewPr ?? task?.payload?.noNewPr),
-    commentOnly: Boolean(task?.payload?.commentOnly ?? task?.payload?.evidenceOnly),
+    forbidNewPr: isVerifyMode || Boolean(task?.payload?.forbidNewPr ?? task?.payload?.noNewPr),
+    commentOnly: isVerifyMode ? false : Boolean(task?.payload?.commentOnly ?? task?.payload?.evidenceOnly),
+    allowNoChanges: isVerifyMode ? true : (task?.payload?.allowNoChanges ?? undefined),
     timeoutMs:
       !isNaN(envTimeoutMs)
         ? envTimeoutMs

@@ -244,6 +244,53 @@ test("buildRunnerTaskFromHandlerPayload: closeout/comment-only flags and existin
   assert.equal(result.existingPrNumber, "#12");
   assert.equal(result.forbidNewPr, true);
   assert.equal(result.commentOnly, true);
+  assert.equal(result.allowNoChanges, undefined);
+});
+
+test("buildRunnerTaskFromHandlerPayload: github-verify mode sets allowNoChanges, forbidNewPr, and runs patch pipeline", () => {
+  const task: HandlerTask = {
+    id: "task-verify",
+    intent: "verify",
+    payload: {
+      mode: "github-verify",
+      repo: "jinwon-int/a2a-docker-runner",
+      issueUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/240",
+      title: "Verification lane test",
+      focus: "read-only validation",
+      prompt: "Verify no diff needed; run audit checks.",
+      requestedBy: "soonwook",
+      runId: "a2a-plane-240-validation-soonwook-20260513T004643Z",
+    },
+  };
+  const result = buildRunnerTaskFromHandlerPayload(task, baseEnv);
+
+  assert.equal(result.mode, "github-verify");
+  assert.equal(result.intent, "verify");
+  assert.equal(result.allowNoChanges, true);
+  assert.equal(result.forbidNewPr, true);
+  assert.equal(result.commentOnly, false);
+  assert.equal(result.repo, "jinwon-int/a2a-docker-runner");
+  assert.equal(result.issueUrl, "https://github.com/jinwon-int/a2a-docker-runner/issues/240");
+  assert.equal(result.requestedBy, "soonwook");
+});
+
+test("buildRunnerTaskFromHandlerPayload: explicit allowNoChanges in payload flows to RunnerTask", () => {
+  const task: HandlerTask = {
+    id: "task-nodiff",
+    intent: "propose_patch",
+    payload: {
+      mode: "github-propose-patch",
+      repo: "jinwon-int/a2a-docker-runner",
+      issueUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/240",
+      allowNoChanges: true,
+    },
+  };
+  const result = buildRunnerTaskFromHandlerPayload(task, baseEnv);
+
+  assert.equal(result.mode, "github-propose-patch");
+  assert.equal(result.allowNoChanges, true);
+  assert.equal(result.forbidNewPr, false);
+  assert.equal(result.commentOnly, false);
 });
 
 test("buildRunnerTaskFromHandlerPayload: payload timeout used when env timeout is unset", () => {
