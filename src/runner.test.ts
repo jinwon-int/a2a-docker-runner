@@ -623,6 +623,101 @@ test("buildActionableError: no false container-name conflict from agent stdout",
 });
 
 // ---------------------------------------------------------------------------
+// buildActionableError: OOM detection + elapsed time in timeout diagnostics
+// Parent: a2a-docker-runner#227
+// ---------------------------------------------------------------------------
+
+test("buildActionableError: detects OOM via exit code 137 (SIGKILL from cgroup)", () => {
+  // Docker/Podman OOM kill produces exit code 137 = 128+9 (SIGKILL).
+  // The runner must surface this as a distinct resource-exhaustion error
+  // rather than a generic non-zero exit.
+  const msg = buildActionableError("docker", "node:22", {
+    code: 137,
+    signal: "SIGKILL",
+    stdout: "some output before kill",
+    stderr: "",
+    timedOut: false,
+    elapsedMs: 4200,
+  });
+
+  assert.ok(msg.includes("OOM"), `Expected OOM detection for exit 137, got: ${msg}`);
+  assert.ok(msg.includes("메모리 부족"), `Expected Korean memory-exhaustion text, got: ${msg}`);
+  assert.ok(msg.includes("exit=137"), `Expected exit code 137 in message, got: ${msg}`);
+  assert.ok(msg.includes("elapsed=4.2s"), `Expected elapsed time in OOM message, got: ${msg}`);
+  assert.ok(msg.includes("--memory"), `Expected --memory tuning hint in OOM message, got: ${msg}`);
+});
+
+test("buildActionableError: detects OOM via stderr pattern when exit code is masked", () => {
+  // In some rootless Podman configurations the exit code may not be 137
+  // but stderr still contains the OOM indicator.  The runner must match
+  // stderr patterns independently of exit code.
+  const msg = buildActionableError("podman", "node:22", {
+    code: 1,
+    signal: null,
+    stdout: "",
+    stderr: "Error: container create failed: container_linux.go: Out of memory: the container was killed by the OOM killer",
+    timedOut: false,
+    elapsedMs: 1100,
+  });
+
+  assert.ok(msg.includes("OOM"), `Expected OOM detection via stderr, got: ${msg}`);
+  assert.ok(msg.includes("메모리 부족"), `Expected Korean memory-exhaustion text for stderr OOM, got: ${msg}`);
+  assert.ok(msg.includes("elapsed=1.1s"), `Expected elapsed time in OOM stderr message, got: ${msg}`);
+});
+
+test("buildActionableError: includes elapsed time in timeout error message", () => {
+  // Timed-out runs must include the actual wall-clock elapsed time
+  // in the error message so operators can tune timeoutMs evidence.
+  const msg = buildActionableError("docker", "node:22", {
+    code: null,
+    signal: "SIGTERM",
+    stdout: "partial output",
+    stderr: "",
+    timedOut: true,
+    elapsedMs: 30100,
+  });
+
+  assert.ok(msg.includes("제한 시간"), `Expected timeout message, got: ${msg}`);
+  assert.ok(msg.includes("elapsed=30.1s"), `Expected elapsed time in timeout message, got: ${msg}`);
+  assert.ok(!msg.includes("elapsed=0.0s"), `Elapsed time should reflect actual runtime, got: ${msg}`);
+});
+
+test("buildActionableError: safely handles missing elapsedMs in timeout", () => {
+  // Backward-compatible: elapsedMs may be absent in callers that don't
+  // supply it.  The error message must still render without NaN or crash.
+  const msg = buildActionableError("docker", "node:22", {
+    code: null,
+    signal: "SIGTERM",
+    stdout: "",
+    stderr: "",
+    timedOut: true,
+    // elapsedMs intentionally omitted
+  });
+
+  assert.ok(msg.includes("제한 시간"), `Expected readable timeout message when elapsedMs is missing, got: ${msg}`);
+  assert.ok(msg.includes("elapsed=0.0s"), `Expected safe default elapsed=0.0s when elapsedMs missing, got: ${msg}`);
+});
+
+test("buildActionableError: OOM detection does not false-match 'out of' in agent stdout", () => {
+  // Agent output like "out of scope" or "running out of disk space"
+  // must not trigger OOM detection.  Only stderr engine errors count.
+  const msg = buildActionableError("docker", "node:22", {
+    code: 1,
+    signal: null,
+    stdout: "warning: running out of disk space in /tmp",
+    stderr: "command not found: build-tool",
+    timedOut: false,
+    elapsedMs: 5000,
+  });
+
+  // combined includes both stdout and stderr, and 'out of disk space'
+  // is in stdout, not stderr (engineStderr).  The OOM detection only
+  // inspects engineStderr.
+  assert.ok(!msg.includes("OOM"), `Must not false-match 'out of' in agent stdout as OOM, got: ${msg}`);
+  assert.ok(!msg.includes("메모리 부족"), `Must not produce OOM message for agent stdout, got: ${msg}`);
+});
+
+// ---------------------------------------------------------------------------
 // CI ownership regression hardening (a2a-docker-runner#215 → builds on #214)
 // ---------------------------------------------------------------------------
 
