@@ -462,15 +462,22 @@ export function extractGitHubEvidence(
     const g = result.github;
     if (g.prUrl) return { ...g, outcome: "pr", prUrl: g.prUrl, blockUrl: undefined, blockCommentUrl: undefined, doneUrl: undefined, doneCommentUrl: undefined };
     const blockUrl = g.blockUrl ?? g.blockCommentUrl;
-    if (blockUrl) return { ...g, outcome: "block", blockUrl, blockCommentUrl: blockUrl };
+    if (blockUrl) return { ...g, outcome: canonicalStructuredOutcome(g, "block"), blockUrl, blockCommentUrl: blockUrl };
     const doneUrl = g.doneUrl ?? g.doneCommentUrl;
-    if (doneUrl && !budgetLimited && result.ok && result.status === "completed") return { ...g, outcome: "done", doneUrl, doneCommentUrl: doneUrl };
+    if (doneUrl && !budgetLimited && result.ok && result.status === "completed") return { ...g, outcome: canonicalStructuredOutcome(g, "done"), doneUrl, doneCommentUrl: doneUrl };
   }
 
   // Fallback: legacy PR URL from stdout parsing
   if (result.prUrl) return { prUrl: result.prUrl };
 
   return null;
+}
+
+function canonicalStructuredOutcome(evidence: GitHubEvidence, fallback: "block" | "done"): GitHubEvidence["outcome"] {
+  if (evidence.outcome === "succeeded_no_changes_with_done_evidence" || evidence.outcome === "blocked_no_changes_with_evidence") {
+    return evidence.outcome;
+  }
+  return fallback;
 }
 
 // ── Handler result builder ─────────────────────────────────────────────────
@@ -514,16 +521,47 @@ export function buildHandlerResult(
 
   return {
     status,
-    summary: `Docker runner completed ${task?.id ?? "unknown task"}`,
+    summary: buildEvidenceBackedSummary(evidence, task),
     prUrl: evidence.prUrl,
     blockCommentUrl: evidence.blockCommentUrl,
     doneCommentUrl: evidence.doneCommentUrl,
-    tests: ["a2a-docker-runner run -> completed"],
+    tests: buildEvidenceBackedTests(evidence),
     filesChanged: resultFilesChanged(result),
-    risks: evidence.prUrl ? [] : ["runner completed without PR evidence"],
+    risks: buildEvidenceBackedRisks(evidence),
     terminalEvidence: buildTerminalEvidenceEvent(result, task, nodeId),
     runnerRaw: brokerFacingRunnerRaw(result),
   };
+}
+
+function buildEvidenceBackedSummary(evidence: GitHubEvidence, task: HandlerTask): string {
+  const taskId = task?.id ?? "unknown task";
+  if (evidence.prUrl) return `Docker runner opened PR evidence — task ${taskId}`;
+  if (evidence.outcome === "succeeded_no_changes_with_done_evidence") {
+    return `Docker runner completed PR-less validation with Done evidence — task ${taskId}`;
+  }
+  if (evidence.outcome === "blocked_no_changes_with_evidence") {
+    return `Docker runner blocked PR-less validation with Block evidence — task ${taskId}`;
+  }
+  if (evidence.blockCommentUrl) return `Docker runner posted Block evidence — task ${taskId}`;
+  return `Docker runner posted Done evidence — task ${taskId}`;
+}
+
+function buildEvidenceBackedTests(evidence: GitHubEvidence): string[] {
+  if (evidence.outcome === "succeeded_no_changes_with_done_evidence") {
+    return ["a2a-docker-runner run -> PR-less validation Done evidence"];
+  }
+  if (evidence.outcome === "blocked_no_changes_with_evidence") {
+    return ["a2a-docker-runner run -> PR-less validation Block evidence"];
+  }
+  return ["a2a-docker-runner run -> completed"];
+}
+
+function buildEvidenceBackedRisks(evidence: GitHubEvidence): string[] {
+  if (evidence.prUrl) return [];
+  if (evidence.outcome === "succeeded_no_changes_with_done_evidence") return [];
+  if (evidence.outcome === "blocked_no_changes_with_evidence") return ["PR-less validation blocked; review Block evidence"];
+  if (evidence.blockCommentUrl) return ["runner blocked; review Block evidence"];
+  return ["runner completed with Done evidence and no PR"];
 }
 
 export function buildTerminalEvidenceEvent(
