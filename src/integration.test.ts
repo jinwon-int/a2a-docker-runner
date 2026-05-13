@@ -1103,6 +1103,88 @@ test("buildTerminalEvidenceEvent: emits compact safe PR evidence without raw log
   assert.ok(!serialized.includes("token=secret"));
 });
 
+test("buildTerminalEvidenceEvent: renders concise parent-round Terminal Brief progress title", () => {
+  const result: RawRunnerOutput = {
+    ok: true, taskId: "task-dungae-1", status: "completed", workDir: "/private/runner/work/task-dungae-1",
+    stdout: "raw log omitted", stderr: "", artifacts: [],
+    resultSummary: {
+      exitCode: 0, signal: null, timedOut: false,
+      stdout: "bounded stdout", stderr: "", stdoutTruncated: false, stderrTruncated: false,
+      artifactCount: 0, manifestPath: "artifacts/manifest.json",
+    },
+    github: { prUrl: "https://github.com/jinwon-int/repo/pull/544" },
+  };
+
+  const event = buildTerminalEvidenceEvent(
+    result,
+    {
+      id: "task-dungae-1",
+      payload: {
+        repo: "jinwon-int/repo",
+        issue: "544",
+        terminalBrief: {
+          workerLabel: "dungae",
+          sequence: "1",
+          total: 7,
+          roundId: "a2a-concise-brief-parent-seoseo-20260513T054937Z",
+        },
+      },
+    },
+    "fallback-node",
+    "2026-05-13T06:00:00.000Z",
+  );
+
+  assert.equal(event.alert.title, "A2A Terminal Brief 완료: dungae(1/7)");
+  assert.deepEqual(event.terminalBrief, {
+    schemaVersion: "a2a.runner.terminal-brief-context.v1",
+    title: "A2A Terminal Brief 완료: dungae(1/7)",
+    worker: "dungae",
+    ownership: "parent-broker-only",
+    roundId: "a2a-concise-brief-parent-seoseo-20260513T054937Z",
+    progress: { sequence: 1, total: 7 },
+  });
+  assert.equal(event.worker, "fallback-node");
+  assert.equal(event.alert.body.includes("issue=jinwon-int/repo#544"), true);
+});
+
+test("buildTerminalEvidenceEvent: Terminal Brief title falls back safely when denominator is unknown", () => {
+  const result: RawRunnerOutput = {
+    ok: true, taskId: "task-nosuk-2", status: "completed", workDir: "/tmp/work",
+    stdout: "raw log omitted", stderr: "", artifacts: [],
+    resultSummary: {
+      exitCode: 0, signal: null, timedOut: false,
+      stdout: "bounded stdout", stderr: "", stdoutTruncated: false, stderrTruncated: false,
+      artifactCount: 0, manifestPath: "artifacts/manifest.json",
+    },
+    github: {
+      taskId: "task-nosuk-2",
+      issueUrl: "https://github.com/jinwon-int/repo/issues/544",
+      doneCommentUrl: "https://github.com/jinwon-int/repo/issues/544#issuecomment-2",
+      validation: { status: "completed", exitCode: 0, timedOut: false, artifactCount: 0 },
+      safetyState: { noLiveProviderSend: true, terminalAck: "requires_operator_receipt", providerSendIsReceiptEvidence: false },
+    },
+  };
+
+  const event = buildTerminalEvidenceEvent(
+    result,
+    {
+      id: "task-nosuk-2",
+      payload: {
+        repo: "jinwon-int/repo",
+        issueUrl: "https://github.com/jinwon-int/repo/issues/544",
+        terminalBrief: { worker: "nosuk", sequence: 2 },
+      },
+    },
+    "nosuk",
+    "2026-05-13T06:01:00.000Z",
+  );
+
+  assert.equal(event.alert.title, "A2A Terminal Brief 완료: nosuk");
+  assert.equal(event.terminalBrief?.progress, undefined);
+  assert.equal(event.terminalBrief?.ownership, "parent-broker-only");
+  assert.ok(!event.alert.title.includes("(2/"));
+});
+
 test("buildTerminalEvidenceEvent: includes safe task context required for terminal notices", () => {
   const result: RawRunnerOutput = {
     ok: true, taskId: "task-120", status: "completed", workDir: "/private/runner/task-120",
