@@ -569,3 +569,44 @@ test("allowNoChanges: flag is preserved through normalization", () => {
   });
   assert.equal(task.allowNoChanges, true);
 });
+
+// ---------------------------------------------------------------------------
+// readOnlyValidation: validation/libero lanes must not create patch evidence
+// from repository mutations.
+// ---------------------------------------------------------------------------
+
+test("readOnlyValidation: implies allowNoChanges for Done evidence without PR", () => {
+  const task = normalizeTask({
+    id: "readonly-validation",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repo: "jinwon-int/test-repo",
+    readOnlyValidation: true,
+    commands: [],
+  });
+
+  assert.equal(task.readOnlyValidation, true);
+  assert.equal(task.allowNoChanges, true);
+});
+
+test("readOnlyValidation: default pipeline fails closed on repository changes before push or PR", () => {
+  const task = normalizeTask({
+    id: "readonly-pipeline",
+    intent: "propose_patch",
+    mode: "github-propose-patch",
+    repo: "jinwon-int/test-repo",
+    readOnlyValidation: true,
+    commands: [],
+  });
+
+  const pipeline = task.commands[1] ?? "";
+  const guardIdx = pipeline.indexOf("error=read_only_validation_changed_repo");
+  const pushIdx = pipeline.indexOf("git push origin");
+  const prIdx = pipeline.indexOf("gh pr create");
+  assert.ok(guardIdx >= 0, "Expected read-only validation guard in default pipeline");
+  assert.ok(pipeline.includes("read_only_validation=passed"), "Expected pass marker for unchanged validation lanes");
+  assert.ok(pipeline.includes("read_only_change="), "Expected exact changed path evidence markers");
+  assert.ok(pushIdx > guardIdx, "Read-only guard must run before git push");
+  assert.ok(prIdx > guardIdx, "Read-only guard must run before gh pr create");
+  assert.ok(pipeline.includes("status=no_changes_allowed"), "Read-only validation must allow no-change Done evidence");
+});

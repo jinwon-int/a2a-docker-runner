@@ -388,6 +388,12 @@ export interface RunnerTask {
   /** When true, the no-changes guard must not fail the task.
    *  The runner accepts terminal evidence without PR for audit/preflight/libero lanes. */
   allowNoChanges?: boolean;
+  /**
+   * When true, treat the task as a read-only validation/libero lane: patch
+   * commands may inspect and test the checkout, but any tracked, staged,
+   * uncommitted, or committed repository delta fails closed before PR creation.
+   */
+  readOnlyValidation?: boolean;
   /** Safe broker/run identifier to carry into release-gate evidence when present. */
   runId?: string;
   /** Safe distributed trace identifier to carry into release-gate evidence when present. */
