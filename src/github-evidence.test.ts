@@ -534,6 +534,75 @@ test("no-changes-allowed marker absent does not affect normal classification", a
 });
 
 // ---------------------------------------------------------------------------
+// readOnlyValidation evidence flow (a2a-docker-runner#237)
+// ---------------------------------------------------------------------------
+
+test("readOnlyValidation: passed outcome maps to succeeded_no_changes_with_done_evidence", async () => {
+  // When readOnlyValidation is set and no changes are produced, the pipeline
+  // outputs read_only_validation=passed followed by status=no_changes_allowed.
+  // Evidence collection must classify this as succeeded_no_changes_with_done_evidence.
+  const evidence = await collectGitHubEvidence(baseConfig, baseTask, {
+    ok: true,
+    taskId: "t1",
+    status: "completed",
+    workDir: "/tmp/a2a/task/run-1",
+    exitCode: 0,
+    signal: null,
+    stdout: [
+      "read_only_validation=passed",
+      "status=no_changes_allowed",
+      "notice=no_code_changes_produced_evidence_only_lane",
+    ].join("\n"),
+    stderr: "",
+    artifacts: [],
+  });
+
+  assert.ok(evidence);
+  assert.equal(evidence?.outcome, "succeeded_no_changes_with_done_evidence");
+  assert.equal(evidence?.validationErrors?.length ?? 0, 0,
+    "readOnlyValidation passed must not produce validation errors");
+});
+
+test("readOnlyValidation: blocked body reports error and changed file list", () => {
+  // When readOnlyValidation guard detects changes, the pipeline exits 4.
+  // The block comment body must include the readOnlyValidation error text
+  // and list of changed files.
+  const body = buildBlockCommentBody(
+    { ...baseTask, readOnlyValidation: true, reportLanguage: "en" },
+    {
+      ok: false,
+      taskId: "t1",
+      status: "failed",
+      workDir: "/tmp/a2a/task/run-1",
+      exitCode: 4,
+      signal: null,
+      stdout: [
+        "read_only_validation=blocked",
+        "error=read_only_validation_changed_repo",
+        "read_only_change=src/runner.ts",
+        "read_only_change=src/types.ts",
+      ].join("\n"),
+      stderr: "",
+      artifacts: [],
+      error: "read_only_validation_changed_repo",
+    },
+  );
+
+  assert.ok(body.includes("### Reason"), "Block comment must include reason section");
+  assert.ok(body.includes("### Next action"), "Block comment must include next-action section");
+  // The error text (read_only_validation_changed_repo) must appear in the body.
+  assert.ok(body.includes("read_only_validation_changed_repo"),
+    "Block comment body must include the readOnlyValidation error");
+  // Block outcome marker must be present.
+  assert.match(body, /outcome=block/);
+  // Changed files must be visible in the body (error text contains them).
+  assert.ok(body.includes("src/runner.ts"),
+    "Block comment body must include changed file paths");
+  assert.ok(body.includes("src/types.ts"),
+    "Block comment body must include changed file paths");
+});
+
+// ---------------------------------------------------------------------------
 // GitHub comment evidence ledger — Start comment & comment ledger projection
 // Parent: a2a-plane#204
 // ---------------------------------------------------------------------------
