@@ -232,6 +232,13 @@ Release-gate validation is skipped for
 required when the evidence lane terminated without producing a pull
 request.
 
+Dashboard/read-model consumers should preserve these PR-less outcomes
+instead of flattening them into generic `done` / `block` states.  A
+valid no-diff validation Done result is not a runner failure and should
+carry an empty risk list, while a PR-less Block result should say that
+validation was blocked and point operators at the Block evidence.  Missing
+PR/Done/Block evidence remains a separate fail-closed condition.
+
 ## OpenClaw plugin A2A development preset
 
 The first-class A2A development path is to keep the runner stateless and clone `openclaw-plugin-a2a` for each job:

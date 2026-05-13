@@ -680,6 +680,34 @@ test("extractGitHubEvidence: keeps legacy Done comment URLs for backwards-compat
   assert.equal(evidence?.doneCommentUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-456");
 });
 
+test("extractGitHubEvidence: preserves PR-less no-change Done outcome for dashboard parity", () => {
+  const result: RawRunnerOutput = {
+    ok: true, taskId: "t-prless", status: "completed", workDir: "/tmp",
+    stdout: "status=no_changes_allowed", stderr: "", artifacts: [],
+    github: {
+      outcome: "succeeded_no_changes_with_done_evidence",
+      doneCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-456",
+    },
+  };
+  const evidence = extractGitHubEvidence(result);
+  assert.equal(evidence?.outcome, "succeeded_no_changes_with_done_evidence");
+  assert.equal(evidence?.doneCommentUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-456");
+});
+
+test("extractGitHubEvidence: preserves PR-less no-change Block outcome for dashboard parity", () => {
+  const result: RawRunnerOutput = {
+    ok: false, taskId: "t-prless-block", status: "failed", workDir: "/tmp",
+    stdout: "status=no_changes_allowed", stderr: "blocked", artifacts: [],
+    github: {
+      outcome: "blocked_no_changes_with_evidence",
+      blockCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-789",
+    },
+  };
+  const evidence = extractGitHubEvidence(result);
+  assert.equal(evidence?.outcome, "blocked_no_changes_with_evidence");
+  assert.equal(evidence?.blockCommentUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-789");
+});
+
 test("extractGitHubEvidence: PR evidence takes precedence over block+done (multiple URLs in github block)", () => {
   const result: RawRunnerOutput = {
     ok: true, taskId: "t1", status: "completed", workDir: "/tmp",
@@ -804,6 +832,42 @@ test("buildHandlerResult: status done when receipt-gated doneCommentUrl present 
   const handlerResult = buildHandlerResult(result, { id: "t1" }, "sogyo");
   assert.equal(handlerResult.status, "done");
   assert.equal(handlerResult.doneCommentUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-456");
+});
+
+test("buildHandlerResult: PR-less validation Done evidence is not reported as a runner failure", () => {
+  const result: RawRunnerOutput = {
+    ok: true, taskId: "t-prless", status: "completed", workDir: "/tmp",
+    stdout: "status=no_changes_allowed", stderr: "", artifacts: [],
+    github: {
+      outcome: "succeeded_no_changes_with_done_evidence",
+      doneCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-456",
+      validation: { status: "completed", exitCode: 0, timedOut: false, artifactCount: 0 },
+    },
+  };
+  const handlerResult = buildHandlerResult(result, { id: "t-prless" }, "sogyo");
+  assert.equal(handlerResult.status, "done");
+  assert.match(handlerResult.summary, /PR-less validation with Done evidence/);
+  assert.deepEqual(handlerResult.risks, []);
+  assert.deepEqual(handlerResult.tests, ["a2a-docker-runner run -> PR-less validation Done evidence"]);
+  assert.equal(handlerResult.terminalEvidence.evidenceKind, "Done");
+});
+
+test("buildHandlerResult: PR-less validation Block evidence stays distinct from missing evidence", () => {
+  const result: RawRunnerOutput = {
+    ok: false, taskId: "t-prless-block", status: "failed", workDir: "/tmp",
+    stdout: "status=no_changes_allowed", stderr: "validation blocked", artifacts: [],
+    github: {
+      outcome: "blocked_no_changes_with_evidence",
+      blockCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-789",
+      validation: { status: "failed", exitCode: 4, timedOut: false, artifactCount: 0 },
+    },
+  };
+  const handlerResult = buildHandlerResult(result, { id: "t-prless-block" }, "sogyo");
+  assert.equal(handlerResult.status, "blocked");
+  assert.match(handlerResult.summary, /blocked PR-less validation with Block evidence/);
+  assert.deepEqual(handlerResult.risks, ["PR-less validation blocked; review Block evidence"]);
+  assert.deepEqual(handlerResult.tests, ["a2a-docker-runner run -> PR-less validation Block evidence"]);
+  assert.equal(handlerResult.terminalEvidence.evidenceKind, "Block");
 });
 
 test("buildHandlerResult: blocked when no evidence at all (completed but no PR)", () => {
