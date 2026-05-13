@@ -162,6 +162,10 @@ function buildDefaultPatchCommands(task: RunnerTask, primaryRepo: RunnerRepo): s
     `  printf 'error=start_comment_failed\\n' | tee -a /work/artifacts/summary.txt`,
     `  exit 2`,
     `fi`,
+    `START_COMMENT_URL="$(grep -Eo 'https://github.com/[^[:space:]]+/issues/[0-9]+#issuecomment-[0-9]+' /work/artifacts/issue-start-comment-output.txt | tail -n 1 || true)"`,
+    `if [ -n "$START_COMMENT_URL" ]; then`,
+    `  printf 'start_comment_url=%s\\n' "$START_COMMENT_URL" | tee -a /work/artifacts/summary.txt`,
+    `fi`,
     `printf 'start_comment=posted\\n' | tee -a /work/artifacts/summary.txt`,
   ].join("\n") : "";
 

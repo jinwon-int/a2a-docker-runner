@@ -465,6 +465,33 @@ test("classifies no-change-allowed Done evidence as succeeded_no_changes_with_do
   assert.equal(evidence?.outcome, "succeeded_no_changes_with_done_evidence");
 });
 
+test("captures Start comment URL for no-change validation evidence", async () => {
+  const startUrl = "https://github.com/jinwon-int/test-repo/issues/1#issuecomment-111";
+  const evidence = await collectGitHubEvidence(baseConfig, baseTask, {
+    ok: true,
+    taskId: "t1",
+    status: "completed",
+    workDir: "/tmp/a2a/task/run-1",
+    exitCode: 0,
+    signal: null,
+    stdout: [
+      startUrl,
+      "start_comment_url=" + startUrl,
+      "start_comment=posted",
+      "status=no_changes_allowed",
+      "notice=no_code_changes_produced_evidence_only_lane",
+    ].join("\n"),
+    stderr: "",
+    artifacts: [],
+  });
+
+  assert.ok(evidence);
+  assert.equal(evidence?.outcome, "succeeded_no_changes_with_done_evidence");
+  assert.equal(evidence?.startCommentUrl, startUrl);
+  assert.equal(evidence?.commentLedger?.entries[0]?.kind, "start");
+  assert.equal(evidence?.commentLedger?.entries[0]?.url, startUrl);
+});
+
 test("classifies no-change-allowed Block evidence as blocked_no_changes_with_evidence", async () => {
   // When no GitHub token is available the block comment cannot actually be
   // posted, so the classification falls through to
@@ -706,6 +733,7 @@ test("buildCommentLedger empty when no comments", () => {
 });
 
 test("collectGitHubEvidence includes commentLedger in evidence", async () => {
+  const startUrl = "https://github.com/jinwon-int/test-repo/issues/1#issuecomment-111";
   const evidence = await collectGitHubEvidence(baseConfig, baseTask, {
     ok: true,
     taskId: "t1",
@@ -713,7 +741,12 @@ test("collectGitHubEvidence includes commentLedger in evidence", async () => {
     workDir: "/tmp/a2a/task/run-1",
     exitCode: 0,
     signal: null,
-    stdout: "pr_created=1",
+    stdout: [
+      startUrl,
+      "start_comment_url=" + startUrl,
+      "start_comment=posted",
+      "pr_created=1",
+    ].join("\n"),
     stderr: "",
     artifacts: [],
     prUrl: "https://github.com/jinwon-int/test-repo/pull/99",
@@ -723,7 +756,9 @@ test("collectGitHubEvidence includes commentLedger in evidence", async () => {
   assert.ok(evidence?.commentLedger, "GitHubEvidence must include a commentLedger");
   assert.equal(evidence?.commentLedger?.schemaVersion, "a2a.runner.github-comment-ledger.v1");
   assert.equal(evidence?.commentLedger?.disclaimer, "GitHub comments are evidence ledger entries, not ACK/read/visibility proof and not approval.");
-  // No comments actually posted (no token), but the ledger is always present.
+  assert.equal(evidence?.startCommentUrl, startUrl);
+  assert.equal(evidence?.commentLedger?.entries[0]?.kind, "start");
+  assert.equal(evidence?.commentLedger?.entries[0]?.url, startUrl);
 });
 
 test("Start comment body never contains secret/credential patterns", () => {

@@ -840,6 +840,7 @@ test("buildHandlerResult: PR-less validation Done evidence is not reported as a 
     stdout: "status=no_changes_allowed", stderr: "", artifacts: [],
     github: {
       outcome: "succeeded_no_changes_with_done_evidence",
+      startCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-111",
       doneCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-456",
       validation: { status: "completed", exitCode: 0, timedOut: false, artifactCount: 0 },
     },
@@ -850,6 +851,7 @@ test("buildHandlerResult: PR-less validation Done evidence is not reported as a 
   assert.deepEqual(handlerResult.risks, []);
   assert.deepEqual(handlerResult.tests, ["a2a-docker-runner run -> PR-less validation Done evidence"]);
   assert.equal(handlerResult.terminalEvidence.evidenceKind, "Done");
+  assert.equal(handlerResult.terminalEvidence.startCommentUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-111");
 });
 
 test("buildHandlerResult: PR-less validation Block evidence stays distinct from missing evidence", () => {
