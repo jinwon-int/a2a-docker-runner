@@ -1281,10 +1281,58 @@ test("buildTerminalEvidenceEvent: renders concise parent-round Terminal Brief pr
     worker: "dungae",
     ownership: "parent-broker-only",
     roundId: "a2a-concise-brief-parent-seoseo-20260513T054937Z",
+    parentRoundId: "a2a-concise-brief-parent-seoseo-20260513T054937Z",
     progress: { sequence: 1, total: 7 },
   });
   assert.equal(event.worker, "fallback-node");
   assert.equal(event.alert.body.includes("issue=jinwon-int/repo#544"), true);
+});
+
+test("buildTerminalEvidenceEvent: preserves parent broker aggregation metadata without bloating title", () => {
+  const result: RawRunnerOutput = {
+    ok: true, taskId: "task-gwakga-6", status: "completed", workDir: "/tmp/work",
+    stdout: "raw log omitted", stderr: "", artifacts: [],
+    resultSummary: {
+      exitCode: 0, signal: null, timedOut: false,
+      stdout: "bounded stdout", stderr: "", stdoutTruncated: false, stderrTruncated: false,
+      artifactCount: 0, manifestPath: "artifacts/manifest.json",
+    },
+    github: { prUrl: "https://github.com/jinwon-int/repo/pull/560" },
+  };
+
+  const event = buildTerminalEvidenceEvent(
+    result,
+    {
+      id: "task-gwakga-6",
+      payload: {
+        repo: "jinwon-int/repo",
+        issue: "560",
+        parentRoundId: "a2a-r9-concise-brief-runtime-20260513T134143Z",
+        parentBroker: "seoseo",
+        originBroker: "gwakga",
+        brokerOfRecord: "seoseo",
+        terminalBrief: { workerLabel: "jingun", sequence: 6, total: "7" },
+      },
+    },
+    "jingun",
+    "2026-05-13T13:50:00.000Z",
+  );
+
+  assert.equal(event.alert.title, "A2A Terminal Brief 완료: jingun(6/7)");
+  assert.deepEqual(event.terminalBrief, {
+    schemaVersion: "a2a.runner.terminal-brief-context.v1",
+    title: "A2A Terminal Brief 완료: jingun(6/7)",
+    worker: "jingun",
+    ownership: "parent-broker-only",
+    roundId: "a2a-r9-concise-brief-runtime-20260513T134143Z",
+    parentRoundId: "a2a-r9-concise-brief-runtime-20260513T134143Z",
+    parentBroker: "seoseo",
+    originBroker: "gwakga",
+    brokerOfRecord: "seoseo",
+    progress: { sequence: 6, total: 7 },
+  });
+  assert.ok(!event.alert.title.includes("seoseo"));
+  assert.ok(!event.alert.title.includes("a2a-r9-concise-brief-runtime"));
 });
 
 test("buildTerminalEvidenceEvent: Terminal Brief title falls back safely when denominator is unknown", () => {
