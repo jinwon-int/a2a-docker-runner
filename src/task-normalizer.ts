@@ -60,7 +60,7 @@ function normalizeRepos(task: RunnerTask): RunnerRepo[] {
 }
 
 export function isPatchMode(mode?: string): boolean {
-  return mode === "github-propose-patch" || mode === "propose_patch";
+  return mode === "github-propose-patch" || mode === "propose_patch" || mode === "github-verify";
 }
 
 function defaultCommands(task: RunnerTask, primaryRepo?: RunnerRepo): string[] {
