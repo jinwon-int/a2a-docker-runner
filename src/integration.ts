@@ -41,6 +41,10 @@ export interface HandlerTaskPayload {
   noNewPr?: boolean;
   commentOnly?: boolean;
   evidenceOnly?: boolean;
+  /** Read-only validation/libero lane: run validation but fail closed on repo diffs and allow Done evidence without PR. */
+  readOnlyValidation?: boolean;
+  validationOnly?: boolean;
+  allowNoChanges?: boolean;
   baseBranch?: string;
   title?: string;
   focus?: string;
@@ -323,6 +327,8 @@ export function buildRunnerTaskFromHandlerPayload(
     existingPrNumber: task?.payload?.existingPrNumber ?? task?.payload?.prNumber,
     forbidNewPr: Boolean(task?.payload?.forbidNewPr ?? task?.payload?.noNewPr),
     commentOnly: Boolean(task?.payload?.commentOnly ?? task?.payload?.evidenceOnly),
+    allowNoChanges: Boolean(task?.payload?.allowNoChanges ?? task?.payload?.readOnlyValidation ?? task?.payload?.validationOnly),
+    readOnlyValidation: Boolean(task?.payload?.readOnlyValidation ?? task?.payload?.validationOnly),
     timeoutMs:
       !isNaN(envTimeoutMs)
         ? envTimeoutMs
