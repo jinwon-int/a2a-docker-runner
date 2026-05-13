@@ -59,6 +59,14 @@ export interface HandlerTaskPayload {
   worker?: string;
   runId?: string;
   traceId?: string;
+  /** Parent-broker aggregation id for concise cross-broker Terminal Brief rounds. */
+  parentRoundId?: string;
+  /** Initiating/parent broker that owns operator-facing Terminal Brief sends. */
+  parentBroker?: string;
+  /** Broker where the child task originated before projection to the parent. */
+  originBroker?: string;
+  /** Broker of record for routing/aggregation decisions. */
+  brokerOfRecord?: string;
   /** Optional parent-round context for concise Terminal Brief titles. */
   terminalBrief?: HandlerTerminalBriefPayload;
   terminalBriefWorker?: string;
@@ -71,7 +79,11 @@ export interface HandlerTerminalBriefPayload {
   workerLabel?: string;
   sequence?: string | number;
   total?: string | number;
+  parentRoundId?: string;
   roundId?: string;
+  parentBroker?: string;
+  originBroker?: string;
+  brokerOfRecord?: string;
 }
 
 /** Minimal broker-task shape needed by the integration helpers. */
@@ -234,6 +246,14 @@ export interface TerminalBriefContext {
   ownership: "parent-broker-only";
   /** Optional initiating parent round/work-order id when supplied by the broker. */
   roundId?: string;
+  /** Preferred parent-broker aggregation id; duplicated from roundId for old consumers when available. */
+  parentRoundId?: string;
+  /** Initiating parent broker; only this owner should emit operator-facing Terminal Brief notifications. */
+  parentBroker?: string;
+  /** Origin broker for projected handoff children. */
+  originBroker?: string;
+  /** Broker of record for routing and parent aggregation. */
+  brokerOfRecord?: string;
   /** Present only when both numerator and denominator are known and valid. */
   progress?: {
     sequence: number;
@@ -996,7 +1016,11 @@ function buildTerminalBriefContext(
   const hasValidProgress = sequence !== undefined && total !== undefined && sequence <= total;
   const subject = hasValidProgress ? `${workerLabel}(${sequence}/${total})` : workerLabel;
   const title = boundAlertPart(`A2A Terminal Brief ${terminalBriefOutcomeLabel(status, evidenceKind)}: ${subject}`, 96);
-  const roundId = safeEvidenceText(brief?.roundId, 120);
+  const parentRoundId = safeEvidenceText(brief?.parentRoundId ?? payload?.parentRoundId ?? brief?.roundId, 120);
+  const roundId = safeEvidenceText(brief?.roundId ?? parentRoundId, 120);
+  const parentBroker = safeEvidenceText(brief?.parentBroker ?? payload?.parentBroker, 80);
+  const originBroker = safeEvidenceText(brief?.originBroker ?? payload?.originBroker, 80);
+  const brokerOfRecord = safeEvidenceText(brief?.brokerOfRecord ?? payload?.brokerOfRecord, 80);
 
   return omitUndefined({
     schemaVersion: "a2a.runner.terminal-brief-context.v1",
@@ -1004,6 +1028,10 @@ function buildTerminalBriefContext(
     worker: workerLabel,
     ownership: "parent-broker-only",
     roundId,
+    parentRoundId,
+    parentBroker,
+    originBroker,
+    brokerOfRecord,
     progress: hasValidProgress ? { sequence, total } : undefined,
   }) as unknown as TerminalBriefContext;
 }

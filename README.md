@@ -286,6 +286,7 @@ The event is intentionally small and secret-free:
 - `repo` and `issue`: repository plus canonical issue URL/reference
 - `prUrl`, `doneUrl`, or `blockUrl`: the chosen completion evidence URL
 - `alert.title`, `alert.body`, `alert.url`: compact preformatted notification text for adapters such as OpenClaw plugin-notifier
+- `terminalBrief`: optional parent-round aggregation context for concise titles, including `parentRoundId`, `parentBroker`, `originBroker`, `brokerOfRecord`, `ownership: "parent-broker-only"`, and known `progress.sequence/total`; these fields preserve routing metadata without being appended to the operator title
 - `testSummary.label`: one-line runner outcome with exit, timeout, artifact count
 - `runnerBuild`: optional bounded build metadata (`version`, `source`, `revision`, `builtAt`, `image`)
 - `reason`: short human-facing Done/Block/failure reason
