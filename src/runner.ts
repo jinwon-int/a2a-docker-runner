@@ -206,9 +206,17 @@ function inferEvidenceFailureCategory(result: RunnerResult): RunnerEvidenceHints
   if (outcome === "block" || outcome === "budget_limited" || outcome === "timed_out" || outcome === "missing_evidence") return outcome;
   if (result.status === "timeout") return "timed_out";
   if (result.resultSummary?.status === "budget_limited" || result.artifactManifest?.status === "budget_limited") return "budget_limited";
+  if (isResourceLimitedFailure(result)) return "resource_limited";
   if (!result.ok && typeof result.exitCode === "number" && result.exitCode !== 0) return "exit_nonzero";
   if (!result.ok) return "failed";
   return undefined;
+}
+
+function isResourceLimitedFailure(result: RunnerResult): boolean {
+  if (result.ok) return false;
+  if (result.exitCode === 137 || result.signal === "SIGKILL") return true;
+  const text = `${result.resultSummary?.stderr ?? result.stderr ?? ""}\n${result.resultSummary?.stdout ?? result.stdout ?? ""}`;
+  return /(?:oomkilled|out of memory|cannot allocate memory|allocation failed|heap limit allocation failed|javaScript heap out of memory|no space left on device|\bENOSPC\b|resource temporarily unavailable|Killed)$/im.test(text);
 }
 
 function buildBranchUrl(repo: string, branch: string): string {

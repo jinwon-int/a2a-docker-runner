@@ -268,6 +268,47 @@ test("buildRunnerEvidenceHints recovers Block URL from non-zero GitHub evidence 
 });
 
 
+test("buildRunnerEvidenceHints classifies resource-limited failures for stability gates", () => {
+  const baseTask = {
+    id: "task-oom",
+    intent: "propose_patch",
+    mode: "github-propose-patch" as const,
+    repo: "jinwon-int/repo",
+    repos: [],
+    commands: ["npm test"],
+    issueUrl: "https://github.com/jinwon-int/repo/issues/5",
+  };
+
+  const exit137Hints = buildRunnerEvidenceHints(baseTask, {
+    ok: false,
+    taskId: "task-oom",
+    status: "failed",
+    workDir: "/tmp/private-task",
+    exitCode: 137,
+    signal: null,
+    stdout: "",
+    stderr: "Killed",
+    artifacts: [],
+  });
+
+  assert.equal(exit137Hints?.failureCategory, "resource_limited");
+
+  const enospcHints = buildRunnerEvidenceHints(baseTask, {
+    ok: false,
+    taskId: "task-enospc",
+    status: "failed",
+    workDir: "/tmp/private-task",
+    exitCode: 1,
+    signal: null,
+    stdout: "",
+    stderr: "npm ERR! ENOSPC: no space left on device",
+    artifacts: [],
+  });
+
+  assert.equal(enospcHints?.failureCategory, "resource_limited");
+});
+
+
 test("artifact manifest schema and dummy sample stay aligned", async () => {
   const schema = JSON.parse(await readFile(join(repoRoot, "docs", "artifact-manifest.schema.json"), "utf8"));
   const sample = JSON.parse(await readFile(join(repoRoot, "examples", "artifact-manifest.dummy-task.json"), "utf8"));
