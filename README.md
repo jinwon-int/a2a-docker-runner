@@ -136,6 +136,102 @@ commit changes, push, and open a PR. Result evidence includes
 `github.prUrl`, `github.blockCommentUrl`, or `github.doneCommentUrl`
 depending on the outcome.
 
+## PR-less validation lanes (allowNoChanges / readOnlyValidation)
+
+Some A2A tasks produce zero code changes and must still output clean
+Done or Block evidence.  The runner supports two task-level flags for
+this pattern, collectively referred to as **PR-less validation lanes**.
+
+### allowNoChanges
+
+When `allowNoChanges: true` is set, the default pipeline allows the
+no-code-change outcome instead of failing closed.  The pipeline emits
+`status=no_changes_allowed`, the runner sets `result.ok=true`, and
+`collectGitHubEvidence` posts a Done comment on the issue — without
+creating a PR.
+
+Use this for:
+
+- **Evidence-only readiness checks** that inspect a repository and
+  confirm no patch is warranted.
+- **Preflight validation** that must succeed (exit 0) regardless of
+  whether code was changed.
+- **Liveness / health lanes** that verify the runner and agent
+  integration are reachable.
+
+Example task:
+
+```json
+{
+  "id": "readiness-validation",
+  "intent": "propose_patch",
+  "mode": "github-propose-patch",
+  "repo": "jinwon-int/a2a-docker-runner",
+  "allowNoChanges": true,
+  "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/237",
+  "requestedBy": "nosuk",
+  "timeoutMs": 600000
+}
+```
+
+### readOnlyValidation
+
+`readOnlyValidation` extends `allowNoChanges` with a hard guard: if the
+coding agent produces any repository changes (staged or unstaged,
+tracked or untracked), the pipeline exits 4 **before** commit, push,
+or PR creation.  The runner posts a Block comment listing the offending
+files.
+
+Use this for:
+
+- **Validation lanes** that must never create patches, only inspect and
+  report.
+- **Operator-protected stability rounds** where worker-initiated
+  changes are not allowed.
+- **Libero / read-only roles** that produce evidence without mutation.
+
+When `readOnlyValidation` is set:
+
+- `allowNoChanges` is implied and auto-set.
+- The no-change path (no changes produced) emits
+  `status=no_changes_allowed` and posts Done evidence — same as
+  `allowNoChanges` alone.
+- The change path (any file difference on the branch) exits 4 and
+  posts Block evidence.
+- No PR is ever created.
+
+Example task:
+
+```json
+{
+  "id": "read-only-stability-round",
+  "intent": "propose_patch",
+  "mode": "github-propose-patch",
+  "repo": "jinwon-int/a2a-docker-runner",
+  "readOnlyValidation": true,
+  "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/237",
+  "requestedBy": "nosuk",
+  "timeoutMs": 600000
+}
+```
+
+### Evidence outcomes
+
+The `github.outcome` in the runner result distinguishes no-change
+outcomes from standard PR/Done/Block:
+
+| Outcome | Condition |
+|---|---|
+| `succeeded_no_changes_with_done_evidence` | `allowNoChanges` + no changes + Done comment posted |
+| `blocked_no_changes_with_evidence` | `allowNoChanges` + blocked + Block comment posted |
+| `block` | `readOnlyValidation` + changes detected (exit 4) + Block comment posted |
+
+Release-gate validation is skipped for
+`succeeded_no_changes_with_done_evidence` and
+`blocked_no_changes_with_evidence` outcomes — PR-level fields are not
+required when the evidence lane terminated without producing a pull
+request.
+
 ## OpenClaw plugin A2A development preset
 
 The first-class A2A development path is to keep the runner stateless and clone `openclaw-plugin-a2a` for each job:
