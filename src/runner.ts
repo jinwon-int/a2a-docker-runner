@@ -1322,9 +1322,18 @@ export function buildActionableError(engine: string, image: string, completed: S
     return `${engine} 실행 파일을 찾을 수 없습니다. Docker 또는 Podman을 설치하거나 A2A_DOCKER_RUNNER_ENGINE을 사용 가능한 엔진으로 설정하세요.`;
   }
   if (completed.timedOut) {
-    return `컨테이너 실행이 제한 시간 안에 끝나지 않았습니다. timeoutMs를 늘리거나 작업 명령을 줄이고, 남은 컨테이너가 있으면 '${engine} ps -a --filter label=a2a.task.id=<safeTaskId>'로 확인한 뒤 run별 container name을 지정해 정리하세요.\n${combined}`.trim();
+    const elapsedSec = ((completed.elapsedMs ?? 0) / 1000).toFixed(1);
+    return `컨테이너 실행이 제한 시간 안에 끝나지 않았습니다 (elapsed=${elapsedSec}s). timeoutMs를 늘리거나 작업 명령을 줄이고, 남은 컨테이너가 있으면 '${engine} ps -a --filter label=a2a.task.id=<safeTaskId>'로 확인한 뒤 run별 container name을 지정해 정리하세요.\n${combined}`.trim();
   }
   const engineStderr = redactSecrets(completed.stderr).trim();
+  // OOM detection: Docker/Podman kills with SIGKILL (exit 137 = 128+9) when
+  // the container exceeds its memory limit.  The daemon may also emit "Out of
+  // memory" to stderr.  Report resource evidence for stability gates.
+  // Parent: a2a-docker-runner#227
+  if (completed.code === 137 || /out of memory|OOMKill|oom-kill/i.test(engineStderr)) {
+    const elapsedSec = ((completed.elapsedMs ?? 0) / 1000).toFixed(1);
+    return `컨테이너가 메모리 부족(OOM)으로 종료되었습니다 (exit=137, elapsed=${elapsedSec}s). --memory 값을 늘리거나 작업 명령을 줄이세요. '${engine} inspect <container>'의 OOMKilled 필드로 확인할 수 있습니다.\n${combined}`.trim();
+  }
   if (/Conflict\.? The container name|container name .* is already in use|name is already in use/i.test(engineStderr)) {
     return `컨테이너 이름 충돌이 발생했습니다. runner는 task id와 run token을 포함한 고유 이름을 사용하므로, 같은 safeTaskId를 가진 오래된 컨테이너가 남았는지 '${engine} ps -a --filter label=a2a.task.id=<safeTaskId>'로 확인하고 해당 run만 정리하세요.\n${combined}`.trim();
   }
@@ -1353,9 +1362,12 @@ interface SpawnResult {
   stderr: string;
   timedOut: boolean;
   errorCode?: string;
+  /** Wall-clock elapsed milliseconds from spawn to close/error. */
+  elapsedMs?: number;
 }
 
 function spawnWithTimeout(command: string, args: string[], timeoutMs: number): Promise<SpawnResult> {
+  const startMs = Date.now();
   return new Promise((resolvePromise, reject) => {
     const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
@@ -1380,11 +1392,12 @@ function spawnWithTimeout(command: string, args: string[], timeoutMs: number): P
         stderr: redactSecrets(error.message),
         timedOut,
         errorCode: error.code,
+        elapsedMs: Date.now() - startMs,
       });
     });
     child.on("close", (code, signal) => {
       clearTimeout(timer);
-      resolvePromise({ code, signal, stdout: redactSecrets(stdout), stderr: redactSecrets(stderr), timedOut });
+      resolvePromise({ code, signal, stdout: redactSecrets(stdout), stderr: redactSecrets(stderr), timedOut, elapsedMs: Date.now() - startMs });
     });
   });
 }
