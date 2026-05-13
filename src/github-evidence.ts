@@ -325,9 +325,19 @@ function buildBaseEvidence(task: NormalizedRunnerTask, result: RunnerResult): Gi
     },
     runId: safeOptionalText(task.runId ?? task.env?.A2A_RUN_ID ?? task.env?.RUN_ID, 120),
     traceId: safeOptionalText(task.traceId ?? task.env?.A2A_TRACE_ID ?? task.env?.TRACE_ID, 120),
+    startCommentUrl: extractStartCommentUrl(result),
     branch: extractBranch(result),
     commit: extractCommit(result),
   };
+}
+
+function extractStartCommentUrl(result: RunnerResult): string | undefined {
+  const lines = `${result.stdout}\n${result.stderr}`.split(/\r?\n/);
+  const startPostedIndex = lines.findIndex((line) => line.trim() === "start_comment=posted");
+  const candidates = (startPostedIndex >= 0 ? lines.slice(0, startPostedIndex + 1) : lines)
+    .flatMap((line) => [...line.matchAll(/https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/issues\/\d+#issuecomment-\d+/g)].map((match) => match[0]))
+    .filter(isSafeGitHubEvidenceUrl);
+  return candidates[0];
 }
 
 function normalizeRepo(task: NormalizedRunnerTask): string | undefined {

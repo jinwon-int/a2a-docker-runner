@@ -121,6 +121,7 @@ test("generates PR-producing default commands for github-propose-patch mode with
   assert.ok(pipeline.indexOf("issue-start-comment.md") < pipeline.indexOf("patch-command.sh"), "Expected start comment before patch execution");
   assert.ok(pipeline.includes("error=gh_unavailable_start_comment_required"), "Expected gh-missing start comment to fail closed");
   assert.ok(pipeline.includes("error=start_comment_failed"), "Expected failed start comment to fail closed");
+  assert.ok(pipeline.includes("start_comment_url=%s"), "Expected Start comment URL to be captured for evidence");
   assert.ok(pipeline.includes("start_comment=posted"), "Expected posted start comment evidence marker");
   assert.ok(pipeline.includes("gh issue comment 'https://github.com/jinwon-int/test-repo/issues/5'"), "Expected issue PR comment");
   assert.ok(pipeline.includes("/work/artifacts/issue-comment-output.txt"), "Expected issue comment output artifact");
