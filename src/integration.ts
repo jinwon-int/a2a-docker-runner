@@ -27,6 +27,14 @@ export interface HandlerEnv {
   A2A_DOCKER_RUNNER_TASK_TIMEOUT_MS?: string;
 }
 
+export type TerminalBriefActivationDecision = "GO_CANDIDATE" | "NO_GO" | "NEEDS_OPERATOR_APPROVAL";
+
+export interface HandlerTerminalBriefActivationPayload {
+  decision?: TerminalBriefActivationDecision;
+  rollbackPlanPath?: string;
+  abortPlanPath?: string;
+}
+
 export interface HandlerTaskPayload {
   mode?: string;
   repo?: string;
@@ -69,6 +77,8 @@ export interface HandlerTaskPayload {
   brokerOfRecord?: string;
   /** Optional parent-round context for concise Terminal Brief titles. */
   terminalBrief?: HandlerTerminalBriefPayload;
+  /** Optional no-live activation readiness packet hints for Terminal Brief finalizers. */
+  terminalBriefActivationReadiness?: HandlerTerminalBriefActivationPayload;
   terminalBriefWorker?: string;
   terminalBriefSequence?: string | number;
   terminalBriefTotal?: string | number;
@@ -84,6 +94,8 @@ export interface HandlerTerminalBriefPayload {
   parentBroker?: string;
   originBroker?: string;
   brokerOfRecord?: string;
+  /** Optional no-live activation readiness packet hints for Terminal Brief finalizers. */
+  activationReadiness?: HandlerTerminalBriefActivationPayload;
 }
 
 /** Minimal broker-task shape needed by the integration helpers. */
@@ -211,6 +223,8 @@ export interface TerminalEvidenceEvent {
   };
   /** Concise parent-round Terminal Brief title context. Parent broker sends; child brokers relay only. */
   terminalBrief?: TerminalBriefContext;
+  /** No-live GO/NO-GO packet for activation readiness finalizers; never grants approval or ACK. */
+  activationReadiness?: TerminalBriefActivationReadiness;
   /** Short human-facing outcome reason; never contains raw runner logs. */
   reason?: string;
   testSummary: {
@@ -233,6 +247,41 @@ export interface TerminalEvidenceEvent {
   runnerBuild?: RunnerBuildMetadata;
   timestamps: {
     emittedAt: string;
+  };
+}
+
+export interface TerminalBriefActivationReadiness {
+  schemaVersion: "a2a.runner.terminal-brief-activation-readiness.v1";
+  decision: TerminalBriefActivationDecision;
+  closeoutEvidenceOnly: {
+    allowedEvidenceKinds: ["PR", "Done", "Block"];
+    actualEvidenceKind: TerminalEvidenceKind;
+    prDoneBlockEvidencePresent: boolean;
+    budgetTimeoutMissingEvidenceBlocksActivation: boolean;
+  };
+  parentAggregation: {
+    ownership: "parent-broker-only";
+    notificationOwner: "parent";
+    parentRoundId?: string;
+    parentBroker?: string;
+    originBroker?: string;
+    brokerOfRecord?: string;
+    progress?: { sequence: number; total: number };
+  };
+  receiptAckBoundary: {
+    githubEvidenceIsTerminalAck: false;
+    githubEvidenceIsVisibilityReceipt: false;
+    providerSendIsReceiptEvidence: false;
+    terminalAckRequiresOperatorVisibleReceipt: true;
+    terminalAckPerformed: false;
+  };
+  activationRollback: {
+    operatorApprovalRequired: true;
+    activationExecuted: false;
+    rollbackExecuted: false;
+    rollbackPlanPath: string;
+    abortPlanPath: string;
+    forbiddenWithoutFreshApproval: string[];
   };
 }
 
@@ -636,6 +685,9 @@ export function buildTerminalEvidenceEvent(
     eventId,
   );
   const terminalBrief = buildTerminalBriefContext(task, worker, status, evidenceKind);
+  const activationReadiness = terminalBrief
+    ? buildTerminalBriefActivationReadiness(task, terminalBrief, evidenceKind)
+    : undefined;
 
   return {
     schemaVersion: "a2a.runner.terminal-evidence.v1",
@@ -657,6 +709,7 @@ export function buildTerminalEvidenceEvent(
     commentLedger: evidence?.commentLedger,
     alert: buildTerminalAlert({ taskId, status, evidenceKind, worker, repo, issue, issueTitle, taskBrief, url, result, testSummary, terminalBriefTitle: terminalBrief?.title }),
     ...(terminalBrief ? { terminalBrief } : {}),
+    ...(activationReadiness ? { activationReadiness } : {}),
     reason: buildTerminalReason(result, evidenceKind),
     testSummary,
     ...(githubCommentProjection ? { githubCommentProjection } : {}),
@@ -1072,6 +1125,71 @@ function buildTerminalBriefContext(
     brokerOfRecord,
     progress: hasValidProgress ? { sequence, total } : undefined,
   }) as unknown as TerminalBriefContext;
+}
+
+function buildTerminalBriefActivationReadiness(
+  task: HandlerTask,
+  terminalBrief: TerminalBriefContext,
+  evidenceKind: TerminalEvidenceKind,
+): TerminalBriefActivationReadiness {
+  const hints = task?.payload?.terminalBrief?.activationReadiness ?? task?.payload?.terminalBriefActivationReadiness;
+  const hasCloseoutEvidence = evidenceKind === "PR" || evidenceKind === "Done" || evidenceKind === "Block";
+  const requestedDecision = hints?.decision;
+  const decision: TerminalBriefActivationDecision = hasCloseoutEvidence
+    ? (requestedDecision === "NO_GO" || requestedDecision === "NEEDS_OPERATOR_APPROVAL" ? requestedDecision : "GO_CANDIDATE")
+    : "NO_GO";
+
+  return {
+    schemaVersion: "a2a.runner.terminal-brief-activation-readiness.v1",
+    decision,
+    closeoutEvidenceOnly: {
+      allowedEvidenceKinds: ["PR", "Done", "Block"],
+      actualEvidenceKind: evidenceKind,
+      prDoneBlockEvidencePresent: hasCloseoutEvidence,
+      budgetTimeoutMissingEvidenceBlocksActivation: !hasCloseoutEvidence,
+    },
+    parentAggregation: omitUndefined({
+      ownership: "parent-broker-only",
+      notificationOwner: "parent",
+      parentRoundId: terminalBrief.parentRoundId ?? terminalBrief.roundId,
+      parentBroker: terminalBrief.parentBroker,
+      originBroker: terminalBrief.originBroker,
+      brokerOfRecord: terminalBrief.brokerOfRecord,
+      progress: terminalBrief.progress,
+    }) as TerminalBriefActivationReadiness["parentAggregation"],
+    receiptAckBoundary: {
+      githubEvidenceIsTerminalAck: false,
+      githubEvidenceIsVisibilityReceipt: false,
+      providerSendIsReceiptEvidence: false,
+      terminalAckRequiresOperatorVisibleReceipt: true,
+      terminalAckPerformed: false,
+    },
+    activationRollback: {
+      operatorApprovalRequired: true,
+      activationExecuted: false,
+      rollbackExecuted: false,
+      rollbackPlanPath: safeRelativePlanPath(hints?.rollbackPlanPath, "rollback/terminal-brief-activation.md"),
+      abortPlanPath: safeRelativePlanPath(hints?.abortPlanPath, "abort/terminal-brief-activation.md"),
+      forbiddenWithoutFreshApproval: [
+        "deploy",
+        "restart_or_reload",
+        "live_provider_send",
+        "terminal_ack_or_replay",
+        "historical_outbox_replay",
+        "db_mutation",
+        "secret_or_visibility_change",
+        "release_or_force_push",
+      ],
+    },
+  };
+}
+
+function safeRelativePlanPath(value: string | undefined, fallback: string): string {
+  const normalized = normalizeString(value);
+  if (!normalized) return fallback;
+  if (normalized.startsWith("/") || normalized.includes("..")) return fallback;
+  if (!/^[A-Za-z0-9_./-]+$/.test(normalized)) return fallback;
+  return normalized.slice(0, 160);
 }
 
 function positiveInteger(value: string | number | undefined): number | undefined {

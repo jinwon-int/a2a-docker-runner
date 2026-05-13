@@ -1335,6 +1335,84 @@ test("buildTerminalEvidenceEvent: preserves parent broker aggregation metadata w
   assert.ok(!event.alert.title.includes("a2a-r9-concise-brief-runtime"));
 });
 
+test("buildTerminalEvidenceEvent: carries no-live activation readiness proof for parent finalizers", () => {
+  const result: RawRunnerOutput = {
+    ok: true, taskId: "task-r9b-jingun", status: "completed", workDir: "/tmp/work",
+    stdout: "raw log omitted", stderr: "", artifacts: [],
+    resultSummary: {
+      exitCode: 0, signal: null, timedOut: false,
+      stdout: "bounded stdout", stderr: "", stdoutTruncated: false, stderrTruncated: false,
+      artifactCount: 0, manifestPath: "artifacts/manifest.json",
+    },
+    github: {
+      taskId: "task-r9b-jingun",
+      issueUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/245",
+      doneCommentUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/245#issuecomment-done",
+      validation: { status: "completed", exitCode: 0, timedOut: false, artifactCount: 0 },
+      safetyState: { noLiveProviderSend: true, terminalAck: "requires_operator_receipt", providerSendIsReceiptEvidence: false },
+    },
+  };
+
+  const event = buildTerminalEvidenceEvent(
+    result,
+    {
+      id: "task-r9b-jingun",
+      payload: {
+        repo: "jinwon-int/a2a-docker-runner",
+        issueUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/245",
+        parentRoundId: "a2a-r9b-terminal-brief-activation-readiness-20260513T152714Z",
+        parentBroker: "seoseo",
+        originBroker: "gwakga",
+        brokerOfRecord: "seoseo",
+        terminalBrief: {
+          workerLabel: "jingun",
+          sequence: 6,
+          total: 7,
+          activationReadiness: {
+            decision: "GO_CANDIDATE",
+            rollbackPlanPath: "rollback/r9b-terminal-brief-activation.md",
+            abortPlanPath: "/root/unsafe-abort.md",
+          },
+        },
+      },
+    },
+    "jingun",
+    "2026-05-13T15:40:00.000Z",
+  );
+
+  assert.equal(event.alert.title, "A2A Terminal Brief 완료: jingun(6/7)");
+  assert.equal(event.terminalBrief?.ownership, "parent-broker-only");
+  assert.deepEqual(event.activationReadiness?.closeoutEvidenceOnly, {
+    allowedEvidenceKinds: ["PR", "Done", "Block"],
+    actualEvidenceKind: "Done",
+    prDoneBlockEvidencePresent: true,
+    budgetTimeoutMissingEvidenceBlocksActivation: false,
+  });
+  assert.equal(event.activationReadiness?.decision, "GO_CANDIDATE");
+  assert.deepEqual(event.activationReadiness?.parentAggregation, {
+    ownership: "parent-broker-only",
+    notificationOwner: "parent",
+    parentRoundId: "a2a-r9b-terminal-brief-activation-readiness-20260513T152714Z",
+    parentBroker: "seoseo",
+    originBroker: "gwakga",
+    brokerOfRecord: "seoseo",
+    progress: { sequence: 6, total: 7 },
+  });
+  assert.deepEqual(event.activationReadiness?.receiptAckBoundary, {
+    githubEvidenceIsTerminalAck: false,
+    githubEvidenceIsVisibilityReceipt: false,
+    providerSendIsReceiptEvidence: false,
+    terminalAckRequiresOperatorVisibleReceipt: true,
+    terminalAckPerformed: false,
+  });
+  assert.equal(event.activationReadiness?.activationRollback.operatorApprovalRequired, true);
+  assert.equal(event.activationReadiness?.activationRollback.activationExecuted, false);
+  assert.equal(event.activationReadiness?.activationRollback.rollbackPlanPath, "rollback/r9b-terminal-brief-activation.md");
+  assert.equal(event.activationReadiness?.activationRollback.abortPlanPath, "abort/terminal-brief-activation.md");
+  assert.ok(event.activationReadiness?.activationRollback.forbiddenWithoutFreshApproval.includes("live_provider_send"));
+  assert.ok(!JSON.stringify(event).includes("/root/unsafe-abort"));
+});
+
 test("buildTerminalEvidenceEvent: Terminal Brief title falls back safely when denominator is unknown", () => {
   const result: RawRunnerOutput = {
     ok: true, taskId: "task-nosuk-2", status: "completed", workDir: "/tmp/work",
