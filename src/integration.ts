@@ -56,6 +56,19 @@ export interface HandlerTaskPayload {
   worker?: string;
   runId?: string;
   traceId?: string;
+  /** Optional parent-round context for concise Terminal Brief titles. */
+  terminalBrief?: HandlerTerminalBriefPayload;
+  terminalBriefWorker?: string;
+  terminalBriefSequence?: string | number;
+  terminalBriefTotal?: string | number;
+}
+
+export interface HandlerTerminalBriefPayload {
+  worker?: string;
+  workerLabel?: string;
+  sequence?: string | number;
+  total?: string | number;
+  roundId?: string;
 }
 
 /** Minimal broker-task shape needed by the integration helpers. */
@@ -181,6 +194,8 @@ export interface TerminalEvidenceEvent {
     body: string;
     url?: string;
   };
+  /** Concise parent-round Terminal Brief title context. Parent broker sends; child brokers relay only. */
+  terminalBrief?: TerminalBriefContext;
   /** Short human-facing outcome reason; never contains raw runner logs. */
   reason?: string;
   testSummary: {
@@ -203,6 +218,23 @@ export interface TerminalEvidenceEvent {
   runnerBuild?: RunnerBuildMetadata;
   timestamps: {
     emittedAt: string;
+  };
+}
+
+export interface TerminalBriefContext {
+  schemaVersion: "a2a.runner.terminal-brief-context.v1";
+  /** Operator-facing concise title, e.g. "A2A Terminal Brief 완료: dungae(1/7)". */
+  title: string;
+  /** Stable worker/node label used in the title. */
+  worker: string;
+  /** Explicit ownership rule: only the initiating parent broker should send operator-facing Briefs. */
+  ownership: "parent-broker-only";
+  /** Optional initiating parent round/work-order id when supplied by the broker. */
+  roundId?: string;
+  /** Present only when both numerator and denominator are known and valid. */
+  progress?: {
+    sequence: number;
+    total: number;
   };
 }
 
@@ -533,6 +565,7 @@ export function buildTerminalEvidenceEvent(
     result.resultSummary?.githubCommentProjection ?? result.artifactManifest?.githubCommentProjection,
     eventId,
   );
+  const terminalBrief = buildTerminalBriefContext(task, worker, status, evidenceKind);
 
   return {
     schemaVersion: "a2a.runner.terminal-evidence.v1",
@@ -552,7 +585,8 @@ export function buildTerminalEvidenceEvent(
     blockUrl: evidence?.blockCommentUrl,
     startCommentUrl: evidence?.startCommentUrl,
     commentLedger: evidence?.commentLedger,
-    alert: buildTerminalAlert({ taskId, status, evidenceKind, worker, repo, issue, issueTitle, taskBrief, url, result, testSummary }),
+    alert: buildTerminalAlert({ taskId, status, evidenceKind, worker, repo, issue, issueTitle, taskBrief, url, result, testSummary, terminalBriefTitle: terminalBrief?.title }),
+    ...(terminalBrief ? { terminalBrief } : {}),
     reason: buildTerminalReason(result, evidenceKind),
     testSummary,
     ...(githubCommentProjection ? { githubCommentProjection } : {}),
@@ -891,6 +925,7 @@ function buildTerminalAlert(input: {
   url?: string;
   result: RawRunnerOutput;
   testSummary: { exitCode?: number | null; timedOut?: boolean; artifactCount?: number };
+  terminalBriefTitle?: string;
 }): { title: string; body: string; url?: string } {
   const icon = input.evidenceKind === "PR"
     ? "PR"
@@ -904,7 +939,7 @@ function buildTerminalAlert(input: {
             ? "Timeout"
             : "Needs review";
   const target = input.repo ?? input.issue ?? input.taskId;
-  const title = boundAlertPart(`A2A ${icon}: ${target}`, 96);
+  const title = input.terminalBriefTitle ?? boundAlertPart(`A2A ${icon}: ${target}`, 96);
   const bodyParts = [
     `task=${input.taskId}`,
     `worker=${input.worker}`,
@@ -924,6 +959,55 @@ function buildTerminalAlert(input: {
     body: boundAlertPart(bodyParts.join(" · "), 360),
     url: input.url,
   }) as { title: string; body: string; url?: string };
+}
+
+function buildTerminalBriefContext(
+  task: HandlerTask,
+  worker: string,
+  status: TerminalEvidenceStatus,
+  evidenceKind: TerminalEvidenceKind,
+): TerminalBriefContext | undefined {
+  const payload = task?.payload;
+  const brief = payload?.terminalBrief;
+  if (!brief && payload?.terminalBriefWorker == null && payload?.terminalBriefSequence == null && payload?.terminalBriefTotal == null) {
+    return undefined;
+  }
+
+  const workerLabel = safeEvidenceText(
+    brief?.workerLabel ?? brief?.worker ?? payload?.terminalBriefWorker ?? payload?.worker ?? worker,
+    48,
+  );
+  if (!workerLabel) return undefined;
+
+  const sequence = positiveInteger(brief?.sequence ?? payload?.terminalBriefSequence);
+  const total = positiveInteger(brief?.total ?? payload?.terminalBriefTotal);
+  const hasValidProgress = sequence !== undefined && total !== undefined && sequence <= total;
+  const subject = hasValidProgress ? `${workerLabel}(${sequence}/${total})` : workerLabel;
+  const title = boundAlertPart(`A2A Terminal Brief ${terminalBriefOutcomeLabel(status, evidenceKind)}: ${subject}`, 96);
+  const roundId = safeEvidenceText(brief?.roundId, 120);
+
+  return omitUndefined({
+    schemaVersion: "a2a.runner.terminal-brief-context.v1",
+    title,
+    worker: workerLabel,
+    ownership: "parent-broker-only",
+    roundId,
+    progress: hasValidProgress ? { sequence, total } : undefined,
+  }) as unknown as TerminalBriefContext;
+}
+
+function positiveInteger(value: string | number | undefined): number | undefined {
+  if (typeof value === "number") return Number.isInteger(value) && value > 0 ? value : undefined;
+  if (typeof value !== "string" || !/^\d+$/.test(value.trim())) return undefined;
+  const parsed = Number(value.trim());
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function terminalBriefOutcomeLabel(status: TerminalEvidenceStatus, kind: TerminalEvidenceKind): string {
+  if (status === "succeeded" || kind === "PR" || kind === "Done") return "완료";
+  if (kind === "TimedOut" || status === "cancelled") return "시간초과";
+  if (kind === "Block" || kind === "BudgetLimited" || status === "blocked") return "차단";
+  return "확인필요";
 }
 
 function compactIssueRef(issue?: string): string | undefined {
