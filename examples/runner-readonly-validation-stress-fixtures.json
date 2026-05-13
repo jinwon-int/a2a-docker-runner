@@ -1,0 +1,128 @@
+{
+  "schemaVersion": "a2a.runner.readonly-validation-stress-fixtures.v1",
+  "run": "a2a-stability-r7-20260513T101831Z",
+  "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/238",
+  "parentUrl": "https://github.com/jinwon-int/a2a-broker/issues/548",
+  "purpose": "Parity/stress coverage for read-only/libero validation lanes without production activation.",
+  "safetyState": {
+    "noProductionDeployOrRestart": true,
+    "noGatewayBrokerWorkerRestart": true,
+    "noLiveProviderSend": true,
+    "noTerminalAckReplay": true,
+    "noProductionDbMutation": true,
+    "terminalAck": "requires_operator_receipt",
+    "providerSendIsReceiptEvidence": false
+  },
+  "expectedGuards": {
+    "readOnlyBlockMarker": "error=read_only_validation_changed_repo",
+    "readOnlyPassMarker": "read_only_validation=passed",
+    "noChangeDoneMarker": "status=no_changes_allowed",
+    "forbiddenPrMarker": "error=new_pr_forbidden",
+    "bootstrapBlockMarker": "error=pre_pr_bootstrap_guard_blocked"
+  },
+  "cases": [
+    {
+      "name": "explicit readOnlyValidation patch lane allows no-change Done but blocks repo diffs before PR",
+      "task": {
+        "id": "readonly-explicit-238",
+        "intent": "propose_patch",
+        "message": "Run read-only validation and report evidence only.",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/238",
+          "title": "Team2 runner parity/stress fixtures for validation lanes",
+          "focus": "read-only validation",
+          "readOnlyValidation": true,
+          "requestedBy": "jingun",
+          "runId": "a2a-stability-r7-20260513T101831Z"
+        }
+      },
+      "expected": {
+        "mode": "github-propose-patch",
+        "readOnlyValidation": true,
+        "allowNoChanges": true,
+        "forbidNewPr": false,
+        "commentOnly": false,
+        "mustContain": [
+          "error=read_only_validation_changed_repo",
+          "read_only_validation=passed",
+          "status=no_changes_allowed",
+          "git diff --name-only",
+          "git status --porcelain",
+          "read_only_change=",
+          "error=pre_pr_bootstrap_guard_blocked"
+        ],
+        "mustOrderBefore": [
+          ["error=read_only_validation_changed_repo", "git push origin"],
+          ["error=read_only_validation_changed_repo", "gh pr create"],
+          ["BOOTSTRAP_BLOCK_PATHS", "git add -A"]
+        ]
+      }
+    },
+    {
+      "name": "validationOnly broker alias maps to the same read-only validation guard",
+      "task": {
+        "id": "readonly-alias-238",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/238",
+          "validationOnly": true,
+          "requestedBy": "jingun",
+          "runId": "a2a-stability-r7-20260513T101831Z"
+        }
+      },
+      "expected": {
+        "mode": "github-propose-patch",
+        "readOnlyValidation": true,
+        "allowNoChanges": true,
+        "forbidNewPr": false,
+        "commentOnly": false,
+        "mustContain": [
+          "error=read_only_validation_changed_repo",
+          "read_only_validation=passed",
+          "status=no_changes_allowed"
+        ],
+        "mustOrderBefore": [
+          ["error=read_only_validation_changed_repo", "git push origin"],
+          ["error=read_only_validation_changed_repo", "gh pr create"]
+        ]
+      }
+    },
+    {
+      "name": "github-verify is a PR-less libero validation lane",
+      "task": {
+        "id": "readonly-verify-238",
+        "intent": "verify",
+        "payload": {
+          "mode": "github-verify",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/238",
+          "focus": "libero validation",
+          "requestedBy": "jingun",
+          "runId": "a2a-stability-r7-20260513T101831Z"
+        }
+      },
+      "expected": {
+        "mode": "github-verify",
+        "readOnlyValidation": true,
+        "allowNoChanges": true,
+        "forbidNewPr": true,
+        "commentOnly": false,
+        "mustContain": [
+          "error=read_only_validation_changed_repo",
+          "error=new_pr_forbidden",
+          "status=no_changes_allowed"
+        ],
+        "mustNotContain": [
+          "gh pr create"
+        ],
+        "mustOrderBefore": [
+          ["error=read_only_validation_changed_repo", "error=new_pr_forbidden"]
+        ]
+      }
+    }
+  ]
+}
