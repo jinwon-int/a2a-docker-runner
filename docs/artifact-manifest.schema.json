@@ -98,7 +98,7 @@
         "blockUrl": { "type": "string", "format": "uri" },
         "branch": { "type": "string", "minLength": 1, "maxLength": 160 },
         "branchUrl": { "type": "string", "format": "uri" },
-        "failureCategory": { "enum": ["pr", "done", "block", "budget_limited", "timed_out", "missing_evidence", "succeeded_no_changes_with_done_evidence", "blocked_no_changes_with_evidence", "failed_infrastructure", "failed", "exit_nonzero", "no_changes_allowed"] }
+        "failureCategory": { "enum": ["pr", "done", "block", "budget_limited", "timed_out", "missing_evidence", "succeeded_no_changes_with_done_evidence", "blocked_no_changes_with_evidence", "failed_infrastructure", "failed", "exit_nonzero", "resource_limited", "no_changes_allowed"] }
       }
     },
     "githubCommentProjection": {
