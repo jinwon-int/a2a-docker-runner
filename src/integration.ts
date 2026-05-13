@@ -41,6 +41,9 @@ export interface HandlerTaskPayload {
   noNewPr?: boolean;
   commentOnly?: boolean;
   evidenceOnly?: boolean;
+  /** Read-only validation/libero lane: run validation but fail closed on repo diffs and allow Done evidence without PR. */
+  readOnlyValidation?: boolean;
+  validationOnly?: boolean;
   /** When true, the no-changes guard must not fail the task.
    *  The runner accepts terminal evidence without PR for audit/preflight/libero lanes.
    *  Auto-set by github-verify mode. */
@@ -362,7 +365,14 @@ export function buildRunnerTaskFromHandlerPayload(
     existingPrNumber: task?.payload?.existingPrNumber ?? task?.payload?.prNumber,
     forbidNewPr: isVerifyMode || Boolean(task?.payload?.forbidNewPr ?? task?.payload?.noNewPr),
     commentOnly: isVerifyMode ? false : Boolean(task?.payload?.commentOnly ?? task?.payload?.evidenceOnly),
-    allowNoChanges: isVerifyMode ? true : (task?.payload?.allowNoChanges ?? undefined),
+    allowNoChanges: isVerifyMode
+      ? true
+      : task?.payload?.allowNoChanges === true ||
+          task?.payload?.readOnlyValidation === true ||
+          task?.payload?.validationOnly === true
+        ? true
+        : undefined,
+    readOnlyValidation: isVerifyMode || Boolean(task?.payload?.readOnlyValidation ?? task?.payload?.validationOnly),
     timeoutMs:
       !isNaN(envTimeoutMs)
         ? envTimeoutMs

@@ -293,6 +293,35 @@ test("buildRunnerTaskFromHandlerPayload: explicit allowNoChanges in payload flow
   assert.equal(result.commentOnly, false);
 });
 
+test("buildRunnerTaskFromHandlerPayload: read-only validation lanes allow no-change evidence and guard diffs", () => {
+  const task: HandlerTask = {
+    id: "task-readonly-validation",
+    intent: "propose_patch",
+    payload: {
+      mode: "github-propose-patch",
+      repo: "jinwon-int/test-repo",
+      readOnlyValidation: true,
+    },
+  };
+  const result = buildRunnerTaskFromHandlerPayload(task, baseEnv);
+
+  assert.equal(result.readOnlyValidation, true);
+  assert.equal(result.allowNoChanges, true);
+  assert.equal(result.commentOnly, false);
+});
+
+test("buildRunnerTaskFromHandlerPayload: validationOnly is a broker alias for read-only validation", () => {
+  const task: HandlerTask = {
+    id: "task-validation-only",
+    intent: "propose_patch",
+    payload: { mode: "github-propose-patch", repo: "jinwon-int/test-repo", validationOnly: true },
+  };
+  const result = buildRunnerTaskFromHandlerPayload(task, baseEnv);
+
+  assert.equal(result.readOnlyValidation, true);
+  assert.equal(result.allowNoChanges, true);
+});
+
 test("buildRunnerTaskFromHandlerPayload: payload timeout used when env timeout is unset", () => {
   const task: HandlerTask = {
     id: "task-payload-timeout",

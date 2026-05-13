@@ -5,10 +5,12 @@ const GITHUB_REPO_SHORTHAND = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 export function normalizeTask(task: RunnerTask): NormalizedRunnerTask {
   const repos = normalizeRepos(task);
   const primaryRepo = repos.find((repo) => repo.primary) ?? repos[0];
-  const commands = task.commands?.length ? task.commands : defaultCommands(task, primaryRepo);
+  const allowNoChanges = task.allowNoChanges === true || task.readOnlyValidation === true;
+  const normalizedTask = { ...task, allowNoChanges };
+  const commands = task.commands?.length ? task.commands : defaultCommands(normalizedTask, primaryRepo);
 
   return {
-    ...task,
+    ...normalizedTask,
     repos,
     commands,
   };
@@ -163,6 +165,25 @@ function buildDefaultPatchCommands(task: RunnerTask, primaryRepo: RunnerRepo): s
     `printf 'start_comment=posted\\n' | tee -a /work/artifacts/summary.txt`,
   ].join("\n") : "";
 
+  const readOnlyValidationGuardBlock = task.readOnlyValidation ? [
+    `# Read-only validation/libero lanes may inspect and test, but must not`,
+    `# produce repository changes or create patch-lane PR evidence.`,
+    `READONLY_CHANGED_PATHS="$( {`,
+    `  git status --porcelain | sed -E 's/^...//'`,
+    `  git diff --name-only "origin/${baseBranch}...HEAD"`,
+    `} | sed '/^$/d' | sort -u )"`,
+    `if [ -n "$READONLY_CHANGED_PATHS" ]; then`,
+    `  printf 'error=read_only_validation_changed_repo\\n' | tee -a /work/artifacts/summary.txt`,
+    `  printf 'read_only_validation=blocked\\n' | tee -a /work/artifacts/summary.txt`,
+    `  printf 'Read-only validation task produced repository changes; refusing to create a PR.\\n' | tee -a /work/artifacts/patch-command.log`,
+    `  printf 'Files detected (repo-relative):\\n' | tee -a /work/artifacts/patch-command.log`,
+    `  printf '%s\\n' "$READONLY_CHANGED_PATHS" | tee -a /work/artifacts/patch-command.log`,
+    `  printf '%s\\n' "$READONLY_CHANGED_PATHS" | sed '/^$/d; s#^#read_only_change=#' >> /work/artifacts/summary.txt`,
+    `  exit 4`,
+    `fi`,
+    `printf 'read_only_validation=passed\\n' | tee -a /work/artifacts/summary.txt`,
+  ].join("\n") : "";
+
   const prePrBootstrapGuardBlock = [
     `# Re-run the bootstrap guard immediately before git add/commit/push.`,
     `# The container-level post-guard is too late for PR safety because the`,
@@ -270,6 +291,7 @@ function buildDefaultPatchCommands(task: RunnerTask, primaryRepo: RunnerRepo): s
     `    git checkout "$BRANCH"`,
     `  fi`,
     `fi`,
+    readOnlyValidationGuardBlock,
     prePrBootstrapGuardBlock,
     `EXISTING_PR_URL="$(grep -RhoE 'https://github.com/[^[:space:]]+/pull/[0-9]+' /work/artifacts 2>/dev/null | tail -n 1 || true)"`,
     `# Commit and create PR if changes exist or the agent already committed.`,
