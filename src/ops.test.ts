@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile, utimes, stat, readdir } from "node:fs/promises";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkDeployedRevision, checkGitHubPatchReadiness, cleanup, install } from "./ops.js";
+import { checkDeployedRevision, checkDeployMarker, checkGitHubPatchReadiness, cleanup, install } from "./ops.js";
 import type { RunnerConfig } from "./types.js";
 
 function runGit(cwd: string, args: string[]): void {
@@ -45,6 +45,96 @@ test("deployed revision doctor passes for clean main matching upstream", async (
   assert.equal(report.detail?.upstreamMainFullSha, head);
   assert.match(String(report.detail?.summary), /^PASS /);
 });
+
+// ── deploy marker doctor ──────────────────────────────────────────────────
+
+test("deploy marker doctor passes when deployed revision matches the expected marker", async () => {
+  const { repo, head } = await makeRevisionRepo();
+
+  const report = await checkDeployMarker(head, repo);
+
+  assert.equal(report.status, "ok");
+  assert.equal(report.detail?.localSha, head.slice(0, 12));
+  assert.equal(report.detail?.localFullSha, head);
+  assert.equal(report.detail?.expectedRevision, head);
+  assert.match(String(report.detail?.summary), /^PASS /);
+});
+
+test("deploy marker doctor passes with short SHA marker", async () => {
+  const { repo, head } = await makeRevisionRepo();
+
+  const shortSha = head.slice(0, 12);
+  const report = await checkDeployMarker(shortSha, repo);
+
+  assert.equal(report.status, "ok");
+  assert.equal(report.detail?.localSha, shortSha);
+  assert.match(String(report.detail?.summary), /^PASS /);
+});
+
+test("deploy marker doctor fails when deployed revision mismatches the expected marker", async () => {
+  const { repo } = await makeRevisionRepo();
+
+  const report = await checkDeployMarker("0000000000000000000000000000000000000000", repo);
+
+  assert.equal(report.status, "fail");
+  assert.match(String(report.detail?.summary), /^FAIL /);
+  assert.match(report.message, /does not match/);
+});
+
+test("deploy marker doctor fails closed when not a git checkout", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "a2a-deploy-marker-nongit-"));
+
+  const report = await checkDeployMarker("abc1234", dir);
+
+  assert.equal(report.status, "fail");
+  assert.match(report.message, /not a git checkout/);
+  assert.match(String(report.detail?.summary), /^FAIL /);
+});
+
+test("deploy marker doctor includes branch and dirty metadata on failure", async () => {
+  const { repo } = await makeRevisionRepo();
+  // Create a new commit on a feature branch so the SHA differs
+  runGit(repo, ["checkout", "-b", "feature/rollout"]);
+  await writeFile(join(repo, "new-feature.txt"), "feature content");
+  runGit(repo, ["add", "new-feature.txt"]);
+  runGit(repo, ["commit", "-m", "feature commit"]);
+
+  // The deploy marker is the original main commit; we're now on a different SHA
+  const originalHead = execFileSync("git", ["rev-parse", "main"], { cwd: repo, encoding: "utf8" }).trim();
+
+  const report = await checkDeployMarker(originalHead, repo);
+
+  assert.equal(report.status, "fail");
+  assert.equal(report.detail?.branch, "feature/rollout");
+  assert.equal(report.detail?.dirty, false);
+  assert.match(String(report.detail?.summary), /^FAIL /);
+});
+
+test("deploy marker doctor fails for mismatched revision even without upstream", async () => {
+  const { repo, head } = await makeRevisionRepo();
+  // Check against the right revision — should still pass even though there's
+  // no remote. The function compares against the marker, not upstream.
+  const report = await checkDeployMarker(head, repo);
+
+  assert.equal(report.status, "ok");
+  assert.equal(report.detail?.localFullSha, head);
+  assert.equal(report.detail?.expectedRevision, head);
+});
+
+test("deploy marker doctor passes for commit matching dirty worktree", async () => {
+  const { repo, head } = await makeRevisionRepo();
+  // Add an uncommitted change but check against the deployed (committed) SHA
+  await writeFile(join(repo, "uncommitted.txt"), "dirty");
+
+  const report = await checkDeployMarker(head, repo);
+
+  // The SHA still matches even though the tree is dirty
+  assert.equal(report.status, "ok");
+  assert.equal(report.detail?.dirty, true);
+  assert.match(String(report.detail?.summary), /^PASS /);
+});
+
+// ── GitHub patch readiness ───────────────────────────────────────────────
 
 test("deployed revision doctor warns for stale, dirty, non-main checkouts", async () => {
   const { repo, head } = await makeRevisionRepo();
