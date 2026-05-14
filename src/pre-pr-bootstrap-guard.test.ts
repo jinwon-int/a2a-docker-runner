@@ -284,6 +284,33 @@ test("guard script reports all banned files at once", () => {
   }
 });
 
+test("guard script blocks bootstrap files copied into artifact evidence", () => {
+  const dir = mkdtempSync(join(tmpdir(), "guard-artifact-repo-"));
+  const artifacts = mkdtempSync(join(tmpdir(), "guard-artifact-evidence-"));
+  try {
+    writeFileSync(join(dir, "README.md"), "# clean repo");
+    writeFileSync(join(artifacts, "AGENTS.md"), "# copied runtime context");
+    mkdirSync(join(artifacts, ".openclaw"), { recursive: true });
+    writeFileSync(join(artifacts, ".openclaw", "state.json"), "{}");
+
+    const result = spawnSync(process.execPath, [GUARD_SCRIPT, "--repo-dir", dir, "--artifacts-dir", artifacts], {
+      encoding: "utf8",
+      timeout: 5000,
+    });
+
+    assert.equal(result.status, 1);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.ok, false);
+    assert.ok(output.offendingPaths.includes("artifacts/AGENTS.md"), JSON.stringify(output.offendingPaths));
+    assert.ok(output.offendingPaths.includes("artifacts/.openclaw/state.json"), JSON.stringify(output.offendingPaths));
+    assert.ok(!result.stdout.includes(dir), "guard evidence must not leak host-specific repo paths");
+    assert.ok(!result.stdout.includes(artifacts), "guard evidence must not leak host-specific artifact paths");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(artifacts, { recursive: true, force: true });
+  }
+});
+
 test("guard script exits 2 on missing repo-dir", () => {
   const result = spawnSync(process.execPath, [GUARD_SCRIPT], {
     encoding: "utf8",
