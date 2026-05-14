@@ -38,6 +38,33 @@ a2a-docker-runner
 
 The built-in `openclaw-plugin-a2a-dev` preset clones `jinwon-int/openclaw-plugin-a2a` and runs its normal install/test path. More complex jobs should use explicit `repos` and `commands` so each task declares exactly what it needs.
 
+## Deployment marker (`.deploy-source-sha`)
+
+After deployment, the runner checkout may contain a `.deploy-source-sha` file that
+records the deployed commit SHA. This file is an expected deployment artifact, not
+a sign of workspace drift.
+
+The `doctor` command and deploy validation in `checkDeployedRevision`
+(`src/ops.ts`) explicitly filter `.deploy-source-sha` from the dirty-worktree
+detection logic:
+
+1. `git status --porcelain` output is parsed per-line; lines mentioning
+   `.deploy-source-sha` are excluded from the dirty flag.
+2. If `.deploy-source-sha` is detected in the porcelain output, a
+   `deploymentMarker: true` field is included in the check detail so operators
+   can see it was recognized.
+3. Real untracked or modified source files (anything besides
+   `.deploy-source-sha`) still trigger a normal dirty-worktree warning.
+
+This means:
+
+| Worktree state | dirty flag | deploymentMarker | doctor status |
+|---|---|---|---|
+| Clean main | `false` | `false` | `ok` |
+| `.deploy-source-sha` only | `false` | `true` | `ok` |
+| `.deploy-source-sha` + real dirty file | `true` | `true` | `warn` |
+| Real dirty files only (no marker) | `true` | `false` | `warn` |
+
 ## Non-goals for MVP
 
 - replacing the broker
