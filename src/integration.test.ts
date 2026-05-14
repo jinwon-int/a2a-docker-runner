@@ -1426,6 +1426,59 @@ test("buildTerminalEvidenceEvent: preserves R12 flat parent metadata and handoff
   });
 });
 
+test("buildTerminalEvidenceEvent: preserves R13 Team2 jingun parent-owned compact title", () => {
+  const result: RawRunnerOutput = {
+    ok: true, taskId: "a2a-r13-terminal-brief-realround-20260514T013556Z-06-jingun", status: "completed", workDir: "/tmp/work",
+    stdout: "raw log omitted", stderr: "", artifacts: [],
+    resultSummary: {
+      exitCode: 0, signal: null, timedOut: false,
+      stdout: "bounded stdout", stderr: "", stdoutTruncated: false, stderrTruncated: false,
+      artifactCount: 0, manifestPath: "artifacts/manifest.json",
+    },
+    github: { doneCommentUrl: "https://github.com/jinwon-int/a2a-docker-runner/issues/251#issuecomment-6" },
+  };
+
+  const event = buildTerminalEvidenceEvent(
+    result,
+    {
+      id: "a2a-r13-terminal-brief-realround-20260514T013556Z-06-jingun",
+      payload: {
+        repo: "jinwon-int/a2a-docker-runner",
+        issue: "251",
+        worker: "jingun",
+        parentRoundId: "a2a-r13-terminal-brief-realround-20260514T013556Z",
+        originBrokerId: "seoseo",
+        parentRoundTotal: 7,
+        terminalBriefSequence: 6,
+        crossBrokerHandoff: {
+          parentRoundId: "a2a-r13-terminal-brief-realround-20260514T013556Z",
+          originBrokerId: "seoseo",
+          handoffBrokerId: "gwakga",
+        },
+      },
+    },
+    "jingun",
+    "2026-05-14T01:35:56.000Z",
+  );
+
+  assert.equal(event.alert.title, "A2A Terminal Brief 완료: jingun(6/7)");
+  assert.equal(event.terminalBrief?.ownership, "parent-broker-only");
+  assert.equal(event.terminalBrief?.parentRoundId, "a2a-r13-terminal-brief-realround-20260514T013556Z");
+  assert.equal(event.terminalBrief?.parentBroker, "seoseo");
+  assert.equal(event.terminalBrief?.originBrokerId, "seoseo");
+  assert.equal(event.terminalBrief?.originBroker, "gwakga");
+  assert.deepEqual(event.terminalBrief?.progress, { sequence: 6, total: 7 });
+  assert.deepEqual(event.terminalBrief?.crossBrokerHandoff, {
+    parentRoundId: "a2a-r13-terminal-brief-realround-20260514T013556Z",
+    originBrokerId: "seoseo",
+    handoffBrokerId: "gwakga",
+  });
+  assert.ok(!event.alert.title.includes("a2a-r13-terminal-brief-realround"));
+  assert.ok(!event.alert.title.includes("seoseo"));
+  assert.equal(event.issueUrl, "https://github.com/jinwon-int/a2a-docker-runner/issues/251");
+  assert.ok(event.alert.body.includes("issue=jinwon-int/a2a-docker-runner#2"));
+});
+
 test("buildTerminalEvidenceEvent: Terminal Brief title falls back safely when denominator is unknown", () => {
   const result: RawRunnerOutput = {
     ok: true, taskId: "task-nosuk-2", status: "completed", workDir: "/tmp/work",
