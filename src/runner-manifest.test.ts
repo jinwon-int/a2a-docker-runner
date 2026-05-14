@@ -249,6 +249,7 @@ test("buildRunnerEvidenceHints recovers Block URL from non-zero GitHub evidence 
       worker: "worker-a",
       issueTitle: "Recovery proof",
       outcome: "block",
+      startCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-111",
       blockCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-123",
       branch: "fix/issue-5",
       validation: { status: "failed", exitCode: 2, signal: null, timedOut: false, artifactCount: 0 },
@@ -258,6 +259,7 @@ test("buildRunnerEvidenceHints recovers Block URL from non-zero GitHub evidence 
   assert.deepEqual(hints, {
     schemaVersion: "a2a.runner.evidence-hints.v1",
     issueUrl: "https://github.com/jinwon-int/repo/issues/5",
+    startCommentUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-111",
     blockUrl: "https://github.com/jinwon-int/repo/issues/5#issuecomment-123",
     branch: "fix/issue-5",
     branchUrl: "https://github.com/jinwon-int/repo/tree/fix/issue-5",
