@@ -376,6 +376,36 @@ test("buildRunnerTaskFromHandlerPayload: explicit repo path with all fields", ()
   assert.equal(result.requestedBy, "bangtong");
 });
 
+test("buildRunnerTaskFromHandlerPayload: preserves R12 parent and handoff metadata", () => {
+  const task: HandlerTask = {
+    id: "task-r12-handoff",
+    intent: "propose_patch",
+    payload: {
+      mode: "github-propose-patch",
+      repo: "jinwon-int/a2a-docker-runner",
+      parentRoundId: "a2a-r12-origin-terminal-brief-guard-20260513T235116Z",
+      originBrokerId: "seoseo",
+      parentRoundTotal: "7",
+      crossBrokerHandoff: {
+        parentRoundId: "a2a-r12-origin-terminal-brief-guard-20260513T235116Z",
+        originBrokerId: "seoseo",
+        handoffBrokerId: "gwakga",
+      },
+    },
+  };
+
+  const result = buildRunnerTaskFromHandlerPayload(task, baseEnv);
+
+  assert.equal(result.parentRoundId, "a2a-r12-origin-terminal-brief-guard-20260513T235116Z");
+  assert.equal(result.originBrokerId, "seoseo");
+  assert.equal(result.parentRoundTotal, 7);
+  assert.deepEqual(result.crossBrokerHandoff, {
+    parentRoundId: "a2a-r12-origin-terminal-brief-guard-20260513T235116Z",
+    originBrokerId: "seoseo",
+    handoffBrokerId: "gwakga",
+  });
+});
+
 test("buildRunnerTaskFromHandlerPayload: constructs issueUrl from repo + issue number", () => {
   const task: HandlerTask = {
     id: "task-ghi",
@@ -1284,6 +1314,7 @@ test("buildTerminalEvidenceEvent: renders concise parent-round Terminal Brief pr
     ownership: "parent-broker-only",
     roundId: "a2a-concise-brief-parent-seoseo-20260513T054937Z",
     parentRoundId: "a2a-concise-brief-parent-seoseo-20260513T054937Z",
+    parentRoundTotal: 7,
     progress: { sequence: 1, total: 7 },
   });
   assert.equal(event.worker, "fallback-node");
@@ -1331,10 +1362,68 @@ test("buildTerminalEvidenceEvent: preserves parent broker aggregation metadata w
     parentBroker: "seoseo",
     originBroker: "gwakga",
     brokerOfRecord: "seoseo",
+    parentRoundTotal: 7,
     progress: { sequence: 6, total: 7 },
   });
   assert.ok(!event.alert.title.includes("seoseo"));
   assert.ok(!event.alert.title.includes("a2a-r9-concise-brief-runtime"));
+});
+
+test("buildTerminalEvidenceEvent: preserves R12 flat parent metadata and handoff context", () => {
+  const result: RawRunnerOutput = {
+    ok: true, taskId: "task-r12-jingun", status: "completed", workDir: "/tmp/work",
+    stdout: "raw log omitted", stderr: "", artifacts: [],
+    resultSummary: {
+      exitCode: 0, signal: null, timedOut: false,
+      stdout: "bounded stdout", stderr: "", stdoutTruncated: false, stderrTruncated: false,
+      artifactCount: 0, manifestPath: "artifacts/manifest.json",
+    },
+    github: { prUrl: "https://github.com/jinwon-int/repo/pull/249" },
+  };
+
+  const event = buildTerminalEvidenceEvent(
+    result,
+    {
+      id: "task-r12-jingun",
+      payload: {
+        repo: "jinwon-int/repo",
+        issue: "249",
+        worker: "jingun",
+        parentRoundId: "a2a-r12-origin-terminal-brief-guard-20260513T235116Z",
+        originBrokerId: "seoseo",
+        parentRoundTotal: 7,
+        terminalBriefSequence: 2,
+        crossBrokerHandoff: {
+          parentRoundId: "a2a-r12-origin-terminal-brief-guard-20260513T235116Z",
+          originBrokerId: "seoseo",
+          handoffBrokerId: "gwakga",
+        },
+      },
+    },
+    "jingun",
+    "2026-05-13T23:55:00.000Z",
+  );
+
+  assert.equal(event.alert.title, "A2A Terminal Brief 완료: jingun(2/7)");
+  assert.deepEqual(event.terminalBrief, {
+    schemaVersion: "a2a.runner.terminal-brief-context.v1",
+    title: "A2A Terminal Brief 완료: jingun(2/7)",
+    worker: "jingun",
+    ownership: "parent-broker-only",
+    roundId: "a2a-r12-origin-terminal-brief-guard-20260513T235116Z",
+    parentRoundId: "a2a-r12-origin-terminal-brief-guard-20260513T235116Z",
+    parentBroker: "seoseo",
+    originBroker: "gwakga",
+    originBrokerId: "seoseo",
+    brokerOfRecord: "seoseo",
+    parentRoundTotal: 7,
+    crossBrokerHandoff: {
+      parentRoundId: "a2a-r12-origin-terminal-brief-guard-20260513T235116Z",
+      originBrokerId: "seoseo",
+      handoffBrokerId: "gwakga",
+    },
+    progress: { sequence: 2, total: 7 },
+  });
 });
 
 test("buildTerminalEvidenceEvent: Terminal Brief title falls back safely when denominator is unknown", () => {

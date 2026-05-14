@@ -8,7 +8,7 @@
  * Broker claim/heartbeat logic is NOT touched by this module.
  */
 
-import type { ArtifactManifest, GitHubCommentProjection, GitHubEvidence, ResultSummary, RunnerBuildMetadata, RunnerTask } from "./types.js";
+import type { ArtifactManifest, GitHubCommentProjection, GitHubEvidence, ResultSummary, RunnerBuildMetadata, RunnerCrossBrokerHandoff, RunnerTask } from "./types.js";
 
 // ── Handler payload shape (what the broker sends to the worker) ────────────
 
@@ -61,6 +61,12 @@ export interface HandlerTaskPayload {
   traceId?: string;
   /** Parent-broker aggregation id for concise cross-broker Terminal Brief rounds. */
   parentRoundId?: string;
+  /** Broker that owns/finalizes the parent round; alias used by R12 broker metadata. */
+  originBrokerId?: string;
+  /** Expected number of children in the parent round; alias for Terminal Brief total. */
+  parentRoundTotal?: string | number;
+  /** Cross-broker handoff routing context for delegated children. */
+  crossBrokerHandoff?: RunnerCrossBrokerHandoff;
   /** Initiating/parent broker that owns operator-facing Terminal Brief sends. */
   parentBroker?: string;
   /** Broker where the child task originated before projection to the parent. */
@@ -84,6 +90,12 @@ export interface HandlerTerminalBriefPayload {
   parentBroker?: string;
   originBroker?: string;
   brokerOfRecord?: string;
+  /** Broker that owns/finalizes the parent round; alias used by R12 broker metadata. */
+  originBrokerId?: string;
+  /** Expected number of children in the parent round; alias for total. */
+  parentRoundTotal?: string | number;
+  /** Cross-broker handoff routing context for delegated children. */
+  crossBrokerHandoff?: RunnerCrossBrokerHandoff;
 }
 
 /** Minimal broker-task shape needed by the integration helpers. */
@@ -252,8 +264,14 @@ export interface TerminalBriefContext {
   parentBroker?: string;
   /** Origin broker for projected handoff children. */
   originBroker?: string;
+  /** Broker that owns/finalizes the parent round; preserved for R12 parity. */
+  originBrokerId?: string;
   /** Broker of record for routing and parent aggregation. */
   brokerOfRecord?: string;
+  /** Expected number of children in the parent round, preserved alongside progress.total. */
+  parentRoundTotal?: number;
+  /** Cross-broker handoff routing context for delegated children. */
+  crossBrokerHandoff?: RunnerCrossBrokerHandoff;
   /** Present only when both numerator and denominator are known and valid. */
   progress?: {
     sequence: number;
@@ -381,6 +399,16 @@ export function buildRunnerTaskFromHandlerPayload(
     requestedBy: safeEvidenceText(task?.payload?.requestedBy ?? task?.payload?.worker, 80),
     runId: safeEvidenceText(task?.payload?.runId, 120),
     traceId: safeEvidenceText(task?.payload?.traceId, 120),
+    parentRoundId: safeEvidenceText(
+      task?.payload?.parentRoundId ?? task?.payload?.terminalBrief?.parentRoundId ?? task?.payload?.terminalBrief?.roundId ?? task?.payload?.crossBrokerHandoff?.parentRoundId,
+      120,
+    ),
+    originBrokerId: safeEvidenceText(
+      task?.payload?.originBrokerId ?? task?.payload?.terminalBrief?.originBrokerId ?? task?.payload?.crossBrokerHandoff?.originBrokerId,
+      80,
+    ),
+    parentRoundTotal: positiveInteger(task?.payload?.parentRoundTotal ?? task?.payload?.terminalBrief?.parentRoundTotal ?? task?.payload?.terminalBriefTotal ?? task?.payload?.terminalBrief?.total),
+    crossBrokerHandoff: sanitizeCrossBrokerHandoff(task?.payload?.crossBrokerHandoff ?? task?.payload?.terminalBrief?.crossBrokerHandoff),
     existingPrUrl: normalizeExistingPrUrl(task, repo),
     existingPrNumber: task?.payload?.existingPrNumber ?? task?.payload?.prNumber,
     forbidNewPr: isVerifyMode || Boolean(task?.payload?.forbidNewPr ?? task?.payload?.noNewPr),
@@ -1039,9 +1067,21 @@ function buildTerminalBriefContext(
 ): TerminalBriefContext | undefined {
   const payload = task?.payload;
   const brief = payload?.terminalBrief;
-  if (!brief && payload?.terminalBriefWorker == null && payload?.terminalBriefSequence == null && payload?.terminalBriefTotal == null) {
-    return undefined;
-  }
+  const handoff = sanitizeCrossBrokerHandoff(brief?.crossBrokerHandoff ?? payload?.crossBrokerHandoff);
+  const parentRoundId = safeEvidenceText(brief?.parentRoundId ?? payload?.parentRoundId ?? brief?.roundId ?? handoff?.parentRoundId, 120);
+  const originBrokerId = safeEvidenceText(brief?.originBrokerId ?? payload?.originBrokerId ?? handoff?.originBrokerId, 80);
+  const total = positiveInteger(brief?.total ?? payload?.terminalBriefTotal ?? brief?.parentRoundTotal ?? payload?.parentRoundTotal);
+  const hasTerminalBriefInput = Boolean(
+    brief ||
+      payload?.terminalBriefWorker != null ||
+      payload?.terminalBriefSequence != null ||
+      payload?.terminalBriefTotal != null ||
+      payload?.parentRoundId != null ||
+      payload?.originBrokerId != null ||
+      payload?.parentRoundTotal != null ||
+      payload?.crossBrokerHandoff != null,
+  );
+  if (!hasTerminalBriefInput) return undefined;
 
   const workerLabel = safeEvidenceText(
     brief?.workerLabel ?? brief?.worker ?? payload?.terminalBriefWorker ?? payload?.worker ?? worker,
@@ -1050,15 +1090,13 @@ function buildTerminalBriefContext(
   if (!workerLabel) return undefined;
 
   const sequence = positiveInteger(brief?.sequence ?? payload?.terminalBriefSequence);
-  const total = positiveInteger(brief?.total ?? payload?.terminalBriefTotal);
   const hasValidProgress = sequence !== undefined && total !== undefined && sequence <= total;
   const subject = hasValidProgress ? `${workerLabel}(${sequence}/${total})` : workerLabel;
   const title = boundAlertPart(`A2A Terminal Brief ${terminalBriefOutcomeLabel(status, evidenceKind)}: ${subject}`, 96);
-  const parentRoundId = safeEvidenceText(brief?.parentRoundId ?? payload?.parentRoundId ?? brief?.roundId, 120);
   const roundId = safeEvidenceText(brief?.roundId ?? parentRoundId, 120);
-  const parentBroker = safeEvidenceText(brief?.parentBroker ?? payload?.parentBroker, 80);
-  const originBroker = safeEvidenceText(brief?.originBroker ?? payload?.originBroker, 80);
-  const brokerOfRecord = safeEvidenceText(brief?.brokerOfRecord ?? payload?.brokerOfRecord, 80);
+  const parentBroker = safeEvidenceText(brief?.parentBroker ?? payload?.parentBroker ?? originBrokerId, 80);
+  const originBroker = safeEvidenceText(brief?.originBroker ?? payload?.originBroker ?? handoff?.handoffBrokerId, 80);
+  const brokerOfRecord = safeEvidenceText(brief?.brokerOfRecord ?? payload?.brokerOfRecord ?? parentBroker, 80);
 
   return omitUndefined({
     schemaVersion: "a2a.runner.terminal-brief-context.v1",
@@ -1069,9 +1107,22 @@ function buildTerminalBriefContext(
     parentRoundId,
     parentBroker,
     originBroker,
+    originBrokerId,
     brokerOfRecord,
+    parentRoundTotal: total,
+    crossBrokerHandoff: handoff,
     progress: hasValidProgress ? { sequence, total } : undefined,
   }) as unknown as TerminalBriefContext;
+}
+
+function sanitizeCrossBrokerHandoff(value: RunnerCrossBrokerHandoff | undefined): RunnerCrossBrokerHandoff | undefined {
+  if (!value) return undefined;
+  const handoff = omitUndefined({
+    parentRoundId: safeEvidenceText(value.parentRoundId, 120),
+    originBrokerId: safeEvidenceText(value.originBrokerId, 80),
+    handoffBrokerId: safeEvidenceText(value.handoffBrokerId, 80),
+  }) as RunnerCrossBrokerHandoff;
+  return Object.keys(handoff).length ? handoff : undefined;
 }
 
 function positiveInteger(value: string | number | undefined): number | undefined {

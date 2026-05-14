@@ -398,12 +398,26 @@ export interface RunnerTask {
   runId?: string;
   /** Safe distributed trace identifier to carry into release-gate evidence when present. */
   traceId?: string;
+  /** Parent-broker aggregation id carried by child tasks for Terminal Brief parity. */
+  parentRoundId?: string;
+  /** Broker that owns/finalizes the parent round. */
+  originBrokerId?: string;
+  /** Expected number of children in the parent round. */
+  parentRoundTotal?: number;
+  /** Cross-broker handoff routing context, when this child was delegated. */
+  crossBrokerHandoff?: RunnerCrossBrokerHandoff;
   /** Optional bounded notification/receipt trace metadata supplied by broker/plugin surfaces. */
   receiptTrace?: RunnerReceiptTrace;
   /** Language hint for comment formatting (e.g. "ko"). */
   reportLanguage?: string;
   /** A2A broker node that requested the task. */
   requestedBy?: string;
+}
+
+export interface RunnerCrossBrokerHandoff {
+  parentRoundId?: string;
+  originBrokerId?: string;
+  handoffBrokerId?: string;
 }
 
 export interface NormalizedRunnerTask extends RunnerTask {
