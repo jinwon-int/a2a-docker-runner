@@ -1,0 +1,208 @@
+{
+  "$schema": "a2a-runner-terminal-evidence-r25-fixture-v1",
+  "description": "R25 terminal brief structured summary fixture. Validates stable summary fields (taskBrief, filesChanged, prUrl, issueUrl, validationCommands, status, riskNotes), compact alert body without raw logs, and artifact/evidence references available for audit.",
+  "round": "A2A Hardening Round 25",
+  "worker": "jingun",
+  "issue": "https://github.com/jinwon-int/a2a-docker-runner/issues/269",
+  "parentIssue": "https://github.com/jinwon-int/a2a-plane/issues/350",
+  "run": "a2a-r25-team2-terminal-brief-implementation-20260515T075717Z",
+  "activeTargets": ["jingun", "bangtong", "dungae", "sogyo", "nosuk"],
+  "excludeNodes": ["yukson"],
+  "emittedAt": "2026-05-15T08:00:00.000Z",
+  "scenarios": [
+    {
+      "name": "PR evidence with structured summary",
+      "handlerTask": {
+        "id": "r25-team2-pr-269",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "269",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/269",
+          "title": "R25 Terminal Brief implementation: structured summary fields",
+          "focus": "Implement stable summary fields (taskBrief, filesChanged, prUrl, issueUrl, validationCommands, status, riskNotes). Prevent raw logs in brief body.",
+          "acceptance": "All 594 existing tests pass; TerminalBrief emits filesChanged, risks, validationCommands; alert body omits raw logs"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "r25-team2-pr-269",
+        "status": "completed",
+        "workDir": "/synthetic/workdir/not-forwarded",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "synthetic raw stdout omitted from terminal brief body",
+        "stderr": "",
+        "artifacts": [
+          "src/integration.ts",
+          "src/integration.test.ts",
+          "examples/runner-terminal-evidence-r25-fixture.json"
+        ],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "npm run build && node --test: ok; 594 tests passed",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 3,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/269"
+        }
+      },
+      "expectedTerminalEvidence": {
+        "schemaVersion": "a2a.runner.terminal-evidence.v1",
+        "eventId": "a2a-terminal:r25-team2-pr-269:succeeded:PR:https://github.com/jinwon-int/a2a-docker-runner/pull/269",
+        "dedupeKey": "a2a-terminal:r25-team2-pr-269:succeeded:PR:https://github.com/jinwon-int/a2a-docker-runner/pull/269",
+        "taskId": "r25-team2-pr-269",
+        "status": "succeeded",
+        "evidenceKind": "PR",
+        "worker": "jingun",
+        "repo": "jinwon-int/a2a-docker-runner",
+        "issue": "https://github.com/jinwon-int/a2a-docker-runner/issues/269",
+        "issueTitle": "R25 Terminal Brief implementation: structured summary fields",
+        "profile": "not set",
+        "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/269",
+        "alert": {
+          "title": "A2A PR: jinwon-int/a2a-docker-runner",
+          "body": "task=r25-team2-pr-269 · worker=jingun · status=succeeded · exit=0 · timeout=false · artifacts=3 · issue=jinwon-int/a2a-docker-runner#269 · title=R25 Terminal Brief implementation: structured summary fields · changes=3 · reason=PR evidence is available for operator review.",
+          "url": "https://github.com/jinwon-int/a2a-docker-runner/pull/269"
+        },
+        "reason": "PR evidence is available for operator review.",
+        "testSummary": {
+          "label": "a2a-docker-runner completed; PR evidence; exit=0; timedOut=false; artifacts=3",
+          "exitCode": 0,
+          "timedOut": false,
+          "artifactCount": 3
+        },
+        "filesChanged": [
+          "src/integration.ts",
+          "src/integration.test.ts",
+          "examples/runner-terminal-evidence-r25-fixture.json"
+        ],
+        "risks": [],
+        "validationCommands": [
+          "a2a-docker-runner default patch pipeline"
+        ],
+        "timestamps": {
+          "emittedAt": "2026-05-15T08:00:00.000Z"
+        },
+        "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/269",
+        "safetyState": {
+          "noLiveProviderSend": true,
+          "terminalAck": "requires_operator_receipt",
+          "providerSendIsReceiptEvidence": false
+        }
+      }
+    },
+    {
+      "name": "Done evidence (comment-only) with structured summary",
+      "handlerTask": {
+        "id": "r25-team2-done-269",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "269",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/269",
+          "commentOnly": true,
+          "focus": "Post Done evidence to lane issue with structured terminal brief summary"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "r25-team2-done-269",
+        "status": "completed",
+        "workDir": "/synthetic/workdir/not-forwarded",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "synthetic raw stdout omitted from terminal brief body",
+        "stderr": "",
+        "artifacts": [],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "status=comment_only_done; 594 tests passed",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 0,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "doneCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/269#issuecomment-r25"
+        }
+      },
+      "expectedTerminalEvidence": {
+        "schemaVersion": "a2a.runner.terminal-evidence.v1",
+        "eventId": "a2a-terminal:r25-team2-done-269:succeeded:Done:https://github.com/jinwon-int/a2a-docker-runner/issues/269#issuecomment-r25",
+        "dedupeKey": "a2a-terminal:r25-team2-done-269:succeeded:Done:https://github.com/jinwon-int/a2a-docker-runner/issues/269#issuecomment-r25",
+        "taskId": "r25-team2-done-269",
+        "status": "succeeded",
+        "evidenceKind": "Done",
+        "worker": "jingun",
+        "repo": "jinwon-int/a2a-docker-runner",
+        "issue": "https://github.com/jinwon-int/a2a-docker-runner/issues/269",
+        "doneUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/269#issuecomment-r25",
+        "alert": {
+          "title": "A2A Done: jinwon-int/a2a-docker-runner",
+          "body": "task=r25-team2-done-269 · worker=jingun · status=succeeded · exit=0 · timeout=false · artifacts=0 · issue=jinwon-int/a2a-docker-runner#269 · risks=1 · reason=Done evidence was posted because no PR was needed.",
+          "url": "https://github.com/jinwon-int/a2a-docker-runner/issues/269#issuecomment-r25"
+        },
+        "reason": "Done evidence was posted because no PR was needed.",
+        "testSummary": {
+          "label": "a2a-docker-runner completed; Done evidence; exit=0; timedOut=false; artifacts=0",
+          "exitCode": 0,
+          "timedOut": false,
+          "artifactCount": 0
+        },
+        "filesChanged": [],
+        "risks": ["runner completed with Done evidence and no PR"],
+        "validationCommands": [
+          "a2a-docker-runner default patch pipeline"
+        ],
+        "timestamps": {
+          "emittedAt": "2026-05-15T08:00:00.000Z"
+        },
+        "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/269",
+        "safetyState": {
+          "noLiveProviderSend": true,
+          "terminalAck": "requires_operator_receipt",
+          "providerSendIsReceiptEvidence": false
+        }
+      }
+    }
+  ],
+  "safeEvidenceMustNotContain": [
+    "Authorization",
+    "Bearer",
+    "x-access-token",
+    "ghp_",
+    "ghs_",
+    "ghr_",
+    "stdout",
+    "stderr",
+    "/root/",
+    "/home/",
+    "/private/",
+    "AGENTS.md",
+    "SOUL.md",
+    "USER.md",
+    "TOOLS.md",
+    "HEARTBEAT.md",
+    "IDENTITY.md",
+    ".openclaw"
+  ],
+  "operatorRunbook": [
+    "1. This fixture validates structured terminal brief summary fields for R25.",
+    "2. Terminal alert body is compact; no raw logs, no private paths, no secrets.",
+    "3. filesChanged, risks, and validationCommands are stable, bounded fields.",
+    "4. Evidence URLs are synthetic and safe for dry-run.",
+    "5. Fail-closed check: no OpenClaw bootstrap files in branch."
+  ]
+}

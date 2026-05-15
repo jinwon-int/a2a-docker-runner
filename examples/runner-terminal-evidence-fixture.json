@@ -73,7 +73,7 @@
     "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/94",
     "alert": {
       "title": "A2A PR: jinwon-int/a2a-docker-runner",
-      "body": "task=round3-terminal-evidence-94 · worker=sogyo · status=succeeded · exit=0 · timeout=false · artifacts=2 · issue=jinwon-int/a2a-docker-runner#94 · title=Add runner-to-broker te...",
+      "body": "task=round3-terminal-evidence-94 · worker=sogyo · status=succeeded · exit=0 · timeout=false · artifacts=2 · issue=jinwon-int/a2a-docker-runner#94 · title=Add runner-to-broker terminal evidence integration fixture · changes=2 · reason=PR evidence is available for operator review.",
       "url": "https://github.com/jinwon-int/a2a-docker-runner/pull/94"
     },
     "reason": "PR evidence is available for operator review.",
@@ -95,6 +95,14 @@
     "timestamps": {
       "emittedAt": "2026-05-02T00:00:00.000Z"
     },
+    "filesChanged": [
+      "artifacts/summary.txt",
+      "artifacts/manifest.json"
+    ],
+    "risks": [],
+    "validationCommands": [
+      "a2a-docker-runner default patch pipeline"
+    ],
     "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/94",
     "safetyState": {
       "noLiveProviderSend": true,
