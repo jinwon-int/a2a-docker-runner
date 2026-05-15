@@ -1,0 +1,16 @@
+{
+  "id": "template-ci-check",
+  "intent": "propose_patch",
+  "mode": "github-propose-patch",
+  "repo": "jinwon-int/a2a-docker-runner",
+  "baseBranch": "main",
+  "template": "ci-check",
+  "templateVars": {
+    "NODE_VERSION": "22",
+    "CHECK_SCRIPT": "npm run check"
+  },
+  "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/261",
+  "reportLanguage": "ko",
+  "requestedBy": "seoseo",
+  "timeoutMs": 120000
+}
