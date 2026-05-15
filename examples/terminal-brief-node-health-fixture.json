@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "a2a.runner.terminal-brief-node-health.v1",
+  "run": "a2a-r25-team1-ops-readiness-terminal-brief-20260515T1656Z",
+  "parent": "a2a-plane#351",
+  "issue": "a2a-docker-runner#270",
+  "targetNode": "nosuk",
+  "expectedRevision": "f17072e",
+  "noLiveProviderSend": true,
+  "terminalOutboxAckPerformed": false,
+  "doctorReport": {
+    "dockerAvailable": true,
+    "taskRootExists": true,
+    "secretMountReadable": true,
+    "baseImagePresent": true,
+    "gitHubPatchReadiness": true,
+    "deployMarker": {
+      "revision": "f17072e",
+      "match": true
+    },
+    "failures": []
+  },
+  "checks": [
+    {
+      "name": "engine available (docker/podman)",
+      "passed": true,
+      "detail": "docker 27.1.1"
+    },
+    {
+      "name": "task root accessible",
+      "passed": true,
+      "detail": "/var/lib/a2a-runner/tasks readable"
+    },
+    {
+      "name": "secret mount readable",
+      "passed": true,
+      "detail": "/mnt/secrets/a2a-edge-secret exists"
+    },
+    {
+      "name": "base image present",
+      "passed": true,
+      "detail": "openclaw/a2a-runner:latest cached"
+    },
+    {
+      "name": "GitHub patch readiness",
+      "passed": true,
+      "detail": "gh CLI authenticated, default org reachable"
+    },
+    {
+      "name": "deploy marker matches expected revision",
+      "passed": true,
+      "detail": "f17072e"
+    }
+  ],
+  "safetyState": {
+    "noLiveProviderSend": true,
+    "providerSendIsReceiptEvidence": false,
+    "terminalAck": "not_performed",
+    "gatewayRestartPerformed": false,
+    "brokerRestartPerformed": false,
+    "dbMutationPerformed": false
+  }
+}
