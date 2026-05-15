@@ -237,3 +237,174 @@ export function sha256Json(value: unknown): string {
   const json = JSON.stringify(value, Object.keys(value as Record<string, unknown>).sort());
   return createHash("sha256").update(json).digest("hex");
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Built-in Terminal Brief Ops-Readiness Templates (Team1 nosuk lane, A2A R25)
+// Parent: a2a-docker-runner#270
+// Parent: a2a-plane#351
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Register all built-in templates at import time.
+ */
+(function registerBuiltinTemplates(): void {
+  // ── Node Health ──────────────────────────────────────────────────────────
+  // Pre/post Terminal Brief activation: runner node health check.
+  // No-live: no provider sends, Gateway restart, DB mutation, terminal ACK.
+  registerTemplate({
+    id: "terminal-brief-node-health",
+    version: "1.0.0",
+    label: "Terminal Brief Node Health Check",
+    mode: "github-propose-patch",
+    prompt: [
+      "You are Team1/Seoseo operations checking node health before or after Terminal Brief activation.",
+      "",
+      "Perform these no-live checks on the a2a-docker-runner checkout:",
+      "",
+      "1. ✅ Run `${DOCTOR_ARGS}` to validate engine (docker/podman), task root, secret mount, base image.",
+      "2. ✅ Run `node scripts/deploy-marker-doctor.mjs --expected-revision ${EXPECTED_REVISION}` to confirm deploy marker.",
+      "3. ✅ Verify the doctor report shows no failures (all checks pass).",
+      "4. ✅ Verify deploy marker matches the expected revision or produce Block evidence if it does not.",
+      "5. ✅ Confirm no provider send, Gateway/broker restart, DB mutation, or terminal ACK was performed.",
+      "",
+      "Safety gates:",
+      "- Do not restart Gateway, broker, or worker processes.",
+      "- Do not send live provider messages or ACK terminal outboxes.",
+      "- Do not mutate production databases.",
+      "- Do not change repository visibility or publish releases.",
+      "- Do not push, merge, or create PRs; this is a verification-only task.",
+      "",
+      "Target node: ${TARGET_NODE}",
+    ].join("\n"),
+    requiredVars: ["DOCTOR_ARGS", "EXPECTED_REVISION", "TARGET_NODE"],
+    optionalVars: {
+      DOCTOR_ARGS: "a2a-docker-runner doctor",
+    },
+    env: {
+      A2A_DOCKER_RUNNER_NO_LIVE: "1",
+    },
+  });
+
+  // ── Latency Diagnostics ──────────────────────────────────────────────────
+  // Pre/post Terminal Brief activation: latency threshold diagnostics.
+  registerTemplate({
+    id: "terminal-brief-latency-diagnostics",
+    version: "1.0.0",
+    label: "Terminal Brief Latency Diagnostics",
+    mode: "github-propose-patch",
+    prompt: [
+      "You are Team1/Seoseo operations running latency diagnostics before or after Terminal Brief activation.",
+      "",
+      "Perform these no-live checks on the a2a-docker-runner checkout:",
+      "",
+      "1. ✅ Validate latency thresholds: p95 <= ${P95_THRESHOLD_MS}ms, p99 <= ${P99_THRESHOLD_MS}ms over ${SAMPLE_SIZE} samples.",
+      "2. ✅ Verify repeated-latency diagnostic stages are present: persistenceSummary, hotEntityMirrorCounts, auditDiagnostics, requestPressure, jsonSerialization.",
+      "3. ✅ Confirm expensive diagnostics are cached or split (no live /health calls to a broker).",
+      "4. ✅ Verify diagnostics split candidates include ${DIAGNOSTICS_SPLIT_CANDIDATES}.",
+      "5. ✅ Report Block evidence if any threshold or diagnostic stage is missing or out of range.",
+      "6. ✅ Confirm no live broker /health calls, Gateway restart, provider send, DB mutation, or terminal ACK.",
+      "",
+      "This check is fixture/synthetic-only: it MUST NOT call a live broker endpoint.",
+      "",
+      "Safety gates:",
+      "- Do not restart Gateway, broker, or worker processes.",
+      "- Do not send live provider messages or ACK terminal outboxes.",
+      "- Do not mutate production databases.",
+      "- No live /health calls to a broker endpoint.",
+      "",
+      "Target node: ${TARGET_NODE}",
+      "Context run: ${RUN_ID}",
+    ].join("\n"),
+    requiredVars: ["TARGET_NODE", "RUN_ID"],
+    optionalVars: {
+      P95_THRESHOLD_MS: "500",
+      P99_THRESHOLD_MS: "500",
+      SAMPLE_SIZE: "100",
+      DIAGNOSTICS_SPLIT_CANDIDATES: "/health/diagnostics, /status",
+    },
+    env: {
+      A2A_DOCKER_RUNNER_NO_LIVE: "1",
+    },
+  });
+
+  // ── Session-Store Residue ───────────────────────────────────────────────
+  registerTemplate({
+    id: "terminal-brief-session-store-residue",
+    version: "1.0.0",
+    label: "Terminal Brief Session-Store Residue Check",
+    mode: "github-propose-patch",
+    prompt: [
+      "You are Team1/Seoseo operations checking OpenClaw session-store residue before or after Terminal Brief activation.",
+      "",
+      "Perform these no-live checks on the a2a-docker-runner checkout:",
+      "",
+      "1. ✅ Verify session store guard detects empty active-agent registries (${ACTIVE_AGENT_ID} sessions.json is not empty).",
+      "2. ✅ Verify session backup count (${MAX_BACKUP_COUNT}) is not exceeded.",
+      "3. ✅ Verify session backup bytes (${MAX_BACKUP_BYTES}) is not exceeded.",
+      "4. ✅ Report Block evidence if session store guard would block execution.",
+      "5. ✅ Confirm cleanup rehearsal runs without errors (dry-run mode).",
+      "6. ✅ Confirm no live provider send, Gateway restart, DB mutation, or terminal ACK.",
+      "",
+      "The session-store guard is embedded in the OpenClaw patch profile at src/config.ts; this template",
+      "validates that the guard triggers correctly without touching a live host session store.",
+      "",
+      "Safety gates:",
+      "- Do not restart Gateway, broker, or worker processes.",
+      "- Do not send live provider messages or ACK terminal outboxes.",
+      "- Do not mutate production databases.",
+      "- Do not copy or upload host session-store files.",
+      "",
+      "Target node: ${TARGET_NODE}",
+    ].join("\n"),
+    requiredVars: ["TARGET_NODE"],
+    optionalVars: {
+      ACTIVE_AGENT_ID: "main",
+      MAX_BACKUP_COUNT: "50",
+      MAX_BACKUP_BYTES: "134217728",
+    },
+    env: {
+      A2A_DOCKER_RUNNER_NO_LIVE: "1",
+    },
+  });
+
+  // ── Worker Readiness ────────────────────────────────────────────────────
+  // Pre/post Terminal Brief activation: full worker readiness gate.
+  registerTemplate({
+    id: "terminal-brief-worker-readiness",
+    version: "1.0.0",
+    label: "Terminal Brief Worker Readiness Gate",
+    mode: "github-propose-patch",
+    prompt: [
+      "You are Team1/Seoseo operations running the full worker readiness gate before or after Terminal Brief activation.",
+      "",
+      "Perform these no-live checks on the a2a-docker-runner checkout:",
+      "",
+      "1. ✅ Run the node health check (template: terminal-brief-node-health).",
+      "2. ✅ Run the latency diagnostics check (template: terminal-brief-latency-diagnostics).",
+      "3. ✅ Run the session-store residue check (template: terminal-brief-session-store-residue).",
+      "4. ✅ Run `a2a-docker-runner doctor` and confirm all checks pass.",
+      "5. ✅ Run `node scripts/deploy-marker-doctor.mjs --expected-revision ${EXPECTED_REVISION}`.",
+      "6. ✅ Verify runner evidence contract: log, test, diff, file evidence kinds work.",
+      "7. ✅ Verify the worker has no stale backlog or pending unhealthy runs.",
+      "8. ✅ Report Block evidence if ANY check fails; report Done evidence only if ALL pass.",
+      "9. ✅ Confirm no live provider send, Gateway restart, DB mutation, or terminal ACK.",
+      "",
+      "This is the final readiness gate. All sub-checks must pass before Terminal Brief activation.",
+      "This template must NOT perform: deployment, restart, canary send, DB prune, or release.",
+      "",
+      "Safety gates:",
+      "- Do not restart Gateway, broker, or worker processes.",
+      "- Do not send live provider messages or ACK terminal outboxes.",
+      "- Do not mutate production databases.",
+      "- Do not push, merge, or create PRs; this is a verification-only task.",
+      "- Do not change repository visibility, publish releases, or tag commits.",
+      "",
+      "Target node: ${TARGET_NODE}",
+      "Context run: ${RUN_ID}",
+    ].join("\n"),
+    requiredVars: ["EXPECTED_REVISION", "TARGET_NODE", "RUN_ID"],
+    env: {
+      A2A_DOCKER_RUNNER_NO_LIVE: "1",
+    },
+  });
+})();

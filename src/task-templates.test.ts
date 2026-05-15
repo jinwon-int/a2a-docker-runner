@@ -279,3 +279,153 @@ test("buildTemplateExpansionEvidence reports missing required vars", () => {
   assert.ok(evidence.varsMissing);
   assert.deepEqual(evidence.varsMissing, ["REQUIRED_TWO"]);
 });
+
+// ---------------------------------------------------------------------------
+// Terminal Brief Ops-Readiness Templates
+// ---------------------------------------------------------------------------
+
+test("terminal-brief-node-health is registered and retrievable", () => {
+  const template = getTemplate("terminal-brief-node-health");
+  assert.ok(template, "terminal-brief-node-health should be registered");
+  assert.equal(template!.id, "terminal-brief-node-health");
+  assert.equal(template!.version, "1.0.0");
+  assert.equal(template!.mode, "github-propose-patch");
+  assert.ok(template!.requiredVars);
+  assert.ok(template!.requiredVars!.includes("EXPECTED_REVISION"));
+  assert.ok(template!.requiredVars!.includes("TARGET_NODE"));
+});
+
+test("terminal-brief-latency-diagnostics is registered and retrievable", () => {
+  const template = getTemplate("terminal-brief-latency-diagnostics");
+  assert.ok(template, "terminal-brief-latency-diagnostics should be registered");
+  assert.equal(template!.id, "terminal-brief-latency-diagnostics");
+  assert.equal(template!.version, "1.0.0");
+  assert.ok(template!.optionalVars);
+  assert.equal(template!.optionalVars!["P95_THRESHOLD_MS"], "500");
+});
+
+test("terminal-brief-session-store-residue is registered and retrievable", () => {
+  const template = getTemplate("terminal-brief-session-store-residue");
+  assert.ok(template, "terminal-brief-session-store-residue should be registered");
+  assert.equal(template!.id, "terminal-brief-session-store-residue");
+  assert.equal(template!.version, "1.0.0");
+  assert.ok(template!.env);
+  assert.equal(template!.env!["A2A_DOCKER_RUNNER_NO_LIVE"], "1");
+});
+
+test("terminal-brief-worker-readiness is registered and retrievable", () => {
+  const template = getTemplate("terminal-brief-worker-readiness");
+  assert.ok(template, "terminal-brief-worker-readiness should be registered");
+  assert.equal(template!.id, "terminal-brief-worker-readiness");
+  assert.equal(template!.version, "1.0.0");
+  assert.ok(template!.requiredVars);
+  assert.ok(template!.requiredVars!.includes("EXPECTED_REVISION"));
+  assert.ok(template!.requiredVars!.includes("TARGET_NODE"));
+  assert.ok(template!.requiredVars!.includes("RUN_ID"));
+});
+
+test("all 4 terminal-brief templates are registered", () => {
+  const ids = listTemplates().filter((id) => id.startsWith("terminal-brief-"));
+  assert.equal(ids.length, 4);
+  assert.ok(ids.includes("terminal-brief-node-health"));
+  assert.ok(ids.includes("terminal-brief-latency-diagnostics"));
+  assert.ok(ids.includes("terminal-brief-session-store-residue"));
+  assert.ok(ids.includes("terminal-brief-worker-readiness"));
+});
+
+test("terminal-brief-node-health expansion produces evidence with vars expanded", () => {
+  const task: RunnerTask = {
+    id: "tb-node-health-run",
+    intent: "propose_patch",
+    template: "terminal-brief-node-health",
+    templateVars: {
+      DOCTOR_ARGS: "a2a-docker-runner doctor",
+      EXPECTED_REVISION: "abc1234",
+      TARGET_NODE: "nosuk",
+    },
+  };
+  const expanded = expandTask(task);
+  assert.ok(expanded);
+  assert.equal(expanded.id, "tb-node-health-run");
+  assert.equal(expanded.mode, "github-propose-patch");
+  assert.ok(expanded.prompt);
+  assert.ok(expanded.prompt!.includes("a2a-docker-runner doctor"));
+  assert.ok(expanded.prompt!.includes("abc1234"));
+  assert.ok(expanded.prompt!.includes("nosuk"));
+  assert.equal(expanded.env!["A2A_DOCKER_RUNNER_NO_LIVE"], "1");
+
+  const template = getTemplate("terminal-brief-node-health")!;
+  const evidence = buildTemplateExpansionEvidence(task, expanded, template);
+  assert.equal(evidence.templateId, "terminal-brief-node-health");
+  assert.equal(evidence.templateVersion, "1.0.0");
+  assert.deepEqual(evidence.varsProvided, ["DOCTOR_ARGS", "EXPECTED_REVISION", "TARGET_NODE"]);
+  assert.ok(evidence.preExpandDigest);
+  assert.ok(evidence.postExpandDigest);
+  assert.notEqual(evidence.preExpandDigest, evidence.postExpandDigest);
+});
+
+test("terminal-brief-latency-diagnostics expansion produces evidence with vars", () => {
+  const task: RunnerTask = {
+    id: "tb-latency-run",
+    intent: "propose_patch",
+    template: "terminal-brief-latency-diagnostics",
+    templateVars: {
+      TARGET_NODE: "nosuk",
+      RUN_ID: "a2a-r25-team1-ops-readiness-20260515T1656Z",
+      P95_THRESHOLD_MS: "500",
+      P99_THRESHOLD_MS: "500",
+      SAMPLE_SIZE: "100",
+      DIAGNOSTICS_SPLIT_CANDIDATES: "/health/diagnostics, /status",
+    },
+  };
+  const expanded = expandTask(task);
+  assert.ok(expanded);
+  assert.ok(expanded.prompt!.includes("nosuk"));
+  assert.ok(expanded.prompt!.includes("500ms"));
+  assert.equal(expanded.env!["A2A_DOCKER_RUNNER_NO_LIVE"], "1");
+
+  const template = getTemplate("terminal-brief-latency-diagnostics")!;
+  const evidence = buildTemplateExpansionEvidence(task, expanded, template);
+  assert.equal(evidence.templateId, "terminal-brief-latency-diagnostics");
+  assert.equal(evidence.templateVersion, "1.0.0");
+  assert.ok(evidence.varsProvided.includes("P95_THRESHOLD_MS"));
+  assert.ok(evidence.varsProvided.includes("TARGET_NODE"));
+  assert.ok(evidence.varsProvided.includes("RUN_ID"));
+  assert.notEqual(evidence.preExpandDigest, evidence.postExpandDigest);
+});
+
+test("terminal-brief-worker-readiness expansion includes all required vars", () => {
+  const task: RunnerTask = {
+    id: "tb-readiness-run",
+    intent: "propose_patch",
+    template: "terminal-brief-worker-readiness",
+    templateVars: {
+      EXPECTED_REVISION: "abc1234",
+      TARGET_NODE: "nosuk",
+      RUN_ID: "a2a-r25-team1-ops-readiness-20260515T1656Z",
+    },
+  };
+  const expanded = expandTask(task);
+  assert.ok(expanded);
+  assert.ok(expanded.prompt!.includes("abc1234"));
+  assert.ok(expanded.prompt!.includes("nosuk"));
+  assert.ok(expanded.prompt!.includes("terminal-brief-node-health"));
+  assert.ok(expanded.prompt!.includes("terminal-brief-latency-diagnostics"));
+  assert.ok(expanded.prompt!.includes("terminal-brief-session-store-residue"));
+
+  const template = getTemplate("terminal-brief-worker-readiness")!;
+  const evidence = buildTemplateExpansionEvidence(task, expanded, template);
+  assert.equal(evidence.templateId, "terminal-brief-worker-readiness");
+  assert.equal(evidence.templateVersion, "1.0.0");
+  assert.ok(evidence.varsProvided.includes("EXPECTED_REVISION"));
+  assert.ok(evidence.varsProvided.includes("TARGET_NODE"));
+  assert.ok(evidence.varsProvided.includes("RUN_ID"));
+  assert.notEqual(evidence.preExpandDigest, evidence.postExpandDigest);
+});
+
+test("terminal-brief templates produce no duplicate id errors on re-import", () => {
+  // Re-registration should throw.
+  assert.throws(() => {
+    registerTemplate({ id: "terminal-brief-node-health", version: "2.0.0", label: "Dup" });
+  }, /already registered/);
+});
