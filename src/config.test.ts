@@ -58,7 +58,7 @@ test("loadConfig builds first-class OpenClaw patch profile", async () => {
   assert.match(config.commandScript ?? "", /openclaw agent/);
   assert.match(config.commandScript ?? "", /--model 'openai-codex\/gpt-5\.5'/);
   assert.match(config.commandScript ?? "", /--thinking 'medium'/);
-  assert.match(config.commandScript ?? "", /OPENCLAW_DISABLE_BUNDLED_PLUGINS='0'/);
+  assert.match(config.commandScript ?? "", /OPENCLAW_DISABLE_BUNDLED_PLUGINS='1'/);
   assert.equal(config.network, "host");
   assert.match(config.commandScript ?? "", /copy_file_if_exists \/run\/secrets\/openclaw-dir\/openclaw\.json/);
   assert.match(config.commandScript ?? "", /auth-profiles\.json/);

@@ -134,6 +134,7 @@ const handlerResult = buildHandlerResult(parsed, task, nodeId);
 | `A2A_DOCKER_RUNNER_PATCH_COMMAND_SCRIPT` | — | Safe patch command script content; highest precedence, written to `/work/patch-command.sh` |
 | `A2A_DOCKER_RUNNER_PATCH_COMMAND_JSON` | — | Safe patch command JSON `{ "argv": [...], "env": {...} }`; used when script is unset |
 | `A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE` | — | Legacy eval template; used only when script/json are unset |
+| `A2A_OPENCLAW_DISABLE_BUNDLED_PLUGINS` | `1` | Disable bundled plugin loading in OpenClaw patch containers (saves ~9s startup latency). Set `0` if plugins are needed |
 
 Patch command precedence is `SCRIPT > JSON > TEMPLATE`. Prefer `SCRIPT` or
 `JSON` for active targets (`bangtong`, `dungae`, `sogyo`, `nosuk`) and keep the

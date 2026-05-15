@@ -65,6 +65,29 @@ This means:
 | `.deploy-source-sha` + real dirty file | `true` | `true` | `warn` |
 | Real dirty files only (no marker) | `true` | `false` | `warn` |
 
+## Latency optimization: OpenClaw patch containers
+
+Measured OpenClaw startup breakdown on `jingun/vps8`:
+
+| Phase | Time | Share |
+|---|---|---|
+| **runtime-plugins** | 9210 ms | **96%** |
+| model-resolution | 194 ms | 2% |
+| auth | 190 ms | 2% |
+| context-engine | 2 ms | <1% |
+| hooks | 2 ms | <1% |
+| workspace | 1 ms | <1% |
+| attempt-dispatch | 5 ms | <1% |
+| **Total** | **9604 ms** | **100%** |
+
+The `runtime-plugins` phase dominates because OpenClaw loads every bundled
+plugin at startup. In a short-lived patch container none of the bundled plugins
+are needed — the container only runs `git`, `gh`, and the OpenClaw agent itself.
+
+The runner defaults `A2A_OPENCLAW_DISABLE_BUNDLED_PLUGINS=1` to skip this
+~9-second penalty. Operators can set it back to `0` if the patch agent requires
+plugin features.
+
 ## Non-goals for MVP
 
 - replacing the broker
