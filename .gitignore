@@ -19,3 +19,7 @@ SOUL.md
 TOOLS.md
 USER.md
 memory/
+
+# Generated / volatile evidence files from e2e/chaos gate runs;
+# these are ephemeral artifacts, not source.
+tmp/
