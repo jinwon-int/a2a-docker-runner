@@ -1,0 +1,97 @@
+{
+  "$schema": "a2a.runner.terminal-brief-worker-readiness.v1",
+  "run": "a2a-r25-team1-ops-readiness-terminal-brief-20260515T1656Z",
+  "parent": "a2a-plane#351",
+  "issue": "a2a-docker-runner#270",
+  "targetNode": "nosuk",
+  "expectedRevision": "f17072e",
+  "noLiveProviderSend": true,
+  "terminalOutboxAckPerformed": false,
+  "subChecks": {
+    "nodeHealth": {
+      "performed": true,
+      "passed": true,
+      "fixture": "examples/terminal-brief-node-health-fixture.json"
+    },
+    "latencyDiagnostics": {
+      "performed": true,
+      "passed": true,
+      "fixture": "examples/terminal-brief-latency-diagnostics-fixture.json"
+    },
+    "sessionStoreResidue": {
+      "performed": true,
+      "passed": true,
+      "fixture": "examples/terminal-brief-session-store-residue-fixture.json"
+    },
+    "doctor": {
+      "performed": true,
+      "passed": true
+    },
+    "deployMarker": {
+      "performed": true,
+      "passed": true,
+      "revision": "f17072e",
+      "match": true
+    },
+    "evidenceContract": {
+      "performed": true,
+      "passed": true,
+      "evidenceKinds": ["log", "test", "diff", "file"]
+    },
+    "staleBacklog": {
+      "performed": true,
+      "passed": true,
+      "unhealthyRuns": 0,
+      "pendingRuns": 0
+    }
+  },
+  "overallReady": true,
+  "checks": [
+    {
+      "name": "node health check passed",
+      "passed": true,
+      "detail": "all 6 sub-checks green"
+    },
+    {
+      "name": "latency diagnostics passed",
+      "passed": true,
+      "detail": "p95=312ms, p99=478ms within threshold"
+    },
+    {
+      "name": "session-store residue check passed",
+      "passed": true,
+      "detail": "guard would not block, backup 12/50 files"
+    },
+    {
+      "name": "doctor report all checks pass",
+      "passed": true,
+      "detail": "0 failures"
+    },
+    {
+      "name": "deploy marker matches expected revision",
+      "passed": true,
+      "detail": "f17072e"
+    },
+    {
+      "name": "evidence contract valid",
+      "passed": true,
+      "detail": "log/test/diff/file kinds all work"
+    },
+    {
+      "name": "no stale backlog or pending unhealthy runs",
+      "passed": true,
+      "detail": "0 unhealthy, 0 pending"
+    }
+  ],
+  "safetyState": {
+    "noLiveProviderSend": true,
+    "providerSendIsReceiptEvidence": false,
+    "terminalAck": "not_performed",
+    "gatewayRestartPerformed": false,
+    "brokerRestartPerformed": false,
+    "dbMutationPerformed": false,
+    "deploymentPerformed": false,
+    "canarySendPerformed": false,
+    "releasePerformed": false
+  }
+}

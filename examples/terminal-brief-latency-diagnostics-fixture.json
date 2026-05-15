@@ -1,0 +1,59 @@
+{
+  "$schema": "a2a.runner.terminal-brief-latency-diagnostics.v1",
+  "run": "a2a-r25-team1-ops-readiness-terminal-brief-20260515T1656Z",
+  "parent": "a2a-plane#351",
+  "issue": "a2a-docker-runner#270",
+  "targetNode": "nosuk",
+  "noLiveProviderSend": true,
+  "terminalOutboxAckPerformed": false,
+  "latencyDiagnostics": {
+    "p95Ms": 312,
+    "p99Ms": 478,
+    "sampleSize": 100,
+    "thresholds": {
+      "p95ThresholdMs": 500,
+      "p99ThresholdMs": 500
+    },
+    "withinThreshold": true,
+    "repeatedLatencyStages": [
+      "persistenceSummary",
+      "hotEntityMirrorCounts",
+      "auditDiagnostics",
+      "requestPressure",
+      "jsonSerialization"
+    ],
+    "diagnosticsSplitCandidates": ["/health/diagnostics", "/status"],
+    "expensiveDiagnosticsCached": true,
+    "brokerHealthCallPerformed": false
+  },
+  "checks": [
+    {
+      "name": "p95 latency within threshold",
+      "passed": true,
+      "detail": "312ms <= 500ms"
+    },
+    {
+      "name": "p99 latency within threshold",
+      "passed": true,
+      "detail": "478ms <= 500ms"
+    },
+    {
+      "name": "all repeated-latency diagnostic stages present",
+      "passed": true,
+      "detail": "5/5 stages found"
+    },
+    {
+      "name": "expensive diagnostics are cached or split",
+      "passed": true,
+      "detail": "no live /health call to broker"
+    }
+  ],
+  "safetyState": {
+    "noLiveProviderSend": true,
+    "providerSendIsReceiptEvidence": false,
+    "terminalAck": "not_performed",
+    "brokerHealthCallPerformed": false,
+    "gatewayRestartPerformed": false,
+    "dbMutationPerformed": false
+  }
+}

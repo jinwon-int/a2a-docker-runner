@@ -1,0 +1,59 @@
+{
+  "$schema": "a2a.runner.terminal-brief-session-store-residue.v1",
+  "run": "a2a-r25-team1-ops-readiness-terminal-brief-20260515T1656Z",
+  "parent": "a2a-plane#351",
+  "issue": "a2a-docker-runner#270",
+  "targetNode": "nosuk",
+  "noLiveProviderSend": true,
+  "terminalOutboxAckPerformed": false,
+  "activeAgentId": "main",
+  "sessionStoreGuard": {
+    "activeAgentRegistryEmpty": true,
+    "backupCount": 12,
+    "maxBackupCount": 50,
+    "backupBytes": 4194304,
+    "maxBackupBytes": 134217728,
+    "guardWouldBlock": false,
+    "reason": null
+  },
+  "cleanupRehearsal": {
+    "performed": true,
+    "dryRun": true,
+    "errors": null
+  },
+  "checks": [
+    {
+      "name": "active-agent registry is empty (no stale sessions)",
+      "passed": true,
+      "detail": "sessions.json is empty for agent 'main'"
+    },
+    {
+      "name": "session backup count within limit",
+      "passed": true,
+      "detail": "12 <= 50"
+    },
+    {
+      "name": "session backup bytes within limit",
+      "passed": true,
+      "detail": "4MB <= 128MB"
+    },
+    {
+      "name": "session store guard would not block execution",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "cleanup rehearsal runs without errors",
+      "passed": true,
+      "detail": "dry-run mode, no errors"
+    }
+  ],
+  "safetyState": {
+    "noLiveProviderSend": true,
+    "providerSendIsReceiptEvidence": false,
+    "terminalAck": "not_performed",
+    "gatewayRestartPerformed": false,
+    "hostSessionStoreFilesCopiedOrUploaded": false,
+    "dbMutationPerformed": false
+  }
+}
