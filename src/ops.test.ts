@@ -159,6 +159,60 @@ test("deployed revision doctor warns for stale, dirty, non-main checkouts", asyn
   assert.match(String(report.detail?.summary), /^WARN /);
 });
 
+test("deployed revision passes with only .deploy-source-sha as untracked file", async () => {
+  const { repo, head } = await makeRevisionRepo();
+  // .deploy-source-sha is an expected deployment marker — should not
+  // trigger a dirty-worktree warning.
+  await writeFile(join(repo, ".deploy-source-sha"), head + "\n");
+
+  const report = await checkDeployedRevision(repo);
+
+  assert.equal(report.status, "ok");
+  assert.equal(report.detail?.localSha, head.slice(0, 12));
+  assert.equal(report.detail?.dirty, false);
+  assert.equal(report.detail?.deploymentMarker, true);
+  assert.match(String(report.detail?.summary), /deploy-source-sha=present/);
+  assert.match(String(report.detail?.summary), /^PASS /);
+});
+
+test("deployed revision warns for real dirty files alongside .deploy-source-sha", async () => {
+  const { repo, head } = await makeRevisionRepo();
+  await writeFile(join(repo, ".deploy-source-sha"), head + "\n");
+  // A real untracked source file should still trigger the dirty warning.
+  await writeFile(join(repo, "uncommitted-source.ts"), "// real change\n");
+
+  const report = await checkDeployedRevision(repo);
+
+  assert.equal(report.status, "warn");
+  assert.equal(report.detail?.dirty, true);
+  assert.equal(report.detail?.deploymentMarker, true);
+  assert.match(String(report.detail?.reason), /dirty worktree/);
+  assert.match(String(report.detail?.summary), /deploy-source-sha=present/);
+  assert.match(String(report.detail?.summary), /^WARN /);
+});
+
+test("deployed revision passes on clean main with .deploy-source-sha committed", async () => {
+  const { repo, head } = await makeRevisionRepo();
+  // .deploy-source-sha already committed — should not show up in porcelain.
+  await writeFile(join(repo, ".deploy-source-sha"), head + "\n");
+  runGit(repo, ["add", ".deploy-source-sha"]);
+  runGit(repo, ["commit", "-m", "record deployed sha"]);
+
+  const report = await checkDeployedRevision(repo);
+
+  // Status is warn because the local SHA now differs from the pinned
+  // upstream main ref — the committed marker is not yet pushed. This is
+  // expected: the test verifies that a committed .deploy-source-sha does
+  // not produce a dirty-worktree warning.
+  assert.equal(report.status, "warn");
+  assert.equal(report.detail?.dirty, false);
+  // deploymentMarker is undefined (absent from detail) because the
+  // committed file does not appear in git status --porcelain output.
+  assert.equal(report.detail?.deploymentMarker, undefined);
+  assert.match(String(report.detail?.reason), /differs from upstream main/);
+  assert.doesNotMatch(String(report.detail?.reason), /dirty worktree/);
+});
+
 function config(rootDir: string, githubTokenFile?: string): RunnerConfig {
   return { rootDir, engine: "docker", image: "example:latest", githubTokenFile, defaultTimeoutMs: 1000 };
 }

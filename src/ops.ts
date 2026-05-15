@@ -269,7 +269,19 @@ export async function checkDeployedRevision(cwd = process.cwd(), upstreamRef = "
   const fullLocalSha = normalizeSha(git(cwd, ["rev-parse", "HEAD"]).stdout.trim());
   const localSha = fullLocalSha?.slice(0, 12);
   const branch = git(cwd, ["branch", "--show-current"]).stdout.trim() || "detached";
-  const dirty = git(cwd, ["status", "--porcelain"]).stdout.trim().length > 0;
+
+  // Compute dirty flag, but exclude .deploy-source-sha as an expected
+  // deployment marker — it records the deployed SHA and should not trigger
+  // a misleading dirty-worktree warning.
+  const porcelainAll = git(cwd, ["status", "--porcelain"]).stdout;
+  const porcelainLines = porcelainAll.split("\n").filter((l) => l.trim().length > 0);
+  const realChanges = porcelainLines.filter((l) => !l.includes(".deploy-source-sha"));
+  const dirty = realChanges.length > 0;
+
+  // Detect .deploy-source-sha as a deployment marker.
+  const deploySourceShaStatus = porcelainLines.find((l) => l.includes(".deploy-source-sha"));
+  const deploymentMarker = deploySourceShaStatus !== undefined;
+
   const upstreamSha = await resolveUpstreamMainSha(cwd, upstreamRef);
 
   const reasons: string[] = [];
@@ -295,6 +307,7 @@ export async function checkDeployedRevision(cwd = process.cwd(), upstreamRef = "
       upstreamMainFullSha: upstreamSha?.full,
       branch,
       dirty,
+      deploymentMarker,
       summaryStatus,
       reason: reasons.join("; ") || undefined,
     }),
@@ -544,11 +557,14 @@ function compactRevisionDetail(input: {
   upstreamMainFullSha?: string;
   branch?: string;
   dirty?: boolean;
+  /** True when .deploy-source-sha was detected as an expected deployment marker. */
+  deploymentMarker?: boolean;
   summaryStatus: "PASS" | "WARN" | "FAIL";
   reason?: string;
 }): Record<string, unknown> {
   const branch = input.branch ?? "unknown";
   const dirty = input.dirty ?? false;
+  const deploymentMarker = input.deploymentMarker ?? false;
   const summary = [
     input.summaryStatus,
     `runner=${input.version ? `v${input.version}` : "unknown"}`,
@@ -556,6 +572,7 @@ function compactRevisionDetail(input: {
     `upstreamMain=${input.upstreamMainSha ?? "unknown"}`,
     `branch=${branch}`,
     `dirty=${dirty ? "yes" : "no"}`,
+    ...(deploymentMarker ? ["deploy-source-sha=present"] : []),
   ].join(" ");
 
   return {
@@ -566,6 +583,7 @@ function compactRevisionDetail(input: {
     upstreamMainFullSha: input.upstreamMainFullSha,
     branch,
     dirty,
+    ...(deploymentMarker ? { deploymentMarker } : {}),
     summary,
     ...(input.reason ? { reason: input.reason } : {}),
   };
