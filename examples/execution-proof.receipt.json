@@ -1,0 +1,15 @@
+{
+  "id": "execution-proof-v1",
+  "schemaVersion": "a2a.runner.execution-proof.v1",
+  "taskId": "template-ci-check",
+  "runToken": "a2a-r23-terminal-brief-spec-taskflow-monorepo-20260515T055352Z",
+  "generatedAt": "2025-06-01T00:00:00.000Z",
+  "inputDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "expandedDigest": "f7bc83f430538424b13298e6aa6fb143ef4d59a149461ff97499736cc2f8c5a3",
+  "chainDigest": "3fdba35f04dc8c462986c992bcf875546257113072a909c162f7e470e581e278",
+  "exitCode": 0,
+  "ok": true,
+  "status": "completed",
+  "outcome": "done",
+  "manifestPath": "artifacts/manifest.json"
+}

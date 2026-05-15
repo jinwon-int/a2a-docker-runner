@@ -4,11 +4,27 @@ import { spawn } from "node:child_process";
 import { normalizeTask } from "./task-normalizer.js";
 import { collectGitHubEvidence } from "./github-evidence.js";
 import { sanitizeSourcePublicExecutionPreflight } from "./source-public-preflight.js";
+import { expandTask, resolveTemplate, buildTemplateExpansionEvidence } from "./task-templates.js";
+import { buildExecutionProof } from "./execution-proof.js";
 import type { ArtifactEvidencePart, ArtifactManifest, ArtifactManifestEntry, ArtifactManifestStatus, CleanupRehearsalEvidence, GitHubCommentProjection, GitHubCommentProjectionKind, NormalizedRunnerTask, ResultSummary, RunnerBudgetEvidence, RunnerConfig, RunnerContinuationEvidence, RunnerEvidenceHints, RunnerReceiptTrace, RunnerResult, RunnerTask, SourcePublicApprovalDecision, SourcePublicApprovalPacket, SourcePublicApprovalRehearsal, SourcePublicExecutionPreflight } from "./types.js";
 
 export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<RunnerResult> {
   validateTask(task);
-  const normalizedTask = normalizeTask(task);
+
+  // ── Template Expansion (Team1 nosuk lane, A2A R23) ────────────────
+  // Parent: a2a-docker-runner#261
+  // Parent: a2a-plane#335
+  let expandedTask: RunnerTask | undefined;
+  let templateExpansionEv: ReturnType<typeof buildTemplateExpansionEvidence> | undefined;
+  if (task.template || task.inlineTemplate) {
+    expandedTask = expandTask(task);
+    const template = resolveTemplate(task);
+    if (template) {
+      templateExpansionEv = buildTemplateExpansionEvidence(task, expandedTask, template);
+    }
+  }
+
+  const normalizedTask = normalizeTask(expandedTask ?? task);
   const root = resolve(config.rootDir);
   const runToken = createRunToken();
   const safeTaskId = safeId(task.id);
@@ -123,6 +139,25 @@ export async function runTask(config: RunnerConfig, task: RunnerTask): Promise<R
       result.resultSummary = { ...result.resultSummary!, ...(evidenceHints ? { evidenceHints } : {}), ...(githubCommentProjection ? { githubCommentProjection } : {}) };
       await writeArtifactManifest(workDir, result.artifactManifest);
     }
+  }
+
+  // ── Execution Proof (Team1 nosuk lane, A2A R23) ──────────────────
+  // Parent: a2a-docker-runner#261
+  // Parent: a2a-plane#335
+  const executionProof = buildExecutionProof({
+    task: normalizedTask,
+    result,
+    expanded: expandedTask,
+    runToken,
+  });
+  result.executionProof = executionProof;
+  result.templateExpansion = templateExpansionEv;
+  if (result.artifactManifest) {
+    result.artifactManifest = {
+      ...result.artifactManifest,
+      executionProof,
+    };
+    await writeArtifactManifest(workDir, result.artifactManifest);
   }
 
   return result;

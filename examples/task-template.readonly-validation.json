@@ -1,0 +1,16 @@
+{
+  "id": "template-readonly-validation",
+  "intent": "propose_patch",
+  "mode": "github-propose-patch",
+  "repo": "jinwon-int/a2a-docker-runner",
+  "baseBranch": "main",
+  "template": "readonly-validation",
+  "templateVars": {
+    "CHECK_COMMAND": "npx tsc --noEmit",
+    "ARTIFACT_NAME": "typecheck.txt"
+  },
+  "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/261",
+  "reportLanguage": "ko",
+  "requestedBy": "seoseo",
+  "timeoutMs": 120000
+}

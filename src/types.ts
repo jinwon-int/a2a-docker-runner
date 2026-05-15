@@ -1,5 +1,98 @@
 export type RunnerEngine = "docker" | "podman";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Task Templates (Team1 nosuk lane, A2A R23)
+// Parent: a2a-docker-runner#261
+// Parent: a2a-plane#335
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A reusable task template that can be referenced by name or inlined.
+ *
+ * Templates support `${variable}` substitution from a task's `templateVars` map.
+ * A template can define repos, commands, prompt, env, mode, and other task
+ * fields that the runner expands at execution time.
+ */
+export interface TaskTemplate {
+  /** Template identifier (used by RunnerTask.template). */
+  id: string;
+  /** Semantic version of this template for compatibility checking. */
+  version?: string;
+  /** Human-readable label. */
+  label?: string;
+  /** Execution mode (e.g. "github-propose-patch", "github-verify"). */
+  mode?: string;
+  /** Optional preset. */
+  preset?: RunnerPreset;
+  /** Repos defined by the template. Tasks may extend these. */
+  repos?: RunnerRepo[];
+  /** Commands with ${variable} placeholders. */
+  commands?: string[];
+  /** Template-level prompt text with ${variable} placeholders. */
+  prompt?: string;
+  /** Default environment variables. */
+  env?: Record<string, string>;
+  /** Default base branch. */
+  baseBranch?: string;
+  /** Language hint. */
+  reportLanguage?: string;
+  /** Default timeout. */
+  timeoutMs?: number;
+  /** Describes what variables the template expects. */
+  requiredVars?: string[];
+  /** Describes optional variables and their defaults. */
+  optionalVars?: Record<string, string>;
+}
+
+/**
+ * Template variable values supplied by a task to fill a template.
+ * Keys are without the `${}` wrapper. Values are safe, bounded strings.
+ */
+export type TaskTemplateVars = Record<string, string>;
+
+/**
+ * Execution proof produced after a runner task completes.
+ *
+ * Links the task input, expansion, commands, and output evidence into a
+ * deterministic, replay-safe proof that can be independently verified.
+ * The proof includes cryptographic digests so consumers can detect tampering
+ * or drift.
+ */
+export interface ExecutionProof {
+  /** Canonical schema version. */
+  schemaVersion: "a2a.runner.execution-proof.v1";
+  /** Task identifier (safeId). */
+  taskId: string;
+  /** Run token that uniquely identifies this execution. */
+  runToken: string;
+  /** ISO-8601 timestamp of when the proof was generated. */
+  generatedAt: string;
+  /** Digest of the normalized task input (before expansion). */
+  inputDigest: string;
+  /** Digest of the expanded commands and env (after template expansion). */
+  expandedDigest: string;
+  /** Digest of the container stdout + stderr output (redacted). */
+  outputDigest: string;
+  /** Digest linking input → expanded → output for tamper evidence. */
+  chainDigest: string;
+  /** Exit code from the container execution. */
+  exitCode: number | null;
+  /** Whether the task was successful. */
+  ok: boolean;
+  /** Task outcome status. */
+  status: "completed" | "failed" | "timeout";
+  /** URL of the PR created (if applicable). */
+  prUrl?: string;
+  /** Evidence outcome classification. */
+  outcome?: ArtifactManifestStatus | "timed_out" | "missing_evidence" | "failed_infrastructure";
+  /** Failure category for stability gates. */
+  failureCategory?: string;
+  /** Bounded, redacted summary of the execution. */
+  summary?: string;
+  /** Reference to the artifact manifest path. */
+  manifestPath: string;
+}
+
 export interface RunnerConfig {
   rootDir: string;
   engine?: RunnerEngine;
@@ -391,6 +484,30 @@ export interface RunnerTask {
    *  The runner accepts terminal evidence without PR for audit/preflight/libero lanes. */
   allowNoChanges?: boolean;
   /**
+   * Name of a predefined task template to expand.
+   * Templates are resolved from the built-in registry or the task's own
+   * `inlineTemplate` field.  When set, the runner merges template fields
+   * into the task before execution.
+   *
+   * Parent: a2a-docker-runner#261
+   * Parent: a2a-plane#335
+   */
+  template?: string;
+  /**
+   * Variable values to interpolate into the referenced or inline template.
+   * Keys match `${variable}` placeholders in template commands, prompt, and env.
+   *
+   * Parent: a2a-docker-runner#261
+   */
+  templateVars?: TaskTemplateVars;
+  /**
+   * Inline template definition.  When set, `template` must be absent or match
+   * `inlineTemplate.id`.  The runner expands this template with `templateVars`.
+   *
+   * Parent: a2a-docker-runner#261
+   */
+  inlineTemplate?: TaskTemplate;
+  /**
    * When true, treat the task as a read-only validation/libero lane: patch
    * commands may inspect and test the checkout, but any tracked, staged,
    * uncommitted, or committed repository delta fails closed before PR creation.
@@ -410,10 +527,41 @@ export interface RunnerTask {
   crossBrokerHandoff?: RunnerCrossBrokerHandoff;
   /** Optional bounded notification/receipt trace metadata supplied by broker/plugin surfaces. */
   receiptTrace?: RunnerReceiptTrace;
+  /** Optional execution proof produced by this task (set by the runner after completion). */
+  executionProof?: ExecutionProof;
   /** Language hint for comment formatting (e.g. "ko"). */
   reportLanguage?: string;
   /** A2A broker node that requested the task. */
   requestedBy?: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Template Expansion Evidence (Team1 nosuk lane, A2A R23)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Evidence that a task template was expanded with specific variable values.
+ *
+ * Captures the template id, version, resolved variables (without secrets),
+ * and digests of the pre-expansion and post-expansion task shapes.
+ */
+export interface TemplateExpansionEvidence {
+  /** Canonical schema version. */
+  schemaVersion: "a2a.runner.template-expansion.v1";
+  /** Template identifier. */
+  templateId: string;
+  /** Template version, when available. */
+  templateVersion?: string;
+  /** Variable keys that were provided (values redacted for safety). */
+  varsProvided: string[];
+  /** Variable keys declared as required by the template but not provided. */
+  varsMissing?: string[];
+  /** Optional variable keys with explicit overrides from the task. */
+  varsOptional?: string[];
+  /** Digest of the task shape before expansion (sha256 hex). */
+  preExpandDigest: string;
+  /** Digest of the task shape after expansion (sha256 hex). */
+  postExpandDigest: string;
 }
 
 export interface RunnerCrossBrokerHandoff {
@@ -599,6 +747,8 @@ export interface ArtifactManifest {
   cleanupRehearsal?: CleanupRehearsalEvidence;
   /** Compact structured evidence URLs for broker task-report recovery. */
   evidenceHints?: RunnerEvidenceHints;
+  /** Optional execution proof linking task input, expansion, and output. */
+  executionProof?: ExecutionProof;
   /** First-class Terminal Brief extension for GitHub comment ledger evidence. */
   githubCommentProjection?: GitHubCommentProjection;
   /** Deterministic no-live rehearsal packet/evidence for source-public approval gates. */
@@ -621,6 +771,7 @@ export interface ResultSummary {
   runnerBuild?: RunnerBuildMetadata;
   /** Optional artifact-contract outcome; budget_limited is handled as blocked/needs continuation. */
   status?: RunnerArtifactContractStatus;
+  executionProof?: ExecutionProof;
   budget?: RunnerBudgetEvidence;
   receiptTrace?: RunnerReceiptTrace;
   continuation?: RunnerContinuationEvidence;
@@ -652,6 +803,10 @@ export interface RunnerResult {
   error?: string;
   /** Structured GitHub evidence for propose_patch / github-propose-patch mode. */
   github?: GitHubEvidence;
+  /** Execution proof for this task. */
+  executionProof?: ExecutionProof;
+  /** Evidence of template expansion when a template was used. */
+  templateExpansion?: TemplateExpansionEvidence;
 }
 
 // ---- Source-Public Approval Rehearsal ----
