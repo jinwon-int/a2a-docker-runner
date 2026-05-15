@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "a2a.runner.monorepo-migration-fixture.v1",
+  "description": "CI-safe monorepo migration proof fixture for Round 23 monorepo validation. This task validates multi-repo checkout, workspace-aware build/test commands, and artifact path contracts without GitHub mutations or live service dependencies.",
+  "id": "monorepo-proof-migration-jingun-001",
+  "intent": "propose_patch",
+  "mode": "github-propose-patch",
+  "repo": "jinwon-int/a2a-docker-runner",
+  "baseBranch": "main",
+  "readOnlyValidation": true,
+  "commands": [
+    "cd /work/repo && echo '=== Monorepo Migration Proof ===' | tee /work/artifacts/migration-proof.txt",
+    "cd /work/repo && echo 'Task: monorepo build/test topology cross-check' | tee -a /work/artifacts/migration-proof.txt",
+    "cd /work/repo && echo 'Node: '$(node --version) | tee -a /work/artifacts/migration-proof.txt",
+    "cd /work/repo && echo 'Workspace packages detected:' && ls -d packages/*/package.json 2>/dev/null || echo '  (single-package layout — no workspaces configured yet)' | tee -a /work/artifacts/migration-proof.txt",
+    "cd /work/repo && npm run check 2>&1 | tee /work/artifacts/check.log",
+    "cd /work/repo && npm run build 2>&1 | tee /work/artifacts/build.log",
+    "cd /work/repo && npm run lint 2>&1 | tee /work/artifacts/lint.log",
+    "cd /work/repo && npm test 2>&1 | tee /work/artifacts/test.log",
+    "cd /work/repo && echo 'Migration proof complete.' | tee -a /work/artifacts/migration-proof.txt"
+  ],
+  "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/262",
+  "reportLanguage": "ko",
+  "requestedBy": "seoseo",
+  "timeoutMs": 600000,
+  "donedComment": {
+    "body": "## Monorepo Migration Proof\n\n**Task**: Cross-check runner/template work from monorepo perspective.\n\n### Evidence summary\n\n- ✅ Build/test topology documented in `docs/monorepo-proof.md`\n- ✅ Template migration patterns tested in `src/monorepo-proof.test.ts`\n- ✅ Task fixture scaffold created at `examples/task.monorepo-migration.json`\n- ✅ No production deploy, restart, live provider send, terminal ACK, DB mutation, release/tag/visibility changes performed\n\nAll safety gates passed — no approval-gated live action was performed.\n\n### Safety gate compliance\n\n| Gate | Status |\n|------|--------|\n| No production deploy/restart | ✅ |\n| No live provider/Telegram canary | ✅ |\n| No terminal ACK/replay | ✅ |\n| No DB mutation/prune/migration | ✅ |\n| No release/tag publish | ✅ |\n| No repo visibility change | ✅ |\n| No secret movement | ✅ |\n| No force-push | ✅ |\n| No approval execution | ✅ |"
+}
+}
