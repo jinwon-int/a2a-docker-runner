@@ -1,0 +1,94 @@
+{
+  "$schema": "task-template.openclaw-latency-check-v1",
+  "description": "CI-safe runner task template for collecting OpenClaw latency/runtime diagnostics on target nodes (nosuk/vps2). Produces structured latency check evidence and markdown runbook without restarting gateways, deploying, or touching live production services.",
+  "source": {
+    "issue": "https://github.com/jinwon-int/a2a-docker-runner/issues/265",
+    "parent": "https://github.com/jinwon-int/a2a-plane/issues/343",
+    "runId": "a2a-r24-openclaw-latency-optimization-20260515T0655Z",
+    "runnerTemplateId": "openclaw-latency-check"
+  },
+  "task": {
+    "id": "${TASK_ID}",
+    "intent": "propose_patch",
+    "mode": "github-propose-patch",
+    "repo": "jinwon-int/a2a-docker-runner",
+    "baseBranch": "main",
+    "template": "openclaw-latency-check",
+    "templateVars": {
+      "TARGET_NODE": "${TARGET_NODE}",
+      "EVIDENCE_PREFIX": "${EVIDENCE_PREFIX}"
+    },
+    "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/265",
+    "reportLanguage": "ko",
+    "requestedBy": "seoseo",
+    "timeoutMs": 180000,
+    "forbidNewPr": true,
+    "allowNoChanges": true
+  },
+  "template": {
+    "id": "openclaw-latency-check",
+    "version": "1.0.0",
+    "label": "OpenClaw all-node latency check",
+    "mode": "github-propose-patch",
+    "requiredVars": [
+      "TARGET_NODE"
+    ],
+    "optionalVars": {
+      "EVIDENCE_PREFIX": "latency-check"
+    },
+    "commands": [
+      "echo '=== OpenClaw Latency Check (A2A R24) ==='",
+      "echo 'Target node: ${TARGET_NODE}'",
+      "echo ''",
+      "echo '--- Step 1: OpenClaw version and runtime ---'",
+      "openclaw --version 2>&1 | tee /work/artifacts/${EVIDENCE_PREFIX}-version.txt || echo 'openclaw not in PATH'",
+      "echo ''",
+      "echo '--- Step 2: Status snapshot ---'",
+      "openclaw status 2>&1 | tee /work/artifacts/${EVIDENCE_PREFIX}-status.txt",
+      "echo ''",
+      "echo '--- Step 3: Deep status probe ---'",
+      "openclaw status --deep 2>&1 | tee /work/artifacts/${EVIDENCE_PREFIX}-deep-status.txt",
+      "echo ''",
+      "echo '--- Step 4: Gateway health/readiness ---'",
+      "openclaw gateway probe 2>&1 | tee /work/artifacts/${EVIDENCE_PREFIX}-gateway-probe.txt || echo 'gateway probe failed (expected in sandbox)'",
+      "echo ''",
+      "echo '--- Step 5: Session store inventory ---'",
+      "ls -la ~/.openclaw/agents/main/sessions/ 2>&1 | tee /work/artifacts/${EVIDENCE_PREFIX}-sessions.txt || echo 'no sessions dir'",
+      "echo ''",
+      "echo '--- Step 6: Event loop / latency ---'",
+      "openclaw logs 10 2>&1 | tee /work/artifacts/${EVIDENCE_PREFIX}-logs.txt || echo 'no logs available'",
+      "echo ''",
+      "echo '--- Step 7: Plugin and provider discovery ---'",
+      "openclaw status --deep 2>&1 | grep -iE 'provider|plugin|channel' | head -20 | tee /work/artifacts/${EVIDENCE_PREFIX}-providers.txt || echo 'no provider info'",
+      "echo ''",
+      "echo '--- Step 8: A2A backlog ---'",
+      "cat /var/lib/openclaw-a2a/tasks/*/task.json 2>/dev/null | head -50 | tee /work/artifacts/${EVIDENCE_PREFIX}-backlog.txt || echo 'no A2A backlog'",
+      "echo ''",
+      "echo '--- Step 9: Build latency check evidence JSON ---'",
+      "node -e \"const {collectOpenClawLatencyCheck, formatLatencyCheckRunbook} = require('./src/openclaw-latency-check.js'); const check = collectOpenClawLatencyCheck('${TARGET_NODE}'); const fs = require('fs'); fs.writeFileSync('/work/artifacts/${EVIDENCE_PREFIX}-evidence.json', JSON.stringify(check, null, 2) + '\\n'); fs.writeFileSync('/work/artifacts/${EVIDENCE_PREFIX}-runbook.md', formatLatencyCheckRunbook(check) + '\\n'); console.log('Latency check evidence written');\" 2>&1 || echo 'latency check module not built yet - using CLI-only evidence'",
+      "echo ''",
+      "echo '=== Latency check complete ==='"
+    ],
+    "prompt": "Collect OpenClaw latency and runtime diagnostics on target node ${TARGET_NODE}. Run the latency check template commands, collect structured evidence, and report findings. Do not restart Gateway/broker/worker, deploy, send provider messages, ACK terminal evidence, or mutate production state."
+  },
+  "noLiveProof": {
+    "templateOnly": true,
+    "liveGatewayCalls": false,
+    "gatewayRestart": false,
+    "brokerRestart": false,
+    "workerRestart": false,
+    "liveProviderSend": false,
+    "terminalAck": "not_attempted",
+    "productionDbMutation": false,
+    "secretOrVisibilityChange": false,
+    "providerSendIsReceiptEvidence": false,
+    "allowedEvidence": [
+      "synthetic-fixture-json",
+      "node-test-output",
+      "git-diff",
+      "structured-latency-evidence"
+    ]
+  },
+  "activeTargets": ["bangtong", "dungae", "sogyo", "nosuk"],
+  "excludeTargets": ["yukson"]
+}

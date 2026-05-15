@@ -237,3 +237,65 @@ export function sha256Json(value: unknown): string {
   const json = JSON.stringify(value, Object.keys(value as Record<string, unknown>).sort());
   return createHash("sha256").update(json).digest("hex");
 }
+
+// ─── Built-in Template Registrations ──────────────────────────────────────
+
+/**
+ * A2A R24 OpenClaw all-node latency check template.
+ *
+ * Collects OpenClaw version, runtime diagnostics, health/ready status,
+ * event-loop metrics, latency logs, session-store residue, A2A backlog,
+ * and plugin/provider discovery drift.
+ *
+ * Target nodes: nosuk/vps2
+ * Prerequisite: Node.js 22+ with `openclaw` available in PATH.
+ * Safety: no restart, deploy, provider send, terminal ACK, or DB mutation.
+ *
+ * Parent: a2a-docker-runner#265
+ * Parent: a2a-plane#343
+ */
+registerTemplate({
+  id: "openclaw-latency-check",
+  version: "1.0.0",
+  label: "OpenClaw all-node latency check",
+  mode: "github-propose-patch",
+  requiredVars: ["TARGET_NODE"],
+  optionalVars: {
+    EVIDENCE_PREFIX: "latency-check",
+  },
+  commands: [
+    // Step 1: Version and runtime
+    'echo "=== OpenClaw Latency Check (A2A R24) ==="',
+    'echo "Target node: ${TARGET_NODE}"',
+    '',
+    // Step 2: Status snapshot
+    'openclaw --version 2>&1 | tee /work/artifacts/${EVIDENCE_PREFIX}-version.txt || echo "openclaw not in PATH"',
+    'openclaw status 2>&1 | tee /work/artifacts/${EVIDENCE_PREFIX}-status.txt',
+    '',
+    // Step 3: Deep status probe
+    'openclaw status --deep 2>&1 | tee /work/artifacts/${EVIDENCE_PREFIX}-deep-status.txt',
+    '',
+    // Step 4: Gateway health
+    'openclaw gateway probe 2>&1 | tee /work/artifacts/${EVIDENCE_PREFIX}-gateway-probe.txt || echo "gateway probe failed (expected in sandbox)"',
+    '',
+    // Step 5: Session store inventory
+    'ls -la ~/.openclaw/agents/main/sessions/ 2>&1 | tee /work/artifacts/${EVIDENCE_PREFIX}-sessions.txt || echo "no sessions dir"',
+    '',
+    // Step 6: Logs / event loop
+    'openclaw logs 10 2>&1 | tee /work/artifacts/${EVIDENCE_PREFIX}-logs.txt || echo "no logs available"',
+    '',
+    // Step 7: Plugin/provider discovery
+    'openclaw status --deep 2>&1 | grep -iE "provider|plugin|channel" | head -20 | tee /work/artifacts/${EVIDENCE_PREFIX}-providers.txt || echo "no provider info"',
+    '',
+    // Step 8: A2A backlog
+    'cat /var/lib/openclaw-a2a/tasks/*/task.json 2>/dev/null | head -50 | tee /work/artifacts/${EVIDENCE_PREFIX}-backlog.txt || echo "no A2A backlog"',
+    '',
+    // Step 9: Build structured evidence
+    'echo "Latency check artifacts collected"',
+  ],
+  prompt:
+    "Collect OpenClaw latency and runtime diagnostics on target node ${TARGET_NODE}. " +
+    "Run the latency check template commands, collect structured evidence, and report findings. " +
+    "Do not restart Gateway/broker/worker, deploy, send provider messages, ACK terminal evidence, " +
+    "or mutate production state.",
+});
