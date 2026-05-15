@@ -1527,6 +1527,117 @@ test("buildTerminalEvidenceEvent: preserves human Terminal Brief summary separat
   assert.ok(!JSON.stringify(event).includes("runner artifact summary must not clobber"));
 });
 
+test("buildHandlerResult: stale PR URL cannot override canonical Done Terminal Brief evidence", () => {
+  const stalePrUrl = "https://github.com/jinwon-int/repo/pull/614";
+  const doneCommentUrl = "https://github.com/jinwon-int/repo/issues/615#issuecomment-200";
+  const result: RawRunnerOutput = {
+    ok: true, taskId: "task-r16-jingun", status: "completed", workDir: "/tmp/work",
+    stdout: "raw log omitted", stderr: "", artifacts: [],
+    artifactManifest: {
+      artifactVersion: 1, schemaVersion: 1, manifestPath: "artifacts/manifest.json",
+      generatedAt: "1970-01-01T00:00:00.000Z", status: "done",
+      prUrl: stalePrUrl,
+      summary: "runner summary must not replace Terminal Brief metadata",
+      evidence: [], artifacts: [],
+    },
+    resultSummary: {
+      exitCode: 0, signal: null, timedOut: false,
+      stdout: "bounded stdout", stderr: "", stdoutTruncated: false, stderrTruncated: false,
+      artifactCount: 0, manifestPath: "artifacts/manifest.json",
+      evidenceHints: {
+        schemaVersion: "a2a.runner.evidence-hints.v1",
+        issueUrl: "https://github.com/jinwon-int/repo/issues/615",
+        prUrl: stalePrUrl,
+        doneUrl: doneCommentUrl,
+      },
+    },
+    github: {
+      outcome: "done",
+      prUrl: stalePrUrl,
+      doneCommentUrl,
+      issueUrl: "https://github.com/jinwon-int/repo/issues/615",
+      validation: { status: "completed", exitCode: 0, timedOut: false, artifactCount: 0 },
+      safetyState: { noLiveProviderSend: true, terminalAck: "requires_operator_receipt", providerSendIsReceiptEvidence: false },
+    },
+  };
+
+  const handlerResult = buildHandlerResult(
+    result,
+    {
+      id: "task-r16-jingun",
+      payload: {
+        repo: "jinwon-int/repo",
+        issue: "615",
+        terminalBrief: {
+          workerLabel: "jingun",
+          sequence: 3,
+          total: 7,
+          summary: "Human all-hands brief: jingun completed runner-lane evidence.",
+        },
+      },
+    },
+    "jingun",
+  );
+
+  assert.equal(handlerResult.status, "done");
+  assert.equal(handlerResult.prUrl, undefined);
+  assert.equal(handlerResult.doneCommentUrl, doneCommentUrl);
+  assert.equal(handlerResult.terminalEvidence.evidenceKind, "Done");
+  assert.equal(handlerResult.terminalEvidence.alert.title, "A2A Terminal Brief 완료: jingun(3/7)");
+  assert.equal(handlerResult.terminalEvidence.alert.url, doneCommentUrl);
+  assert.equal(handlerResult.terminalEvidence.terminalBrief?.summary, "Human all-hands brief: jingun completed runner-lane evidence.");
+  assert.ok(!JSON.stringify(handlerResult.terminalEvidence).includes(stalePrUrl));
+  assert.ok(!JSON.stringify(handlerResult.terminalEvidence).includes("runner summary must not replace"));
+});
+
+test("buildTerminalEvidenceEvent: uses parentRoundOrder and crossBroker child worker for default Terminal Brief title", () => {
+  const result: RawRunnerOutput = {
+    ok: true, taskId: "task-r26-dungae", status: "completed", workDir: "/tmp/work",
+    stdout: "raw log omitted", stderr: "", artifacts: [],
+    resultSummary: {
+      exitCode: 0, signal: null, timedOut: false,
+      stdout: "bounded stdout", stderr: "", stdoutTruncated: false, stderrTruncated: false,
+      artifactCount: 0, manifestPath: "artifacts/manifest.json",
+    },
+    github: {
+      prUrl: "https://github.com/jinwon-int/repo/pull/626",
+      startCommentUrl: "https://github.com/jinwon-int/repo/issues/626#issuecomment-100",
+    },
+  };
+
+  const event = buildTerminalEvidenceEvent(
+    result,
+    {
+      id: "task-r26-dungae",
+      payload: {
+        repo: "jinwon-int/repo",
+        issue: "626",
+        parentRoundId: "round-r26",
+        parentRoundOrder: 2,
+        parentRoundTotal: 3,
+        originBrokerId: "seoseo",
+        crossBrokerHandoff: {
+          parentRoundId: "round-r26",
+          originBrokerId: "seoseo",
+          handoffBrokerId: "gwakga",
+          childWorkerId: "dungae",
+        },
+        terminalBriefSummary: "Human all-hands brief: dungae opened the compatibility PR.",
+      },
+    },
+    "gwakga",
+    "2026-05-15T11:00:00.000Z",
+  );
+
+  assert.equal(event.alert.title, "A2A Terminal Brief 완료: dungae(2/3)");
+  assert.equal(event.terminalBrief?.title, "A2A Terminal Brief 완료: dungae(2/3)");
+  assert.equal(event.terminalBrief?.worker, "dungae");
+  assert.deepEqual(event.terminalBrief?.progress, { sequence: 2, total: 3 });
+  assert.equal(event.terminalBrief?.summary, "Human all-hands brief: dungae opened the compatibility PR.");
+  assert.equal(event.worker, "gwakga");
+  assert.ok(!JSON.stringify(event).includes("Docker runner opened PR evidence"));
+});
+
 test("buildTerminalEvidenceEvent: Terminal Brief title falls back safely when denominator is unknown", () => {
   const result: RawRunnerOutput = {
     ok: true, taskId: "task-nosuk-2", status: "completed", workDir: "/tmp/work",

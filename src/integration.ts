@@ -65,6 +65,10 @@ export interface HandlerTaskPayload {
   originBrokerId?: string;
   /** Expected number of children in the parent round; alias for Terminal Brief total. */
   parentRoundTotal?: string | number;
+  /** 1-based worker order in the parent round; alias for Terminal Brief sequence. */
+  parentRoundOrder?: string | number;
+  /** Backward-compatible alias for parentRoundOrder. */
+  parentRoundIndex?: string | number;
   /** Cross-broker handoff routing context for delegated children. */
   crossBrokerHandoff?: RunnerCrossBrokerHandoff;
   /** Initiating/parent broker that owns operator-facing Terminal Brief sends. */
@@ -96,6 +100,10 @@ export interface HandlerTerminalBriefPayload {
   originBrokerId?: string;
   /** Expected number of children in the parent round; alias for total. */
   parentRoundTotal?: string | number;
+  /** 1-based worker order in the parent round; alias for sequence. */
+  parentRoundOrder?: string | number;
+  /** Backward-compatible alias for parentRoundOrder. */
+  parentRoundIndex?: string | number;
   /** Human-authored all-hands Terminal Brief summary. Never replaced by runner evidence summary text. */
   summary?: string;
   /** Cross-broker handoff routing context for delegated children. */
@@ -424,6 +432,14 @@ export function buildRunnerTaskFromHandlerPayload(
       80,
     ),
     parentRoundTotal: positiveInteger(task?.payload?.parentRoundTotal ?? task?.payload?.terminalBrief?.parentRoundTotal ?? task?.payload?.terminalBriefTotal ?? task?.payload?.terminalBrief?.total),
+    parentRoundOrder: positiveInteger(
+      task?.payload?.parentRoundOrder ??
+        task?.payload?.parentRoundIndex ??
+        task?.payload?.terminalBrief?.parentRoundOrder ??
+        task?.payload?.terminalBrief?.parentRoundIndex ??
+        task?.payload?.terminalBriefSequence ??
+        task?.payload?.terminalBrief?.sequence,
+    ),
     crossBrokerHandoff: sanitizeCrossBrokerHandoff(task?.payload?.crossBrokerHandoff ?? task?.payload?.terminalBrief?.crossBrokerHandoff),
     existingPrUrl: normalizeExistingPrUrl(task, repo),
     existingPrNumber: task?.payload?.existingPrNumber ?? task?.payload?.prNumber,
@@ -515,7 +531,9 @@ export function parseRunnerOutput(raw: string): RawRunnerOutput {
 /**
  * Extract structured GitHub completion evidence from raw runner output.
  *
- * Precedence: prUrl > blockCommentUrl > doneCommentUrl.
+ * Precedence follows explicit structured outcome first, then legacy
+ * PR/Block/Done ordering. Stale non-canonical URLs are stripped only when the
+ * structured outcome tells us which evidence is canonical.
  */
 export function extractGitHubEvidence(
   result: RawRunnerOutput,
@@ -524,17 +542,65 @@ export function extractGitHubEvidence(
   // Runner already produced structured evidence (github property)
   if (result.github) {
     const g = result.github;
-    if (g.prUrl) return { ...g, outcome: "pr", prUrl: g.prUrl, blockUrl: undefined, blockCommentUrl: undefined, doneUrl: undefined, doneCommentUrl: undefined };
     const blockUrl = g.blockUrl ?? g.blockCommentUrl;
-    if (blockUrl) return { ...g, outcome: canonicalStructuredOutcome(g, "block"), blockUrl, blockCommentUrl: blockUrl };
     const doneUrl = g.doneUrl ?? g.doneCommentUrl;
-    if (doneUrl && !budgetLimited && result.ok && result.status === "completed") return { ...g, outcome: canonicalStructuredOutcome(g, "done"), doneUrl, doneCommentUrl: doneUrl };
+    const doneEvidenceIsTerminal = Boolean(doneUrl && !budgetLimited && result.ok && result.status === "completed");
+
+    if (blockUrl && isStructuredBlockOutcome(g)) return canonicalBlockEvidence(g, blockUrl);
+    if (doneUrl && doneEvidenceIsTerminal && isStructuredDoneOutcome(g)) return canonicalDoneEvidence(g, doneUrl);
+    if (g.prUrl) return canonicalPrEvidence(g);
+    if (blockUrl) return canonicalBlockEvidence(g, blockUrl);
+    if (doneUrl && doneEvidenceIsTerminal) return canonicalDoneEvidence(g, doneUrl);
   }
 
   // Fallback: legacy PR URL from stdout parsing
   if (result.prUrl) return { prUrl: result.prUrl };
 
   return null;
+}
+
+function canonicalPrEvidence(evidence: GitHubEvidence): GitHubEvidence {
+  return {
+    ...evidence,
+    outcome: "pr",
+    prUrl: evidence.prUrl,
+    blockUrl: undefined,
+    blockCommentUrl: undefined,
+    doneUrl: undefined,
+    doneCommentUrl: undefined,
+  };
+}
+
+function canonicalBlockEvidence(evidence: GitHubEvidence, blockUrl: string): GitHubEvidence {
+  return {
+    ...evidence,
+    outcome: canonicalStructuredOutcome(evidence, "block"),
+    prUrl: undefined,
+    blockUrl,
+    blockCommentUrl: blockUrl,
+    doneUrl: undefined,
+    doneCommentUrl: undefined,
+  };
+}
+
+function canonicalDoneEvidence(evidence: GitHubEvidence, doneUrl: string): GitHubEvidence {
+  return {
+    ...evidence,
+    outcome: canonicalStructuredOutcome(evidence, "done"),
+    prUrl: undefined,
+    blockUrl: undefined,
+    blockCommentUrl: undefined,
+    doneUrl,
+    doneCommentUrl: doneUrl,
+  };
+}
+
+function isStructuredBlockOutcome(evidence: GitHubEvidence): boolean {
+  return evidence.outcome === "block" || evidence.outcome === "blocked_no_changes_with_evidence";
+}
+
+function isStructuredDoneOutcome(evidence: GitHubEvidence): boolean {
+  return evidence.outcome === "done" || evidence.outcome === "succeeded_no_changes_with_done_evidence";
 }
 
 function canonicalStructuredOutcome(evidence: GitHubEvidence, fallback: "block" | "done"): GitHubEvidence["outcome"] {
@@ -658,7 +724,7 @@ export function buildTerminalEvidenceEvent(
         : result.ok
           ? "blocked"
           : "failed";
-  const url = evidence?.prUrl ?? evidence?.doneCommentUrl ?? evidence?.blockCommentUrl;
+  const url = terminalEvidenceUrl(evidence, evidenceKind);
   const taskId = task?.id ?? result.taskId ?? "unknown";
   const summary = result.resultSummary;
   const worker = normalizeString(nodeId) ?? "unknown";
@@ -719,6 +785,14 @@ export function buildTerminalEvidenceEvent(
     runnerBuild: summary?.runnerBuild ?? result.runnerBuild,
     timestamps: { emittedAt },
   };
+}
+
+function terminalEvidenceUrl(evidence: GitHubEvidence | null, evidenceKind: TerminalEvidenceKind): string | undefined {
+  if (!evidence) return undefined;
+  if (evidenceKind === "PR") return evidence.prUrl;
+  if (evidenceKind === "Done") return evidence.doneCommentUrl;
+  if (evidenceKind === "Block" || evidenceKind === "BudgetLimited") return evidence.blockCommentUrl;
+  return undefined;
 }
 
 /**
@@ -1124,6 +1198,8 @@ function buildTerminalBriefContext(
       payload?.terminalBriefWorker != null ||
       payload?.terminalBriefSequence != null ||
       payload?.terminalBriefTotal != null ||
+      payload?.parentRoundOrder != null ||
+      payload?.parentRoundIndex != null ||
       payload?.parentRoundId != null ||
       payload?.originBrokerId != null ||
       payload?.parentRoundTotal != null ||
@@ -1132,12 +1208,19 @@ function buildTerminalBriefContext(
   if (!hasTerminalBriefInput) return undefined;
 
   const workerLabel = safeEvidenceText(
-    brief?.workerLabel ?? brief?.worker ?? payload?.terminalBriefWorker ?? payload?.worker ?? worker,
+    brief?.workerLabel ?? brief?.worker ?? payload?.terminalBriefWorker ?? handoff?.childWorkerId ?? payload?.worker ?? worker,
     48,
   );
   if (!workerLabel) return undefined;
 
-  const sequence = positiveInteger(brief?.sequence ?? payload?.terminalBriefSequence);
+  const sequence = positiveInteger(
+    brief?.sequence ??
+      brief?.parentRoundOrder ??
+      brief?.parentRoundIndex ??
+      payload?.terminalBriefSequence ??
+      payload?.parentRoundOrder ??
+      payload?.parentRoundIndex,
+  );
   const hasValidProgress = sequence !== undefined && total !== undefined && sequence <= total;
   const subject = hasValidProgress ? `${workerLabel}(${sequence}/${total})` : workerLabel;
   const title = boundAlertPart(`A2A Terminal Brief ${terminalBriefOutcomeLabel(status, evidenceKind)}: ${subject}`, 96);
@@ -1171,6 +1254,7 @@ function sanitizeCrossBrokerHandoff(value: RunnerCrossBrokerHandoff | undefined)
     parentRoundId: safeEvidenceText(value.parentRoundId, 120),
     originBrokerId: safeEvidenceText(value.originBrokerId, 80),
     handoffBrokerId: safeEvidenceText(value.handoffBrokerId, 80),
+    childWorkerId: safeEvidenceText(value.childWorkerId, 80),
   }) as RunnerCrossBrokerHandoff;
   return Object.keys(handoff).length ? handoff : undefined;
 }
