@@ -523,6 +523,8 @@ export interface RunnerTask {
   originBrokerId?: string;
   /** Expected number of children in the parent round. */
   parentRoundTotal?: number;
+  /** 1-based child order within the parent round. */
+  parentRoundOrder?: number;
   /** Cross-broker handoff routing context, when this child was delegated. */
   crossBrokerHandoff?: RunnerCrossBrokerHandoff;
   /** Optional bounded notification/receipt trace metadata supplied by broker/plugin surfaces. */
@@ -568,6 +570,7 @@ export interface RunnerCrossBrokerHandoff {
   parentRoundId?: string;
   originBrokerId?: string;
   handoffBrokerId?: string;
+  childWorkerId?: string;
 }
 
 export interface NormalizedRunnerTask extends RunnerTask {

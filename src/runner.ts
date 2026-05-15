@@ -174,13 +174,16 @@ export function buildRunnerEvidenceHints(task: NormalizedRunnerTask, result: Run
   const branch = safeHintText(github?.branch ?? result.artifactManifest?.branch);
   const repo = safeGitHubRepoSlug(github?.repo ?? result.artifactManifest?.repo ?? task.repo);
   const failureCategory = inferEvidenceFailureCategory(result);
+  const prUrl = canonicalHintPrUrl(result);
+  const doneUrl = canonicalHintDoneUrl(result);
+  const blockUrl = canonicalHintBlockUrl(result);
   const hint: RunnerEvidenceHints = {
     schemaVersion: "a2a.runner.evidence-hints.v1",
     ...(safeGitHubUrl(task.issueUrl ?? result.artifactManifest?.issueUrl, "issues") ? { issueUrl: task.issueUrl ?? result.artifactManifest?.issueUrl } : {}),
     ...(safeGitHubUrl(github?.startCommentUrl, "issues") ? { startCommentUrl: github?.startCommentUrl } : {}),
-    ...(safeGitHubUrl(github?.prUrl ?? result.prUrl ?? result.artifactManifest?.prUrl, "pull") ? { prUrl: github?.prUrl ?? result.prUrl ?? result.artifactManifest?.prUrl } : {}),
-    ...(safeGitHubUrl(github?.doneUrl ?? github?.doneCommentUrl, "issues") ? { doneUrl: github?.doneUrl ?? github?.doneCommentUrl } : {}),
-    ...(safeGitHubUrl(github?.blockUrl ?? github?.blockCommentUrl, "issues") ? { blockUrl: github?.blockUrl ?? github?.blockCommentUrl } : {}),
+    ...(safeGitHubUrl(prUrl, "pull") ? { prUrl } : {}),
+    ...(safeGitHubUrl(doneUrl, "issues") ? { doneUrl } : {}),
+    ...(safeGitHubUrl(blockUrl, "issues") ? { blockUrl } : {}),
     ...(branch ? { branch } : {}),
     ...(repo && branch ? { branchUrl: buildBranchUrl(repo, branch) } : {}),
     ...(failureCategory ? { failureCategory } : {}),
@@ -188,22 +191,38 @@ export function buildRunnerEvidenceHints(task: NormalizedRunnerTask, result: Run
   return Object.keys(hint).length > 1 ? hint : undefined;
 }
 
+function canonicalHintPrUrl(result: RunnerResult): string | undefined {
+  const github = result.github;
+  if (!github) return result.prUrl ?? result.artifactManifest?.prUrl;
+  if (github.outcome === "pr") return github.prUrl ?? result.prUrl ?? result.artifactManifest?.prUrl;
+  if (github.outcome) return undefined;
+  return github.prUrl ?? result.prUrl ?? result.artifactManifest?.prUrl;
+}
+
+function canonicalHintDoneUrl(result: RunnerResult): string | undefined {
+  const github = result.github;
+  if (!github) return undefined;
+  if (github.outcome === "done" || github.outcome === "succeeded_no_changes_with_done_evidence") return github.doneUrl ?? github.doneCommentUrl;
+  if (github.outcome) return undefined;
+  if (github.prUrl || result.prUrl || result.artifactManifest?.prUrl) return undefined;
+  if (github.blockUrl || github.blockCommentUrl) return undefined;
+  return github.doneUrl ?? github.doneCommentUrl;
+}
+
+function canonicalHintBlockUrl(result: RunnerResult): string | undefined {
+  const github = result.github;
+  if (!github) return undefined;
+  if (github.outcome === "block" || github.outcome === "blocked_no_changes_with_evidence") return github.blockUrl ?? github.blockCommentUrl;
+  if (github.outcome) return undefined;
+  if (github.prUrl || result.prUrl || result.artifactManifest?.prUrl) return undefined;
+  return github.blockUrl ?? github.blockCommentUrl;
+}
+
 export function buildGitHubCommentProjection(task: NormalizedRunnerTask, result: RunnerResult): GitHubCommentProjection | undefined {
   const github = result.github;
-  const kind: GitHubCommentProjectionKind | undefined = github?.prUrl
-    ? "pr"
-    : github?.doneUrl ?? github?.doneCommentUrl
-      ? "done"
-      : github?.blockUrl ?? github?.blockCommentUrl
-        ? "block"
-        : undefined;
-  const url = kind === "pr"
-    ? github?.prUrl
-    : kind === "done"
-      ? github?.doneUrl ?? github?.doneCommentUrl
-      : kind === "block"
-        ? github?.blockUrl ?? github?.blockCommentUrl
-        : undefined;
+  const projectionSource = canonicalGitHubCommentProjectionSource(result);
+  const kind = projectionSource?.kind;
+  const url = projectionSource?.url;
   if (!kind || !url || !safeGitHubUrl(url, kind === "pr" ? "pull" : "issues")) return undefined;
   const projectedUrl = url;
 
@@ -228,6 +247,16 @@ export function buildGitHubCommentProjection(task: NormalizedRunnerTask, result:
     commentIsVisibilityReceipt: false,
     commentIsOperatorApproval: false,
   };
+}
+
+function canonicalGitHubCommentProjectionSource(result: RunnerResult): { kind: GitHubCommentProjectionKind; url: string } | undefined {
+  const blockUrl = canonicalHintBlockUrl(result);
+  const doneUrl = canonicalHintDoneUrl(result);
+  const prUrl = canonicalHintPrUrl(result);
+  if (blockUrl) return { kind: "block", url: blockUrl };
+  if (doneUrl) return { kind: "done", url: doneUrl };
+  if (prUrl) return { kind: "pr", url: prUrl };
+  return undefined;
 }
 
 function sanitizeManifestPath(_value: string): string {
@@ -886,7 +915,7 @@ export async function buildArtifactManifest(workDir: string, artifacts: string[]
     ...(task?.id ? { taskId: task.id } : {}),
     ...(primaryRepo?.url ? { repo: primaryRepo.url } : task?.repo ? { repo: task.repo } : {}),
     ...(primaryRepo?.branch ?? task?.baseBranch ? { branch: primaryRepo?.branch ?? task?.baseBranch } : {}),
-    ...(context.prUrl ? { prUrl: context.prUrl } : task?.existingPrUrl ? { prUrl: task.existingPrUrl } : {}),
+    ...(context.prUrl ? { prUrl: context.prUrl } : {}),
     ...(task?.issueUrl ? { issueUrl: task.issueUrl } : {}),
     status: context.status ?? "done",
     summary,
