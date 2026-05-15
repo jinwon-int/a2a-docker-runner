@@ -142,6 +142,7 @@ export function buildRunnerEvidenceHints(task: NormalizedRunnerTask, result: Run
   const hint: RunnerEvidenceHints = {
     schemaVersion: "a2a.runner.evidence-hints.v1",
     ...(safeGitHubUrl(task.issueUrl ?? result.artifactManifest?.issueUrl, "issues") ? { issueUrl: task.issueUrl ?? result.artifactManifest?.issueUrl } : {}),
+    ...(safeGitHubUrl(github?.startCommentUrl, "issues") ? { startCommentUrl: github?.startCommentUrl } : {}),
     ...(safeGitHubUrl(github?.prUrl ?? result.prUrl ?? result.artifactManifest?.prUrl, "pull") ? { prUrl: github?.prUrl ?? result.prUrl ?? result.artifactManifest?.prUrl } : {}),
     ...(safeGitHubUrl(github?.doneUrl ?? github?.doneCommentUrl, "issues") ? { doneUrl: github?.doneUrl ?? github?.doneCommentUrl } : {}),
     ...(safeGitHubUrl(github?.blockUrl ?? github?.blockCommentUrl, "issues") ? { blockUrl: github?.blockUrl ?? github?.blockCommentUrl } : {}),

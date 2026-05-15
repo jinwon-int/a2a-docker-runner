@@ -45,7 +45,16 @@ Excluded legacy target:
 1. Seoseo/operator reviews the merged PR and CI result.
 2. Build/package from the merge commit only; do not publish from an issue branch.
 3. **Pre-deploy canary**: Run CI-safe canary fixture on the merge commit: `node --test dist/canary.test.js`.
-4. Collect no-live receipt-smoke evidence for all active workers (`bangtong`, `dungae`, `sogyo`, `nosuk`) into one sanitized JSON file, then run the merged-evidence guard from the merge commit:
+4. **Deploy-marker doctor**: Before rollout, run the deploy-marker doctor to confirm the deployed runner revision matches the expected merge commit:
+
+   ```bash
+   node scripts/deploy-marker-doctor.mjs \
+     --expected-revision <merge-commit-sha> \
+     --repo-dir .
+   ```
+
+   The doctor fails closed when the deployed revision does not match the expected marker, when the checkout is not a git worktree, or when the local SHA cannot be resolved. It produces no-live refresh safety evidence: no provider sends, terminal ACKs, deployments, restarts, or DB mutations are performed. This check is deterministic, CI-safe, and requires no external services.
+5. Collect no-live receipt-smoke evidence for all active workers (`bangtong`, `dungae`, `sogyo`, `nosuk`) into one sanitized JSON file, then run the merged-evidence guard from the merge commit:
 
    ```bash
    npm run rollout:receipt-evidence -- \
@@ -54,10 +63,17 @@ Excluded legacy target:
    ```
 
    The guard fails closed if any active worker is missing, reports a different runner artifact commit, lacks an artifact version or passing focused test result, lacks operator-visible terminal receipt evidence, allows provider-send-only ACK, or has stale-backlog terminal receipt evidence. Do not include tokens, private host paths, raw session dumps, live Telegram sends, or real terminal-outbox ACKs in the merged input.
-5. Roll out one active target at a time, starting with a non-critical worker when possible.
-6. On each target, run `a2a-docker-runner doctor` and a small non-secret smoke task before sending real GitHub jobs.
-7. Confirm the worker completion payload preserves runner evidence fields when present: `github.prUrl`, `github.doneCommentUrl`, and `github.blockCommentUrl`.
-8. Continue to the next active target only after the previous target reports healthy status and expected evidence output.
+6. Roll out one active target at a time, starting with a non-critical worker when possible.
+7. On each target, run `a2a-docker-runner doctor` and the deploy-marker doctor before sending real GitHub jobs:
+
+   ```bash
+   a2a-docker-runner doctor
+   node scripts/deploy-marker-doctor.mjs --expected-revision <merge-commit-sha>
+   ```
+
+   Both checks must pass before sending real jobs to the target.
+8. Confirm the worker completion payload preserves runner evidence fields when present: `github.prUrl`, `github.doneCommentUrl`, and `github.blockCommentUrl`.
+9. Continue to the next active target only after the previous target reports healthy status and expected evidence output.
 
 ## Chaos E2E release gate
 

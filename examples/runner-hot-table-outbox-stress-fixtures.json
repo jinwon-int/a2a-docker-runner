@@ -1,0 +1,791 @@
+{
+  "$schema": "a2a-runner-hot-table-outbox-stress-fixtures-v1",
+  "schemaVersion": "a2a.runner.hot-table-outbox-stress-fixtures.v1",
+  "run": "a2a-stability-r20-20260515T102000Z",
+  "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/257",
+  "parentUrl": "https://github.com/jinwon-int/a2a-broker/issues/636",
+  "worker": "nosuk",
+  "purpose": "Stress/parity coverage for broker_terminal_outbox hot-table stability under concurrent PR/Done/Block terminal evidence submissions. Validates receipt-gated ACK, deduplication, overlapping runs, and provider-send rejection without operator-visible receipt. No live broker, Docker, Gateway, Telegram, GitHub writes, deploys, restarts, merges, tokens, raw logs, or private paths.",
+  "emittedAt": "2026-05-15T10:20:00.000Z",
+  "safetyState": {
+    "noProductionDeployOrRestart": true,
+    "noGatewayBrokerWorkerRestart": true,
+    "noLiveProviderSend": true,
+    "noTerminalAckReplay": true,
+    "noProductionDbMutation": true,
+    "terminalAck": "requires_operator_receipt",
+    "providerSendIsReceiptEvidence": false,
+    "hotTableFixtureOnly": true
+  },
+  "stressProfile": {
+    "concurrentOutboxOperations": 5,
+    "dedupeCollisions": 2,
+    "overlappingRunPairs": 3,
+    "providerSendOnlyCount": 2,
+    "receiptGatedCount": 5,
+    "expectedAckAfterReceiptCount": 3,
+    "expectedBlockedCount": 2,
+    "terminalOutboxTableRows": 314
+  },
+  "expectedGuards": {
+    "noLiveProviderSend": "operator-visible receipt required before terminal ack",
+    "providerSendAloneBlockedAck": "provider send success without operator-visible receipt",
+    "dedupeKeyMustMatchEventId": "dedupeKey must equal eventId for replay safety",
+    "missingReceiptBlocked": "missing operator-visible receipt",
+    "receiptEventIdMismatchBlocked": "receipt eventId mismatch",
+    "receiptDedupeKeyMismatchBlocked": "receipt dedupeKey mismatch",
+    "terminalOutboxAckPerformed": false
+  },
+  "cases": [
+    {
+      "name": "concurrent PR #1: receipt-gated ACK completes cursor",
+      "stressIndex": 0,
+      "handlerTask": {
+        "id": "hot-table-stress-pr-1",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "257",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/257",
+          "title": "Team1/nosuk hot-table outbox stress PR evidence #1",
+          "focus": "Concurrent outbox operation under runner hot-table load",
+          "requestedBy": "nosuk",
+          "runId": "a2a-stability-r20-20260515T102000Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "hot-table-stress-pr-1",
+        "status": "completed",
+        "workDir": "/synthetic/hot-table/outbox/nosuk/pr1",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "synthetic PR #1 stdout omitted from stress terminal evidence",
+        "stderr": "",
+        "artifacts": ["artifacts/summary.txt", "artifacts/manifest.json"],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "hot-table stress PR #1: ok",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 2,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/257"
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-sse",
+        "receiptId": "receipt-hot-table-stress-pr-1",
+        "url": "https://broker.example.invalid/receipts/receipt-hot-table-stress-pr-1",
+        "deliveredAt": "2026-05-15T10:20:01.000Z"
+      },
+      "expected": {
+        "evidenceKind": "PR",
+        "status": "succeeded",
+        "acknowledged": true,
+        "cursorComplete": true,
+        "ackReason": "terminal evidence has operator-visible receipt",
+        "terminalOutboxId": "hot-table-stress-pr-1"
+      }
+    },
+    {
+      "name": "concurrent PR #2: receipt-gated ACK completes cursor",
+      "stressIndex": 1,
+      "handlerTask": {
+        "id": "hot-table-stress-pr-2",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "257",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/257",
+          "title": "Team1/nosuk hot-table outbox stress PR evidence #2",
+          "focus": "Concurrent outbox operation under runner hot-table load",
+          "requestedBy": "nosuk",
+          "runId": "a2a-stability-r20-20260515T102000Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "hot-table-stress-pr-2",
+        "status": "completed",
+        "workDir": "/synthetic/hot-table/outbox/nosuk/pr2",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "synthetic PR #2 stdout omitted from stress terminal evidence",
+        "stderr": "",
+        "artifacts": ["artifacts/summary.txt", "artifacts/manifest.json"],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "hot-table stress PR #2: ok",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 2,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/258"
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-sse",
+        "receiptId": "receipt-hot-table-stress-pr-2",
+        "url": "https://broker.example.invalid/receipts/receipt-hot-table-stress-pr-2",
+        "deliveredAt": "2026-05-15T10:20:01.500Z"
+      },
+      "expected": {
+        "evidenceKind": "PR",
+        "status": "succeeded",
+        "acknowledged": true,
+        "cursorComplete": true,
+        "ackReason": "terminal evidence has operator-visible receipt",
+        "terminalOutboxId": "hot-table-stress-pr-2"
+      }
+    },
+    {
+      "name": "concurrent Done: receipt-gated ACK with no PR needed",
+      "stressIndex": 2,
+      "handlerTask": {
+        "id": "hot-table-stress-done-1",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "257",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/257",
+          "title": "Team1/nosuk hot-table outbox stress Done evidence",
+          "focus": "Concurrent Done evidence under runner hot-table load",
+          "requestedBy": "nosuk",
+          "runId": "a2a-stability-r20-20260515T102000Z",
+          "allowNoChanges": true,
+          "readOnlyValidation": true
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "hot-table-stress-done-1",
+        "status": "completed",
+        "workDir": "/synthetic/hot-table/outbox/nosuk/done1",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "synthetic Done stdout omitted from stress terminal evidence",
+        "stderr": "",
+        "artifacts": ["artifacts/summary.txt"],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "no_changes_allowed: Done evidence posted",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 1,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/257",
+          "doneCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/257#issuecomment-done-stress",
+          "validation": {
+            "status": "no_changes_allowed",
+            "exitCode": 0,
+            "timedOut": false,
+            "artifactCount": 1
+          },
+          "safetyState": {
+            "noLiveProviderSend": true,
+            "terminalAck": "requires_operator_receipt",
+            "providerSendIsReceiptEvidence": false
+          }
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-sse",
+        "receiptId": "receipt-hot-table-stress-done-1",
+        "url": "https://broker.example.invalid/receipts/receipt-hot-table-stress-done-1",
+        "deliveredAt": "2026-05-15T10:20:02.000Z"
+      },
+      "expected": {
+        "evidenceKind": "Done",
+        "status": "succeeded",
+        "acknowledged": true,
+        "cursorComplete": true,
+        "ackReason": "terminal evidence has operator-visible receipt",
+        "terminalOutboxId": "hot-table-stress-done-1"
+      }
+    },
+    {
+      "name": "concurrent Block: receipt-gated ACK for blocked validation",
+      "stressIndex": 3,
+      "handlerTask": {
+        "id": "hot-table-stress-block-1",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "257",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/257",
+          "title": "Team1/nosuk hot-table outbox stress Block evidence",
+          "focus": "Concurrent Block evidence under runner hot-table load",
+          "requestedBy": "nosuk",
+          "runId": "a2a-stability-r20-20260515T102000Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": false,
+        "taskId": "hot-table-stress-block-1",
+        "status": "failed",
+        "workDir": "/synthetic/hot-table/outbox/nosuk/block1",
+        "exitCode": 4,
+        "signal": null,
+        "stdout": "synthetic Block stdout omitted from stress terminal evidence",
+        "stderr": "read_only_validation_changed_repo: blocked",
+        "artifacts": ["artifacts/summary.txt", "artifacts/patch-command.log"],
+        "error": "read_only_validation detected changes; refusing to create PR",
+        "resultSummary": {
+          "exitCode": 4,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "read_only_validation=blocked",
+          "stderr": "read_only_validation_changed_repo: blocked",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 2,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/257",
+          "blockCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/257#issuecomment-block-stress",
+          "validation": {
+            "status": "blocked",
+            "exitCode": 4,
+            "timedOut": false,
+            "artifactCount": 2
+          },
+          "safetyState": {
+            "noLiveProviderSend": true,
+            "terminalAck": "requires_operator_receipt",
+            "providerSendIsReceiptEvidence": false
+          }
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-sse",
+        "receiptId": "receipt-hot-table-stress-block-1",
+        "url": "https://broker.example.invalid/receipts/receipt-hot-table-stress-block-1",
+        "deliveredAt": "2026-05-15T10:20:02.500Z"
+      },
+      "expected": {
+        "evidenceKind": "Block",
+        "status": "blocked",
+        "acknowledged": true,
+        "cursorComplete": true,
+        "ackReason": "terminal evidence has operator-visible receipt",
+        "terminalOutboxId": "hot-table-stress-block-1"
+      }
+    },
+    {
+      "name": "concurrent BudgetLimited: no PR/Done/Block, cursor incomplete without receipt",
+      "stressIndex": 4,
+      "handlerTask": {
+        "id": "hot-table-stress-budget-limited",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "257",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/257",
+          "title": "Team1/nosuk hot-table outbox stress BudgetLimited",
+          "focus": "Budget-limited outbox entry under concurrent load",
+          "requestedBy": "nosuk",
+          "runId": "a2a-stability-r20-20260515T102000Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "hot-table-stress-budget-limited",
+        "status": "completed",
+        "workDir": "/synthetic/hot-table/outbox/nosuk/budget",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "budget limited after partial progress",
+        "stderr": "",
+        "artifacts": ["artifacts/summary.txt", "artifacts/manifest.json"],
+        "artifactManifest": {
+          "schemaVersion": 1,
+          "manifestPath": "artifacts/manifest.json",
+          "generatedAt": "2026-05-15T10:20:00.000Z",
+          "artifacts": [
+            { "path": "artifacts/summary.txt", "name": "summary.txt", "sizeBytes": 128 },
+            { "path": "artifacts/manifest.json", "name": "manifest.json", "sizeBytes": 256 }
+          ],
+          "status": "budget_limited",
+          "budget": {
+            "limitKind": "time",
+            "limit": "45m task timeout budget",
+            "used": "45m",
+            "reason": "Hot-table stress budget limited before outbox completion"
+          },
+          "continuation": {
+            "recommended": true,
+            "nextPrompt": "Continue from hot-table stress artifacts; resume outbox processing on operator approval.",
+            "requiresApproval": true
+          }
+        },
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "budget limit reached: hot-table outbox stress partial completion",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 2,
+          "manifestPath": "artifacts/manifest.json",
+          "status": "budget_limited",
+          "budget": {
+            "limitKind": "time",
+            "limit": "45m task timeout budget",
+            "used": "45m",
+            "reason": "Hot-table stress budget limited before outbox completion"
+          },
+          "continuation": {
+            "recommended": true,
+            "nextPrompt": "Continue from hot-table stress artifacts; resume outbox processing on operator approval.",
+            "requiresApproval": true
+          }
+        },
+        "github": {
+          "doneCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/257#issuecomment-budget-limited"
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-sse",
+        "receiptId": "receipt-hot-table-stress-budget-limited",
+        "url": "https://broker.example.invalid/receipts/receipt-hot-table-stress-budget-limited",
+        "deliveredAt": "2026-05-15T10:20:03.000Z"
+      },
+      "expected": {
+        "evidenceKind": "BudgetLimited",
+        "status": "blocked",
+        "acknowledged": false,
+        "cursorComplete": false,
+        "ackReason": "PR/Done/Block terminal evidence required before terminal ack",
+        "terminalOutboxId": "hot-table-stress-budget-limited"
+      }
+    },
+    {
+      "name": "dedupe collision #1: identical PR URL within same run produces stable dedupeKey",
+      "stressIndex": 5,
+      "dedupeGroup": "collision-group-A",
+      "handlerTask": {
+        "id": "hot-table-stress-dedupe-1a",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "257",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/257",
+          "title": "Team1/nosuk hot-table dedupe stress A",
+          "focus": "Dedupe key stability under concurrent outbox writes",
+          "requestedBy": "nosuk",
+          "runId": "a2a-stability-r20-20260515T102000Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "hot-table-stress-dedupe-1a",
+        "status": "completed",
+        "workDir": "/synthetic/hot-table/outbox/nosuk/dedupe1a",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "synthetic dedupe PR stdout omitted",
+        "stderr": "",
+        "artifacts": ["artifacts/summary.txt"],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "dedupe stress: ok",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 1,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/260"
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-sse",
+        "receiptId": "receipt-hot-table-stress-dedupe-1a",
+        "url": "https://broker.example.invalid/receipts/receipt-hot-table-stress-dedupe-1a",
+        "deliveredAt": "2026-05-15T10:20:04.000Z"
+      },
+      "expected": {
+        "evidenceKind": "PR",
+        "status": "succeeded",
+        "acknowledged": true,
+        "cursorComplete": true,
+        "dedupeKeyMatchesEventId": true,
+        "ackReason": "terminal evidence has operator-visible receipt",
+        "terminalOutboxId": "hot-table-stress-dedupe-1a"
+      }
+    },
+    {
+      "name": "dedupe collision #2: same PR URL, different task id produces same dedupeKey as sibling",
+      "stressIndex": 6,
+      "dedupeGroup": "collision-group-A",
+      "handlerTask": {
+        "id": "hot-table-stress-dedupe-1b",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "257",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/257",
+          "title": "Team1/nosuk hot-table dedupe stress A (retry)",
+          "focus": "Dedupe key stability under concurrent outbox writes",
+          "requestedBy": "nosuk",
+          "runId": "a2a-stability-r20-20260515T102000Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "hot-table-stress-dedupe-1b",
+        "status": "completed",
+        "workDir": "/synthetic/hot-table/outbox/nosuk/dedupe1b",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "synthetic dedupe PR stdout omitted",
+        "stderr": "",
+        "artifacts": ["artifacts/summary.txt"],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "dedupe stress retry: ok",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 1,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/260"
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-sse",
+        "receiptId": "receipt-hot-table-stress-dedupe-1b",
+        "url": "https://broker.example.invalid/receipts/receipt-hot-table-stress-dedupe-1b",
+        "deliveredAt": "2026-05-15T10:20:04.500Z"
+      },
+      "expected": {
+        "evidenceKind": "PR",
+        "status": "succeeded",
+        "acknowledged": true,
+        "cursorComplete": true,
+        "dedupeKeyMatchesEventId": true,
+        "sharedDedupeKeyWith": "hot-table-stress-dedupe-1a",
+        "ackReason": "terminal evidence has operator-visible receipt",
+        "terminalOutboxId": "hot-table-stress-dedupe-1b"
+      }
+    },
+    {
+      "name": "provider send success only: ACK blocked, cursor incomplete",
+      "stressIndex": 7,
+      "providerSendSuccessOnly": true,
+      "handlerTask": {
+        "id": "hot-table-stress-provider-send-only",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "257",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/257",
+          "title": "Team1/nosuk hot-table provider send (no receipt)",
+          "focus": "Provider send success alone must not advance terminal outbox cursor",
+          "requestedBy": "nosuk",
+          "runId": "a2a-stability-r20-20260515T102000Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "hot-table-stress-provider-send-only",
+        "status": "completed",
+        "workDir": "/synthetic/hot-table/outbox/nosuk/provider-send",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "synthetic provider send stdout omitted",
+        "stderr": "",
+        "artifacts": ["artifacts/summary.txt"],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "provider send success: ok (no operator-visible receipt)",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 1,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/261"
+        }
+      },
+      "expected": {
+        "evidenceKind": "PR",
+        "status": "succeeded",
+        "acknowledged": false,
+        "cursorComplete": false,
+        "ackReason": "operator-visible receipt required before terminal ack",
+        "terminalOutboxId": "hot-table-stress-provider-send-only"
+      }
+    },
+    {
+      "name": "receipt with eventId mismatch: ACK blocked safely",
+      "stressIndex": 8,
+      "handlerTask": {
+        "id": "hot-table-stress-receipt-mismatch",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "257",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/257",
+          "title": "Team1/nosuk hot-table receipt eventId mismatch",
+          "focus": "Receipt with wrong eventId must fail closed",
+          "requestedBy": "nosuk",
+          "runId": "a2a-stability-r20-20260515T102000Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "hot-table-stress-receipt-mismatch",
+        "status": "completed",
+        "workDir": "/synthetic/hot-table/outbox/nosuk/receipt-mismatch",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "synthetic mismatch stdout omitted",
+        "stderr": "",
+        "artifacts": ["artifacts/summary.txt"],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "receipt mismatch test: ok",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 1,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/262"
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-sse",
+        "receiptId": "receipt-wrong-event-id",
+        "url": "https://broker.example.invalid/receipts/receipt-wrong-event-id",
+        "deliveredAt": "2026-05-15T10:20:05.000Z"
+      },
+      "expected": {
+        "evidenceKind": "PR",
+        "status": "succeeded",
+        "acknowledged": false,
+        "cursorComplete": false,
+        "ackReason": "operator-visible receipt required before terminal ack",
+        "terminalOutboxId": "hot-table-stress-receipt-mismatch"
+      }
+    },
+    {
+      "name": "receipt with operatorVisible=false: ACK blocked",
+      "stressIndex": 9,
+      "handlerTask": {
+        "id": "hot-table-stress-visible-false",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "257",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/257",
+          "title": "Team1/nosuk hot-table operatorVisible=false",
+          "focus": "Receipt with operatorVisible=false must not advance cursor",
+          "requestedBy": "nosuk",
+          "runId": "a2a-stability-r20-20260515T102000Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "hot-table-stress-visible-false",
+        "status": "completed",
+        "workDir": "/synthetic/hot-table/outbox/nosuk/visible-false",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "synthetic visible-false stdout omitted",
+        "stderr": "",
+        "artifacts": ["artifacts/summary.txt"],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "operatorVisible=false: ok",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 1,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/263"
+        }
+      },
+      "receipt": {
+        "operatorVisible": false,
+        "channel": "telegram",
+        "receiptId": "receipt-visible-false",
+        "url": "https://broker.example.invalid/receipts/receipt-visible-false",
+        "deliveredAt": "2026-05-15T10:20:06.000Z"
+      },
+      "expected": {
+        "evidenceKind": "PR",
+        "status": "succeeded",
+        "acknowledged": false,
+        "cursorComplete": false,
+        "ackReason": "operator-visible receipt required before terminal ack",
+        "terminalOutboxId": "hot-table-stress-visible-false"
+      }
+    },
+    {
+      "name": "TimedOut stress: missing terminal evidence must not ACK",
+      "stressIndex": 10,
+      "handlerTask": {
+        "id": "hot-table-stress-timeout",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "257",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/257",
+          "title": "Team1/nosuk hot-table timeout stress",
+          "focus": "Timed out runner must not advance terminal outbox cursor",
+          "requestedBy": "nosuk",
+          "runId": "a2a-stability-r20-20260515T102000Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": false,
+        "taskId": "hot-table-stress-timeout",
+        "status": "timeout",
+        "workDir": "/synthetic/hot-table/outbox/nosuk/timeout",
+        "exitCode": null,
+        "signal": "SIGTERM",
+        "stdout": "timed out stdout omitted",
+        "stderr": "timed out stderr omitted",
+        "artifacts": [],
+        "resultSummary": {
+          "exitCode": null,
+          "signal": "SIGTERM",
+          "timedOut": true,
+          "stdout": "",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 0,
+          "manifestPath": "artifacts/manifest.json"
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-sse",
+        "receiptId": "receipt-hot-table-stress-timeout",
+        "url": "https://broker.example.invalid/receipts/receipt-hot-table-stress-timeout",
+        "deliveredAt": "2026-05-15T10:20:07.000Z"
+      },
+      "expected": {
+        "evidenceKind": "TimedOut",
+        "status": "cancelled",
+        "acknowledged": false,
+        "cursorComplete": false,
+        "ackReason": "PR/Done/Block terminal evidence required before terminal ack",
+        "terminalOutboxId": "hot-table-stress-timeout"
+      }
+    },
+    {
+      "name": "MissingEvidence stress: runner failed without PR/Done/Block",
+      "stressIndex": 11,
+      "handlerTask": {
+        "id": "hot-table-stress-missing-evidence",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "257",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/257",
+          "title": "Team1/nosuk hot-table missing evidence stress",
+          "focus": "Runner failure without terminal evidence must not advance cursor",
+          "requestedBy": "nosuk",
+          "runId": "a2a-stability-r20-20260515T102000Z"
+        }
+      },
+      "runnerOutput": {
+        "ok": false,
+        "taskId": "hot-table-stress-missing-evidence",
+        "status": "failed",
+        "workDir": "/synthetic/hot-table/outbox/nosuk/missing-evidence",
+        "exitCode": 1,
+        "signal": null,
+        "stdout": "stdout omitted from stress terminal evidence",
+        "stderr": "fatal: patch command failed before producing evidence",
+        "artifacts": ["artifacts/summary.txt", "artifacts/patch-command.log"],
+        "error": "patch command exited 1 without producing PR/Done/Block evidence",
+        "resultSummary": {
+          "exitCode": 1,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "",
+          "stderr": "fatal: patch command failed",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 2,
+          "manifestPath": "artifacts/manifest.json"
+        }
+      },
+      "receipt": {
+        "operatorVisible": true,
+        "channel": "broker-sse",
+        "receiptId": "receipt-hot-table-stress-missing-evidence",
+        "url": "https://broker.example.invalid/receipts/receipt-hot-table-stress-missing-evidence",
+        "deliveredAt": "2026-05-15T10:20:08.000Z"
+      },
+      "expected": {
+        "evidenceKind": "MissingEvidence",
+        "status": "failed",
+        "acknowledged": false,
+        "cursorComplete": false,
+        "ackReason": "PR/Done/Block terminal evidence required before terminal ack",
+        "terminalOutboxId": "hot-table-stress-missing-evidence"
+      }
+    }
+  ]
+}

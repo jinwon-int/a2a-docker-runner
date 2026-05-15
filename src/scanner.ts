@@ -392,6 +392,7 @@ function sanitizeEvidenceHints(hints: ArtifactManifest["evidenceHints"] | undefi
   if (!hints || hints.schemaVersion !== "a2a.runner.evidence-hints.v1") return undefined;
   const safe: ArtifactManifest["evidenceHints"] = { schemaVersion: "a2a.runner.evidence-hints.v1" };
   if (typeof hints.issueUrl === "string" && isSafeGitHubUrl(hints.issueUrl)) safe.issueUrl = hints.issueUrl;
+  if (typeof hints.startCommentUrl === "string" && isSafeGitHubUrl(hints.startCommentUrl)) safe.startCommentUrl = hints.startCommentUrl;
   if (typeof hints.prUrl === "string" && isSafeGitHubUrl(hints.prUrl)) safe.prUrl = hints.prUrl;
   if (typeof hints.doneUrl === "string" && isSafeGitHubUrl(hints.doneUrl)) safe.doneUrl = hints.doneUrl;
   if (typeof hints.blockUrl === "string" && isSafeGitHubUrl(hints.blockUrl)) safe.blockUrl = hints.blockUrl;

@@ -75,6 +75,8 @@ export interface HandlerTaskPayload {
   brokerOfRecord?: string;
   /** Optional parent-round context for concise Terminal Brief titles. */
   terminalBrief?: HandlerTerminalBriefPayload;
+  /** Optional human-authored Terminal Brief summary; preserved separately from runner closeout summaries. */
+  terminalBriefSummary?: string;
   terminalBriefWorker?: string;
   terminalBriefSequence?: string | number;
   terminalBriefTotal?: string | number;
@@ -94,6 +96,8 @@ export interface HandlerTerminalBriefPayload {
   originBrokerId?: string;
   /** Expected number of children in the parent round; alias for total. */
   parentRoundTotal?: string | number;
+  /** Human-authored all-hands Terminal Brief summary. Never replaced by runner evidence summary text. */
+  summary?: string;
   /** Cross-broker handoff routing context for delegated children. */
   crossBrokerHandoff?: RunnerCrossBrokerHandoff;
 }
@@ -112,6 +116,8 @@ export interface HandlerResult {
   status: "pr_opened" | "done" | "blocked";
   summary: string;
   prUrl?: string;
+  /** Start comment URL for the evidence round, when the runner posted one. */
+  startCommentUrl?: string;
   blockCommentUrl?: string;
   doneCommentUrl?: string;
   branch?: string;
@@ -138,6 +144,8 @@ export interface OperatorTaskReportEvidence {
   taskBrief?: string;
   /** Canonical PR/Done/Block URL, when available. */
   url?: string;
+  /** Start comment URL for the evidence round, when available. */
+  startCommentUrl?: string;
   summary: string;
   tests: string[];
   risks: string[];
@@ -254,6 +262,8 @@ export interface TerminalBriefContext {
   title: string;
   /** Stable worker/node label used in the title. */
   worker: string;
+  /** Human-authored all-hands summary preserved without being overwritten by runner closeout text. */
+  summary?: string;
   /** Explicit ownership rule: only the initiating parent broker should send operator-facing Briefs. */
   ownership: "parent-broker-only";
   /** Optional initiating parent round/work-order id when supplied by the broker. */
@@ -571,6 +581,7 @@ export function buildHandlerResult(
     status,
     summary: buildEvidenceBackedSummary(evidence, task),
     prUrl: evidence.prUrl,
+    startCommentUrl: evidence.startCommentUrl,
     blockCommentUrl: evidence.blockCommentUrl,
     doneCommentUrl: evidence.doneCommentUrl,
     tests: buildEvidenceBackedTests(evidence),
@@ -683,7 +694,7 @@ export function buildTerminalEvidenceEvent(
     blockUrl: evidence?.blockCommentUrl,
     startCommentUrl: evidence?.startCommentUrl,
     commentLedger: evidence?.commentLedger,
-    alert: buildTerminalAlert({ taskId, status, evidenceKind, worker, repo, issue, issueTitle, taskBrief, url, result, testSummary, terminalBriefTitle: terminalBrief?.title }),
+    alert: buildTerminalAlert({ taskId, status, evidenceKind, worker, repo, issue, issueTitle, taskBrief, url, result, testSummary, terminalBriefTitle: terminalBrief?.title, terminalBriefSummary: terminalBrief?.summary }),
     ...(terminalBrief ? { terminalBrief } : {}),
     reason: buildTerminalReason(result, evidenceKind),
     testSummary,
@@ -748,6 +759,7 @@ export function buildOperatorTaskReportEvidence(result: HandlerResult): Operator
     issueTitle: event.issueTitle,
     taskBrief: event.taskBrief,
     url: result.prUrl ?? result.doneCommentUrl ?? result.blockCommentUrl ?? event.prUrl ?? event.doneUrl ?? event.blockUrl,
+    startCommentUrl: result.startCommentUrl ?? event.startCommentUrl,
     summary: result.summary,
     tests: result.tests,
     risks: result.risks,
@@ -1024,6 +1036,7 @@ function buildTerminalAlert(input: {
   result: RawRunnerOutput;
   testSummary: { exitCode?: number | null; timedOut?: boolean; artifactCount?: number };
   terminalBriefTitle?: string;
+  terminalBriefSummary?: string;
 }): { title: string; body: string; url?: string } {
   const icon = input.evidenceKind === "PR"
     ? "PR"
@@ -1048,6 +1061,7 @@ function buildTerminalAlert(input: {
   ];
   const issueRef = compactIssueRef(input.issue);
   if (issueRef) bodyParts.push(`issue=${issueRef}`);
+  if (input.terminalBriefSummary) bodyParts.push(`summary=${input.terminalBriefSummary}`);
   if (input.issueTitle) bodyParts.push(`title=${input.issueTitle}`);
   if (input.taskBrief) bodyParts.push(`brief=${input.taskBrief}`);
   const reason = buildTerminalReason(input.result, input.evidenceKind);
@@ -1093,6 +1107,7 @@ function buildTerminalBriefContext(
   const hasValidProgress = sequence !== undefined && total !== undefined && sequence <= total;
   const subject = hasValidProgress ? `${workerLabel}(${sequence}/${total})` : workerLabel;
   const title = boundAlertPart(`A2A Terminal Brief ${terminalBriefOutcomeLabel(status, evidenceKind)}: ${subject}`, 96);
+  const summary = safeEvidenceText(brief?.summary ?? payload?.terminalBriefSummary, 240);
   const roundId = safeEvidenceText(brief?.roundId ?? parentRoundId, 120);
   const parentBroker = safeEvidenceText(brief?.parentBroker ?? payload?.parentBroker ?? originBrokerId, 80);
   const originBroker = safeEvidenceText(brief?.originBroker ?? payload?.originBroker ?? handoff?.handoffBrokerId, 80);
@@ -1102,6 +1117,7 @@ function buildTerminalBriefContext(
     schemaVersion: "a2a.runner.terminal-brief-context.v1",
     title,
     worker: workerLabel,
+    summary,
     ownership: "parent-broker-only",
     roundId,
     parentRoundId,

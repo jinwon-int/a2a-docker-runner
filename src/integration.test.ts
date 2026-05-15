@@ -880,6 +880,7 @@ test("buildHandlerResult: PR-less validation Done evidence is not reported as a 
   assert.match(handlerResult.summary, /PR-less validation with Done evidence/);
   assert.deepEqual(handlerResult.risks, []);
   assert.deepEqual(handlerResult.tests, ["a2a-docker-runner run -> PR-less validation Done evidence"]);
+  assert.equal(handlerResult.startCommentUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-111");
   assert.equal(handlerResult.terminalEvidence.evidenceKind, "Done");
   assert.equal(handlerResult.terminalEvidence.startCommentUrl, "https://github.com/jinwon-int/repo/issues/5#issuecomment-111");
 });
@@ -1477,6 +1478,52 @@ test("buildTerminalEvidenceEvent: preserves R13 Team2 jingun parent-owned compac
   assert.ok(!event.alert.title.includes("seoseo"));
   assert.equal(event.issueUrl, "https://github.com/jinwon-int/a2a-docker-runner/issues/251");
   assert.ok(event.alert.body.includes("issue=jinwon-int/a2a-docker-runner#2"));
+});
+
+test("buildTerminalEvidenceEvent: preserves human Terminal Brief summary separately from runner summary", () => {
+  const result: RawRunnerOutput = {
+    ok: true, taskId: "task-r15-jingun", status: "completed", workDir: "/tmp/work",
+    stdout: "raw log omitted", stderr: "", artifacts: [],
+    artifactManifest: {
+      artifactVersion: 1, schemaVersion: 1, manifestPath: "artifacts/manifest.json",
+      generatedAt: "1970-01-01T00:00:00.000Z", status: "done",
+      summary: "runner artifact summary must not clobber human brief", evidence: [], artifacts: [],
+    },
+    resultSummary: {
+      exitCode: 0, signal: null, timedOut: false,
+      stdout: "bounded stdout", stderr: "", stdoutTruncated: false, stderrTruncated: false,
+      artifactCount: 0, manifestPath: "artifacts/manifest.json",
+    },
+    github: {
+      prUrl: "https://github.com/jinwon-int/repo/pull/615",
+      startCommentUrl: "https://github.com/jinwon-int/repo/issues/615#issuecomment-100",
+    },
+  };
+
+  const event = buildTerminalEvidenceEvent(
+    result,
+    {
+      id: "task-r15-jingun",
+      payload: {
+        repo: "jinwon-int/repo",
+        issue: "615",
+        terminalBrief: {
+          workerLabel: "jingun",
+          sequence: 6,
+          total: 7,
+          summary: "Human all-hands brief: jingun opened the compatibility PR.",
+        },
+      },
+    },
+    "jingun",
+    "2026-05-14T07:00:00.000Z",
+  );
+
+  assert.equal(event.startCommentUrl, "https://github.com/jinwon-int/repo/issues/615#issuecomment-100");
+  assert.equal(event.prUrl, "https://github.com/jinwon-int/repo/pull/615");
+  assert.equal(event.terminalBrief?.summary, "Human all-hands brief: jingun opened the compatibility PR.");
+  assert.ok(event.alert.body.includes("summary=Human all-hands brief"));
+  assert.ok(!JSON.stringify(event).includes("runner artifact summary must not clobber"));
 });
 
 test("buildTerminalEvidenceEvent: Terminal Brief title falls back safely when denominator is unknown", () => {

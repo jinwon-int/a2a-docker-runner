@@ -23,6 +23,8 @@ export interface DoctorReport {
   extraMounts: OpsCheck;
   baseImage: OpsCheck;
   githubPatch: OpsCheck;
+  /** Deploy-marker validation: checks whether the deployed revision matches an expected deploy marker. */
+  deployMarker?: OpsCheck;
 }
 
 export interface InstallReport {
@@ -226,8 +228,17 @@ export async function doctor(config: RunnerConfig): Promise<DoctorReport> {
     : { status: "fail" as const, message: "no container engine available for base image check", detail: { image: config.image } };
   const githubPatch = checkGitHubPatchReadiness(config);
   const engineReady = docker.status === "ok" || podman.status === "ok";
+  const checks = [runnerRevision, taskRoot, secretMount, extraMounts, baseImage, githubPatch];
+
+  // Deploy-marker is optional: only checked when buildMetadata.revision is provided.
+  let deployMarker: OpsCheck | undefined;
+  if (config.buildMetadata?.revision) {
+    deployMarker = await checkDeployMarker(config.buildMetadata.revision);
+    checks.push(deployMarker);
+  }
+
   return {
-    ok: engineReady && [runnerRevision, taskRoot, secretMount, extraMounts, baseImage, githubPatch].every((check) => check.status !== "fail"),
+    ok: engineReady && checks.every((check) => check.status !== "fail"),
     engine,
     runnerRevision,
     docker,
@@ -237,6 +248,7 @@ export async function doctor(config: RunnerConfig): Promise<DoctorReport> {
     extraMounts,
     baseImage,
     githubPatch,
+    ...(deployMarker ? { deployMarker } : {}),
   };
 }
 
@@ -299,6 +311,84 @@ export async function checkDeployedRevision(cwd = process.cwd(), upstreamRef = "
       summaryStatus,
       reason: reasons.join("; ") || undefined,
     }),
+  };
+}
+
+/**
+ * Check whether the deployed revision matches an expected deploy marker.
+ *
+ * A deploy marker is a specific git revision (full or short SHA) that a rollout
+ * target should be running after a deploy. This check validates that the local
+ * checkout is on the expected revision, which is useful for pre-rollout doctor
+ * verification and refresh safety evidence.
+ *
+ * When the checkout is not a git worktree or the local SHA cannot be determined,
+ * the check fails closed (status "fail") because the deploy marker cannot be
+ * verified.
+ */
+export async function checkDeployMarker(
+  expectedRevision: string,
+  cwd = process.cwd(),
+): Promise<OpsCheck> {
+  const version = await readPackageVersion(cwd);
+  const insideWorkTree = git(cwd, ["rev-parse", "--is-inside-work-tree"]);
+
+  if (insideWorkTree.status !== 0 || insideWorkTree.stdout.trim() !== "true") {
+    return {
+      status: "fail",
+      message: "deploy marker not inspectable: not a git checkout",
+      detail: {
+        expectedRevision,
+        version,
+        summary: `FAIL runner=${version ? `v${version}` : "unknown"} expected=${expectedRevision}`,
+        reason: "not a git checkout",
+      },
+    };
+  }
+
+  const fullLocalSha = normalizeSha(git(cwd, ["rev-parse", "HEAD"]).stdout.trim());
+  const localSha = fullLocalSha?.slice(0, 12);
+  const branch = git(cwd, ["branch", "--show-current"]).stdout.trim() || "detached";
+  const dirty = git(cwd, ["status", "--porcelain"]).stdout.trim().length > 0;
+
+  if (!fullLocalSha) {
+    return {
+      status: "fail",
+      message: "deploy marker not inspectable: local SHA unavailable",
+      detail: {
+        expectedRevision,
+        version,
+        branch,
+        dirty,
+        summary: `FAIL runner=${version ? `v${version}` : "unknown"} expected=${expectedRevision}`,
+        reason: "local SHA unavailable",
+      },
+    };
+  }
+
+  // Accept either full (40-char) or short (12-char) SHA match.
+  const marker = expectedRevision.toLowerCase();
+  const matches = fullLocalSha === marker || localSha === marker;
+
+  const status: OpsStatus = matches ? "ok" : "fail";
+  const summaryStatus = status === "ok" ? "PASS" : "FAIL";
+
+  return {
+    status,
+    message: matches
+      ? "deployed revision matches deploy marker"
+      : "deployed revision does not match deploy marker",
+    detail: {
+      version,
+      localSha,
+      localFullSha: fullLocalSha,
+      expectedRevision,
+      expectedRevisionShort: marker.slice(0, 12),
+      branch,
+      dirty,
+      summary: `${summaryStatus} runner=${version ? `v${version}` : "unknown"} local=${localSha ?? "unknown"} expected=${marker.slice(0, 12)}`,
+      ...(matches ? {} : { reason: "local revision is different from deploy marker" }),
+    },
   };
 }
 

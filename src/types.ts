@@ -186,6 +186,8 @@ export interface GitHubEvidence {
 export interface RunnerEvidenceHints {
   schemaVersion: "a2a.runner.evidence-hints.v1";
   issueUrl?: string;
+  /** Start comment URL for the evidence round, when available. */
+  startCommentUrl?: string;
   prUrl?: string;
   doneUrl?: string;
   blockUrl?: string;

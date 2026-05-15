@@ -34,7 +34,7 @@ const BANNED_DIRS = new Set([
 function usage(exitCode = 2) {
   const stream = exitCode === 0 ? process.stdout : process.stderr;
   stream.write(
-    "Usage: node scripts/pre-pr-bootstrap-guard.mjs --repo-dir <path>\n",
+    "Usage: node scripts/pre-pr-bootstrap-guard.mjs --repo-dir <path> [--artifacts-dir <path>]\n",
   );
   process.exit(exitCode);
 }
@@ -45,6 +45,7 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (arg === "--help" || arg === "-h") usage(0);
     if (arg === "--repo-dir") args.repoDir = argv[++i];
+    else if (arg === "--artifacts-dir") args.artifactsDir = argv[++i];
     else throw new Error(`unknown argument: ${arg}`);
   }
   if (!args.repoDir) usage();
@@ -55,7 +56,7 @@ function parseArgs(argv) {
  * Recursively walk a directory for banned bootstrap paths.
  * Returns a sorted list of repo-relative offending paths.
  */
-async function collectBannedPaths(repoDir) {
+async function collectBannedPaths(repoDir, artifactsDir) {
   const absolute = resolve(repoDir);
   const candidates = [];
 
@@ -76,8 +77,37 @@ async function collectBannedPaths(repoDir) {
   }
 
   const offending = filterBranchEnteringPaths(absolute, candidates);
+  if (artifactsDir) {
+    offending.push(...await collectBannedArtifactPaths(artifactsDir));
+  }
   offending.sort();
   return offending;
+}
+
+/**
+ * Artifact evidence is always publishable evidence, so any runtime/bootstrap
+ * context copied there must fail closed.  Report stable artifact-relative paths
+ * only; never include absolute host/container paths.
+ */
+async function collectBannedArtifactPaths(artifactsDir) {
+  const absolute = resolve(artifactsDir);
+  const candidates = [];
+
+  for (const name of BANNED_FILES) {
+    const full = join(absolute, name);
+    if (existsSync(full)) candidates.push(`artifacts/${name}`);
+  }
+
+  for (const name of BANNED_DIRS) {
+    const full = join(absolute, name);
+    if (existsSync(full)) {
+      const entries = await walkDir(full, `artifacts/${name}`);
+      candidates.push(...entries);
+      if (entries.length === 0) candidates.push(`artifacts/${name}`);
+    }
+  }
+
+  return candidates;
 }
 
 function filterBranchEnteringPaths(repoDir, candidates) {
@@ -142,7 +172,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const absolute = resolve(args.repoDir);
 
-  const offending = await collectBannedPaths(absolute);
+  const offending = await collectBannedPaths(absolute, args.artifactsDir);
 
   const output = {
     schemaVersion: "a2a.runner.pre-pr-bootstrap-guard.v1",
