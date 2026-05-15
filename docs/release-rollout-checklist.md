@@ -27,6 +27,60 @@ Scope: operator checklist for proposing and rolling out an `a2a-docker-runner` r
   - Optional smoke after build: `node dist/cli.js --help`.
 - Keep GitHub Actions on non-deprecated action runtimes. Current CI uses `actions/checkout@v5` and `actions/setup-node@v5` with Node 22 so Node 20 runtime deprecation warnings do not become release noise.
 
+## Terminal Brief ops-readiness templates (Team1/seoseo lane)
+
+The built-in template registry in `src/task-templates.ts` includes four no-live
+reusable diagnostic/check templates for production operations readiness before
+and after Terminal Brief activation.
+
+Built-in template ids:
+
+- **`terminal-brief-node-health`** — Validates runner node health: engine
+  (docker/podman), task root, secret mount, base image, GitHub patch readiness,
+  and deploy-marker revision match.
+- **`terminal-brief-latency-diagnostics`** — Validates latency thresholds
+  (p95/p99), repeated-latency diagnostic stages, diagnostics split candidates,
+  and expensive-diagnostics caching guarantees.
+- **`terminal-brief-session-store-residue`** — Validates OpenClaw session-store
+  guard: empty active-agent registries, backup count/bytes within limits,
+  cleanup rehearsal dry-run.
+- **`terminal-brief-worker-readiness`** — Composite readiness gate that chains
+  all three templates above plus doctor, deploy-marker, evidence contract, and
+  stale-backlog checks.
+
+All four templates ship with `A2A_DOCKER_RUNNER_NO_LIVE=1` enforced in env and
+require explicit safety gates: no provider sends, Gateway/broker/worker restart,
+DB mutation, terminal ACK, deployment, release, or repo visibility change.
+
+Each template has a corresponding example fixture in `examples/`:
+
+```
+examples/terminal-brief-node-health-fixture.json
+examples/terminal-brief-latency-diagnostics-fixture.json
+examples/terminal-brief-session-store-residue-fixture.json
+examples/terminal-brief-worker-readiness-fixture.json
+```
+
+Use within a `RunnerTask` by setting `template` to the id and providing the
+required `templateVars`. Example task referencing the node-health template:
+
+```json
+{
+  "id": "tb-node-health-pre-activation",
+  "intent": "propose_patch",
+  "template": "terminal-brief-node-health",
+  "templateVars": {
+    "DOCTOR_ARGS": "a2a-docker-runner doctor",
+    "EXPECTED_REVISION": "f17072e",
+    "TARGET_NODE": "nosuk"
+  },
+  "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/270"
+}
+```
+
+These templates do **not** implement Terminal Brief core feature logic (Team2/Gwakga
+scope). They are production operations and runbook tools for Team1/Seoseo.
+
 ## Active rollout targets
 
 Active workers for this runner family:
