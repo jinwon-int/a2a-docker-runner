@@ -975,7 +975,8 @@ test("buildHandlerResult: includes filesChanged from artifacts", () => {
     github: { prUrl: "https://github.com/jinwon-int/repo/pull/1" },
   };
   const handlerResult = buildHandlerResult(result, { id: "t1" }, "sogyo");
-  assert.deepEqual(handlerResult.filesChanged, ["/tmp/a/task.json", "/tmp/a/summary.txt"]);
+  // workDir /tmp is stripped from artifact paths to prevent private path leaks
+  assert.deepEqual(handlerResult.filesChanged, ["a/task.json", "a/summary.txt"]);
 });
 
 test("buildHandlerResult: prefers artifactManifest paths for modern runner results", () => {
@@ -1256,7 +1257,7 @@ test("buildTerminalEvidenceEvent: emits compact safe PR evidence without raw log
   assert.equal(event.prUrl, "https://github.com/jinwon-int/repo/pull/79");
   assert.deepEqual(event.alert, {
     title: "A2A PR: jinwon-int/repo",
-    body: "task=task-79 · worker=sogyo · status=succeeded · exit=0 · timeout=false · artifacts=1 · issue=jinwon-int/repo#79 · reason=PR evidence is available for operator review.",
+    body: "task=task-79 · worker=sogyo · status=succeeded · exit=0 · timeout=false · artifacts=1 · issue=jinwon-int/repo#79 · changes=1 · reason=PR evidence is available for operator review.",
     url: "https://github.com/jinwon-int/repo/pull/79",
   });
   assert.equal(event.testSummary.label, "a2a-docker-runner completed; PR evidence; exit=0; timedOut=false; artifacts=1");

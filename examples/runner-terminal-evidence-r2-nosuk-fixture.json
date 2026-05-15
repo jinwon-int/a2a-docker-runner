@@ -73,7 +73,7 @@
         "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/151",
         "alert": {
           "title": "A2A PR: jinwon-int/a2a-docker-runner",
-          "body": "task=r2-nosuk-pr-98 · worker=nosuk · status=succeeded · exit=0 · timeout=false · artifacts=1 · issue=jinwon-int/a2a-docker-runner#98 · title=R2 compact PR terminal evidence smok...",
+          "body": "task=r2-nosuk-pr-98 · worker=nosuk · status=succeeded · exit=0 · timeout=false · artifacts=1 · issue=jinwon-int/a2a-docker-runner#98 · title=R2 compact PR terminal evidence smoke · changes=1 · reason=PR evidence is available for operator review.",
           "url": "https://github.com/jinwon-int/a2a-docker-runner/pull/151"
         },
         "reason": "PR evidence is available for operator review.",
@@ -93,7 +93,14 @@
           "noLiveProviderSend": true,
           "terminalAck": "requires_operator_receipt",
           "providerSendIsReceiptEvidence": false
-        }
+        },
+        "filesChanged": [
+          "artifacts/summary.txt"
+        ],
+        "risks": [],
+        "validationCommands": [
+          "a2a-docker-runner default patch pipeline"
+        ]
       }
     },
     {
@@ -147,7 +154,7 @@
         "doneUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/98#issuecomment-151",
         "alert": {
           "title": "A2A Done: jinwon-int/a2a-docker-runner",
-          "body": "task=r2-nosuk-done-98 · worker=nosuk · status=succeeded · exit=0 · timeout=false · artifacts=0 · issue=jinwon-int/a2a-docker-runner#98 · reason=Done evidence was posted because ...",
+          "body": "task=r2-nosuk-done-98 · worker=nosuk · status=succeeded · exit=0 · timeout=false · artifacts=0 · issue=jinwon-int/a2a-docker-runner#98 · risks=1 · reason=Done evidence was posted because no PR was needed.",
           "url": "https://github.com/jinwon-int/a2a-docker-runner/issues/98#issuecomment-151"
         },
         "reason": "Done evidence was posted because no PR was needed.",
@@ -167,7 +174,14 @@
           "noLiveProviderSend": true,
           "terminalAck": "requires_operator_receipt",
           "providerSendIsReceiptEvidence": false
-        }
+        },
+        "filesChanged": [],
+        "risks": [
+          "runner completed with Done evidence and no PR"
+        ],
+        "validationCommands": [
+          "a2a-docker-runner default patch pipeline"
+        ]
       }
     },
     {
@@ -222,7 +236,7 @@
         "blockUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/98#issuecomment-152",
         "alert": {
           "title": "A2A Block: jinwon-int/a2a-docker-runner",
-          "body": "task=r2-nosuk-block-98 · worker=nosuk · status=blocked · exit=1 · timeout=false · artifacts=1 · issue=jinwon-int/a2a-docker-runner#98 · reason=receipt missing; compact terminal ...",
+          "body": "task=r2-nosuk-block-98 · worker=nosuk · status=blocked · exit=1 · timeout=false · artifacts=1 · issue=jinwon-int/a2a-docker-runner#98 · changes=1 · risks=1 · reason=receipt missing; compact terminal ack withheld",
           "url": "https://github.com/jinwon-int/a2a-docker-runner/issues/98#issuecomment-152"
         },
         "reason": "receipt missing; compact terminal ack withheld",
@@ -242,7 +256,16 @@
           "noLiveProviderSend": true,
           "terminalAck": "requires_operator_receipt",
           "providerSendIsReceiptEvidence": false
-        }
+        },
+        "filesChanged": [
+          "artifacts/block-summary.txt"
+        ],
+        "risks": [
+          "runner blocked; review Block evidence"
+        ],
+        "validationCommands": [
+          "a2a-docker-runner default patch pipeline"
+        ]
       }
     },
     {
@@ -291,7 +314,7 @@
         "issue": "https://github.com/jinwon-int/a2a-docker-runner/issues/98",
         "alert": {
           "title": "A2A Needs review: jinwon-int/a2a-docker-runner",
-          "body": "task=r2-nosuk-send-success-only-98 · worker=nosuk · status=blocked · exit=0 · timeout=false · artifacts=0 · issue=jinwon-int/a2a-docker-runner#98 · reason=Runner completed witho..."
+          "body": "task=r2-nosuk-send-success-only-98 · worker=nosuk · status=blocked · exit=0 · timeout=false · artifacts=0 · issue=jinwon-int/a2a-docker-runner#98 · risks=1 · reason=Runner completed without PR<path> evidence."
         },
         "reason": "Runner completed without PR/Done/Block evidence.",
         "testSummary": {
@@ -310,7 +333,14 @@
           "noLiveProviderSend": true,
           "terminalAck": "requires_operator_receipt",
           "providerSendIsReceiptEvidence": false
-        }
+        },
+        "filesChanged": [],
+        "risks": [
+          "runner completed without structured GitHub evidence"
+        ],
+        "validationCommands": [
+          "a2a-docker-runner default patch pipeline"
+        ]
       },
       "expectedAckDecision": {
         "terminalAckAllowed": false,

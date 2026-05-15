@@ -231,6 +231,12 @@ export interface TerminalEvidenceEvent {
   };
   /** Concise parent-round Terminal Brief title context. Parent broker sends; child brokers relay only. */
   terminalBrief?: TerminalBriefContext;
+  /** Changed file paths captured for audit and summary. Stable, bounded, no raw paths. */
+  filesChanged?: string[];
+  /** Concise risk notes for operator attention. Stable, bounded, no raw logs. */
+  risks?: string[];
+  /** Validation command labels for audit traceability. Stable, bounded. */
+  validationCommands?: string[];
   /** Short human-facing outcome reason; never contains raw runner logs. */
   reason?: string;
   testSummary: {
@@ -661,6 +667,9 @@ export function buildTerminalEvidenceEvent(
   const issueUrl = normalizeGitHubIssueUrl(task?.payload?.issueUrl ?? evidence?.issueUrl, repo, task?.payload?.issue ?? task?.payload?.issueNumber);
   const issueTitle = safeEvidenceText(task?.payload?.title ?? evidence?.issueTitle, 160);
   const taskBrief = safeEvidenceText(task?.payload?.focus ?? task?.message ?? task?.payload?.prompt ?? evidence?.taskBrief, 240);
+  const filesChanged = resultFilesChanged(result);
+  const risks = evidence ? buildEvidenceBackedRisks(evidence) : ["runner completed without structured GitHub evidence"];
+  const validationCommands = buildValidationCommands(task);
   const testSummary = {
     label: buildTestSummaryLabel(result, evidenceKind),
     exitCode: summary?.exitCode ?? result.exitCode,
@@ -689,12 +698,15 @@ export function buildTerminalEvidenceEvent(
     issueUrl,
     issueTitle,
     taskBrief,
+    filesChanged,
+    risks,
+    validationCommands,
     prUrl: evidence?.prUrl,
     doneUrl: evidence?.doneCommentUrl,
     blockUrl: evidence?.blockCommentUrl,
     startCommentUrl: evidence?.startCommentUrl,
     commentLedger: evidence?.commentLedger,
-    alert: buildTerminalAlert({ taskId, status, evidenceKind, worker, repo, issue, issueTitle, taskBrief, url, result, testSummary, terminalBriefTitle: terminalBrief?.title, terminalBriefSummary: terminalBrief?.summary }),
+    alert: buildTerminalAlert({ taskId, status, evidenceKind, worker, repo, issue, issueTitle, taskBrief, filesChanged, risks, url, result, testSummary, terminalBriefTitle: terminalBrief?.title, terminalBriefSummary: terminalBrief?.summary }),
     ...(terminalBrief ? { terminalBrief } : {}),
     reason: buildTerminalReason(result, evidenceKind),
     testSummary,
@@ -907,7 +919,25 @@ function resultFilesChanged(result: RawRunnerOutput): string[] {
   if (manifestArtifacts && manifestArtifacts.length > 0) {
     return manifestArtifacts.map((artifact) => artifact.path);
   }
-  return result.artifacts ?? [];
+  const artifacts = result.artifacts ?? [];
+  const workDir = result.workDir;
+  if (workDir) {
+    return artifacts.map((p) => p.startsWith(workDir) ? p.slice(workDir.length + 1) : p);
+  }
+  return artifacts;
+}
+
+function buildValidationCommands(task: HandlerTask): string[] {
+  const commands: string[] = [];
+  const taskFocus = task?.payload?.focus ?? task?.message ?? task?.payload?.prompt;
+  if (typeof taskFocus === "string") {
+    commands.push(taskFocus.slice(0, 240));
+  }
+  const acceptance = task?.payload?.acceptance;
+  if (typeof acceptance === "string") {
+    commands.push(acceptance.slice(0, 240));
+  }
+  return commands.length > 0 ? commands : ["a2a-docker-runner default patch pipeline"];
 }
 
 function brokerFacingRunnerRaw(result: RawRunnerOutput): Record<string, unknown> {
@@ -1033,6 +1063,8 @@ function buildTerminalAlert(input: {
   issueTitle?: string;
   taskBrief?: string;
   url?: string;
+  filesChanged?: string[];
+  risks?: string[];
   result: RawRunnerOutput;
   testSummary: { exitCode?: number | null; timedOut?: boolean; artifactCount?: number };
   terminalBriefTitle?: string;
@@ -1064,6 +1096,8 @@ function buildTerminalAlert(input: {
   if (input.terminalBriefSummary) bodyParts.push(`summary=${input.terminalBriefSummary}`);
   if (input.issueTitle) bodyParts.push(`title=${input.issueTitle}`);
   if (input.taskBrief) bodyParts.push(`brief=${input.taskBrief}`);
+  if (input.filesChanged && input.filesChanged.length > 0) bodyParts.push(`changes=${input.filesChanged.length}`);
+  if (input.risks && input.risks.length > 0) bodyParts.push(`risks=${input.risks.length}`);
   const reason = buildTerminalReason(input.result, input.evidenceKind);
   bodyParts.push(`reason=${reason}`);
   return omitUndefined({
@@ -1163,8 +1197,15 @@ function compactIssueRef(issue?: string): string | undefined {
 }
 
 function boundAlertPart(value: string, max: number): string {
-  const compact = boundReason(value);
-  return compact.length <= max ? compact : `${compact.slice(0, Math.max(0, max - 3))}...`;
+  const compact = value
+    .replace(/x-access-token:[^@\s]+@github\.com/g, "x-access-token:<redacted>@github.com")
+    .replace(/(token|password|secret|api[_-]?key)=\S+/gi, "$1=<redacted>")
+    .replace(/\b[A-Za-z_][A-Za-z0-9_]*(?:TOKEN|SECRET|PASSWORD)=\S+/g, "<redacted-secret-env>")
+    .replace(/\/[^\s:;,)]+(?:\/[^\s:;,)]+)+/g, "<path>")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (compact.length <= max) return compact;
+  return `${compact.slice(0, Math.max(0, max - 3))}...`;
 }
 
 function buildTerminalReason(result: RawRunnerOutput, kind: TerminalEvidenceKind): string {
