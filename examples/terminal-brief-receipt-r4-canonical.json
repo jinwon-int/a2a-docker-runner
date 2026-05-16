@@ -181,7 +181,7 @@
       "runId": "terminal-brief-receipt-r4-canonical-20260506T004710Z"
     },
     {
-      "name": "provider send success alone is not ACK evidence",
+      "name": "provider send success alone is not receipt evidence (separate from Terminal ACK)",
       "providerSendSuccessOnly": true,
       "handlerTask": {
         "id": "r4-canonical-send-only-154",

@@ -213,9 +213,9 @@ export interface GitHubCommentLedgerEntry {
 /**
  * GitHub comment evidence ledger.
  *
- * Comments are evidence ledger entries only — they are NOT ACK, read-receipt,
- * or operator-approval proof.  The ledger is explicitly separate from Terminal
- * Brief ACK/read/visibility decisions and from operator approval.
+ * Comments are evidence ledger entries that record task progress and outcomes.
+ * Terminal ACK is a separate broker-protocol concept requiring operator-visible
+ * receipt; it is distinct from comment evidence entries.
  *
  * Parent: a2a-plane#204
  */
@@ -224,8 +224,8 @@ export interface GitHubCommentLedger {
   schemaVersion: "a2a.runner.github-comment-ledger.v1";
   /** Ordered list of comment evidence entries. Start comment is first when present. */
   entries: GitHubCommentLedgerEntry[];
-  /** Explicit separation: comments are evidence ledger entries, not approval. */
-  disclaimer: "GitHub comments are evidence ledger entries, not ACK/read/visibility proof and not approval.";
+  /** Explicit separation: comments are evidence ledger entries; Terminal ACK is a separate broker concept. */
+  disclaimer: "GitHub comments are evidence ledger entries recording task progress and outcomes. Terminal ACK is a separate broker-protocol concept requiring operator-visible receipt.";
 }
 
 export interface GitHubEvidence {
@@ -254,10 +254,9 @@ export interface GitHubEvidence {
   /** Start comment URL posted at the beginning of the evidence round. */
   startCommentUrl?: string;
   /**
-   * GitHub comment evidence ledger.
-   * Comments are evidence ledger entries only — not ACK, read-receipt, or
-   * operator-approval proof.  Explicitly separate from Terminal Brief
-   * ACK/read/visibility decisions.
+   * GitHub comment evidence ledger recording task progress and outcomes.
+   * Terminal ACK is a separate broker-protocol concept requiring
+   * operator-visible receipt; it is distinct from comment evidence entries.
    *
    * Parent: a2a-plane#204
    */
@@ -293,8 +292,9 @@ export type GitHubCommentProjectionKind = "pr" | "done" | "block";
 
 /**
  * Terminal Brief extension that projects GitHub issue/PR comments as a
- * replay-safe evidence ledger entry. This is intentionally not ACK/read/
- * visibility evidence and never represents operator approval.
+ * replay-safe evidence ledger entry. This is evidence recording, not
+ * Terminal ACK (which is a separate broker protocol requiring
+ * operator-visible receipt) and never represents operator approval.
  */
 export interface GitHubCommentProjection {
   schemaVersion: "a2a.runner.github-comment-projection.v1";

@@ -194,8 +194,9 @@ export async function collectGitHubEvidence(
   }
 
   // Build the GitHub comment evidence ledger from any posted comments.
-  // Comments are evidence ledger entries only — not ACK, read-receipt,
-  // or operator-approval proof.
+  // Comments are evidence ledger entries recording task progress/outcomes.
+  // Terminal ACK is a separate broker-protocol concept requiring
+  // operator-visible receipt.
   // Parent: a2a-plane#204
   evidence.commentLedger = buildCommentLedger(evidence, task);
 
@@ -395,9 +396,9 @@ function extractFirstMatch(result: RunnerResult, patterns: RegExp[]): string | u
 /**
  * Build a GitHub comment evidence ledger from the current evidence state.
  *
- * Comments are evidence ledger entries only — not ACK, read-receipt,
- * or operator-approval proof.  The ledger is explicitly separate from
- * Terminal Brief ACK/read/visibility decisions.
+ * Comments are evidence ledger entries recording task progress and outcomes.
+ * Terminal ACK is a separate broker-protocol concept requiring
+ * operator-visible receipt; it is distinct from comment evidence entries.
  *
  * Parent: a2a-plane#204
  */
@@ -434,7 +435,7 @@ export function buildCommentLedger(evidence: GitHubEvidence, task: NormalizedRun
   return {
     schemaVersion: "a2a.runner.github-comment-ledger.v1",
     entries,
-    disclaimer: "GitHub comments are evidence ledger entries, not ACK/read/visibility proof and not approval.",
+    disclaimer: "GitHub comments are evidence ledger entries recording task progress and outcomes. Terminal ACK is a separate broker-protocol concept requiring operator-visible receipt.",
   };
 }
 
@@ -585,16 +586,16 @@ function buildEvidenceMarker(task: NormalizedRunnerTask, outcome: "done" | "bloc
 function buildGitHubProjectionSafetyLines(lang: string): string[] {
   if (lang === "ko") {
     return [
-      "- GitHub comment evidence projection: `ledger-only` (Terminal Brief 확장)",
-      "- commentIsTerminalAck: `false` (ACK/read/visibility 증거 아님)",
-      "- commentIsOperatorApproval: `false` (operator approval 아님)",
+      "- evidence projection: `ledger-only` (GitHub comment 증거 원장 항목)",
+      "- commentIsTerminalAck: `false` (Terminal ACK는 별도 브로커 프로토콜, 피드백 증거와 구분)",
+      "- commentIsOperatorApproval: `false` (operator approval은 별도 게이트)",
       "- manifest binding: `artifacts/manifest.json` / `resultSummary.evidenceHints`",
     ];
   }
   return [
-    "- GitHub comment evidence projection: `ledger-only` (Terminal Brief extension)",
-    "- commentIsTerminalAck: `false` (not ACK/read/visibility evidence)",
-    "- commentIsOperatorApproval: `false` (not operator approval)",
+    "- evidence projection: `ledger-only` (GitHub comment is evidence ledger entry)",
+    "- commentIsTerminalAck: `false` (Terminal ACK is separate broker protocol, distinct from comment evidence)",
+    "- commentIsOperatorApproval: `false` (operator approval is separate gate)",
     "- manifest binding: `artifacts/manifest.json` / `resultSummary.evidenceHints`",
   ];
 }
@@ -612,7 +613,8 @@ function parseIssueCommentApiUrl(issueUrl: string | undefined): string | undefin
  * Build a Start comment body.
  *
  * The Start comment marks the beginning of an evidence round.
- * It is an evidence ledger entry, not ACK/read/visibility proof and not approval.
+ * It is an evidence ledger entry recording task progress.
+ * Terminal ACK is a separate broker-protocol concept.
  *
  * Parent: a2a-plane#204
  */
@@ -622,8 +624,8 @@ export function buildStartCommentBody(task: NormalizedRunnerTask): string {
   const issueUrl = normalizeIssueUrl(task) ?? "N/A";
 
   const disclaimerLine = lang === "ko"
-    ? "> 이 코멘트는 증거 원장(evidence ledger) 항목입니다. ACK/읽음 확인/운영자 승인 증거가 아닙니다."
-    : "> This comment is an evidence ledger entry. It is not ACK, read-receipt, or operator-approval proof.";
+    ? "> 이 코멘트는 증거 원장(evidence ledger) 항목으로 작업 진행 상황을 기록합니다. Terminal ACK는 별도 브로커 프로토콜 개념입니다."
+    : "> This comment is an evidence ledger entry recording task progress. Terminal ACK is a separate broker-protocol concept.";
 
   if (lang === "ko") {
     return [
@@ -922,14 +924,14 @@ function buildNoLiveNoAckSafetyLines(lang: string): string[] {
   if (lang === "ko") {
     return [
       "- noLiveProviderSend: `true` (라이브 Telegram/provider 전송 없음)",
-      "- terminalAck: `requires_operator_receipt` (operator-visible receipt 전까지 ACK 금지)",
-      "- providerSendIsReceiptEvidence: `false` (provider send 성공은 receipt/ACK 증거가 아님)",
+      "- terminalAck: `requires_operator_receipt` (Terminal outbox ACK는 operator-visible receipt 필요)",
+      "- providerSendIsReceiptEvidence: `false` (provider send 성공만으로는 receipt 증거 불충분)",
     ];
   }
   return [
     "- noLiveProviderSend: `true` (no live Telegram/provider send)",
-    "- terminalAck: `requires_operator_receipt` (no terminal-outbox ACK before operator-visible receipt)",
-    "- providerSendIsReceiptEvidence: `false` (provider send success is not receipt/ACK evidence)",
+    "- terminalAck: `requires_operator_receipt` (terminal-outbox ACK requires operator-visible receipt before cursor advances)",
+    "- providerSendIsReceiptEvidence: `false` (provider send success alone is not receipt evidence)",
   ];
 }
 

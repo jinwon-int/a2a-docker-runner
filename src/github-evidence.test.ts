@@ -634,7 +634,7 @@ test("readOnlyValidation: blocked body reports error and changed file list", () 
 // Parent: a2a-plane#204
 // ---------------------------------------------------------------------------
 
-test("buildStartCommentBody includes disclaimer that comment is NOT ACK/approval (ko)", () => {
+test("buildStartCommentBody includes Korean disclaimer separating evidence from Terminal ACK", () => {
   const body = buildStartCommentBody(baseTask);
 
   assert.match(body, /## 🟢 Start/);
@@ -645,8 +645,8 @@ test("buildStartCommentBody includes disclaimer that comment is NOT ACK/approval
   assert.match(body, /\*\*이슈 제목\*\*: Evidence contract proof/);
   assert.match(body, /\*\*작업 요약\*\*: Produce compact terminal notice evidence without leaking raw logs/);
 
-  // MUST include the disclaimer that this is NOT ACK/approval proof
-  assert.match(body, /증거 원장.*evidence ledger.*ACK.*읽음 확인.*운영자 승인/);
+  // Korean disclaimer describes evidence independently from Terminal ACK
+  assert.match(body, /증거 원장.*Terminal ACK는 별도 브로커 프로토콜 개념/);
   assert.match(body, /자동 생성된 Start 코멘트.*A2A Docker Runner/);
 });
 
@@ -658,8 +658,8 @@ test("buildStartCommentBody produces English body when reportLanguage is en", ()
   assert.match(body, /\*\*Task ID\*\*: `test-task`/);
   assert.match(body, /Beginning work\. Inspecting repository and making warranted code\/docs\/tests changes\./);
 
-  // English disclaimer must explicitly separate from ACK/approval
-  assert.match(body, /not ACK, read-receipt, or operator-approval proof/);
+  // English disclaimer describes evidence independently from Terminal ACK
+  assert.match(body, /Terminal ACK is a separate broker-protocol concept/);
   assert.match(body, /Auto-generated Start comment/);
 });
 
@@ -677,7 +677,7 @@ test("buildCommentLedger with start comment only", () => {
   const ledger = buildCommentLedger(evidence, baseTask);
 
   assert.equal(ledger.schemaVersion, "a2a.runner.github-comment-ledger.v1");
-  assert.equal(ledger.disclaimer, "GitHub comments are evidence ledger entries, not ACK/read/visibility proof and not approval.");
+  assert.equal(ledger.disclaimer, "GitHub comments are evidence ledger entries recording task progress and outcomes. Terminal ACK is a separate broker-protocol concept requiring operator-visible receipt.");
   assert.equal(ledger.entries.length, 1);
   assert.equal(ledger.entries[0].kind, "start");
   assert.equal(ledger.entries[0].url, "https://github.com/jinwon-int/test-repo/issues/1#issuecomment-111");
@@ -729,7 +729,7 @@ test("buildCommentLedger empty when no comments", () => {
 
   assert.equal(ledger.schemaVersion, "a2a.runner.github-comment-ledger.v1");
   assert.equal(ledger.entries.length, 0);
-  assert.ok(ledger.disclaimer.includes("not ACK"));
+  assert.ok(ledger.disclaimer.includes("Terminal ACK is a separate"));
 });
 
 test("collectGitHubEvidence includes commentLedger in evidence", async () => {
@@ -755,7 +755,7 @@ test("collectGitHubEvidence includes commentLedger in evidence", async () => {
   assert.ok(evidence);
   assert.ok(evidence?.commentLedger, "GitHubEvidence must include a commentLedger");
   assert.equal(evidence?.commentLedger?.schemaVersion, "a2a.runner.github-comment-ledger.v1");
-  assert.equal(evidence?.commentLedger?.disclaimer, "GitHub comments are evidence ledger entries, not ACK/read/visibility proof and not approval.");
+  assert.equal(evidence?.commentLedger?.disclaimer, "GitHub comments are evidence ledger entries recording task progress and outcomes. Terminal ACK is a separate broker-protocol concept requiring operator-visible receipt.");
   assert.equal(evidence?.startCommentUrl, startUrl);
   assert.equal(evidence?.commentLedger?.entries[0]?.kind, "start");
   assert.equal(evidence?.commentLedger?.entries[0]?.url, startUrl);
@@ -809,7 +809,7 @@ test("comment ledger disclaimer is identical across all invocations", () => {
   const ledger2 = buildCommentLedger({}, baseTask);
   const ledger3 = buildCommentLedger({ doneCommentUrl: "http://example.com" }, baseTask);
 
-  const expected = "GitHub comments are evidence ledger entries, not ACK/read/visibility proof and not approval.";
+  const expected = "GitHub comments are evidence ledger entries recording task progress and outcomes. Terminal ACK is a separate broker-protocol concept requiring operator-visible receipt.";
   assert.equal(ledger1.disclaimer, expected);
   assert.equal(ledger2.disclaimer, expected);
   assert.equal(ledger3.disclaimer, expected);
@@ -830,7 +830,7 @@ test("Done/Block comment bodies include idempotent GitHub projection safety mark
 
   const block = buildBlockCommentBody({ ...baseTask, reportLanguage: "en" }, result);
   assert.match(block, /<!-- a2a:github-evidence:v1 task=test-task issue=jinwon-int\/test-repo#1 outcome=block -->/);
-  assert.match(block, /GitHub comment evidence projection: `ledger-only`/);
+  assert.match(block, /evidence projection: `ledger-only`/);
   assert.match(block, /commentIsTerminalAck: `false`/);
   assert.match(block, /commentIsOperatorApproval: `false`/);
 

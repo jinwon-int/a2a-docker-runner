@@ -223,10 +223,9 @@ export interface TerminalEvidenceEvent {
   /** Start comment URL posted at the beginning of the evidence round. */
   startCommentUrl?: string;
   /**
-   * GitHub comment evidence ledger.
-   * Comments are evidence ledger entries only — not ACK, read-receipt, or
-   * operator-approval proof.  Explicitly separate from Terminal Brief
-   * ACK/read/visibility decisions.
+   * GitHub comment evidence ledger recording task progress and outcomes.
+   * Terminal ACK is a separate broker-protocol concept requiring
+   * operator-visible receipt; it is distinct from comment evidence entries.
    *
    * Parent: a2a-plane#204
    */
@@ -255,9 +254,9 @@ export interface TerminalEvidenceEvent {
     stdoutTruncated?: boolean;
     stderrTruncated?: boolean;
   };
-  /** First-class GitHub comment ledger projection. Not ACK/read/visibility proof or approval. */
+  /** First-class GitHub comment evidence projection. Evidence ledger entry, not Terminal ACK. */
   githubCommentProjection?: GitHubCommentProjection;
-  /** Explicit no-live/no-ACK state; provider send success is not receipt evidence. */
+  /** No-live/terminal-ACK safety state; provider send success alone is not receipt evidence. */
   safetyState: {
     noLiveProviderSend: true;
     terminalAck: "requires_operator_receipt";

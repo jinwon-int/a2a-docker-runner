@@ -48,7 +48,11 @@ const DEFAULT_SAFETY_GATES: Omit<ApprovalRehearsalSafetyGate, "passed" | "reason
   },
   {
     id: "no_terminal_ack",
-    label: "No terminal ACK or read-receipt claim",
+    label: "No terminal ACK without operator-visible receipt",
+  },
+  {
+    id: "no_read_receipt_claim",
+    label: "No read-receipt claim (evidence ledger entry only)",
   },
   {
     id: "no_production_db_mutation",
