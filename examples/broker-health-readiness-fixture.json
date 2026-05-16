@@ -79,7 +79,7 @@
     "Run npm test in CI/local fixture mode only; do not call a live broker endpoint.",
     "Confirm repeated /health plan includes p95/p99 <= 500ms thresholds over 100 samples.",
     "Confirm stage diagnostics cover persistenceSummary, hotEntityMirrorCounts, auditDiagnostics, requestPressure, and jsonSerialization.",
-    "Confirm closeout evidence says provider accepted-send is not terminal ACK or read/visibility proof.",
+    "Confirm closeout evidence says provider accepted-send is not terminal ACK, read receipt, visibility proof, or operator approval.",
     "If a production-like run is needed later, require explicit operator approval before any broker/Gateway restart, live provider send, DB mutation, or terminal ACK."
   ]
 }

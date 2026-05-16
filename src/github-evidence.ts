@@ -194,9 +194,11 @@ export async function collectGitHubEvidence(
   }
 
   // Build the GitHub comment evidence ledger from any posted comments.
-  // Comments are evidence ledger entries only — not ACK, read-receipt,
-  // or operator-approval proof.
+  // Comments are evidence ledger entries only — not ACK, read receipt,
+  // visibility proof, or operator approval.
   // Parent: a2a-plane#204
+  // Parent: a2a-docker-runner#285
+  // Parent: a2a-docker-runner#284
   evidence.commentLedger = buildCommentLedger(evidence, task);
 
   evidence.outcome = classifyGitHubEvidenceOutcome(result, evidence);
@@ -395,11 +397,13 @@ function extractFirstMatch(result: RunnerResult, patterns: RegExp[]): string | u
 /**
  * Build a GitHub comment evidence ledger from the current evidence state.
  *
- * Comments are evidence ledger entries only — not ACK, read-receipt,
- * or operator-approval proof.  The ledger is explicitly separate from
- * Terminal Brief ACK/read/visibility decisions.
+ * Comments are evidence ledger entries only — not ACK, read receipt,
+ * visibility proof, or operator approval.  The ledger is explicitly
+ * separate from Terminal Brief ACK/read-receipt decisions.
  *
  * Parent: a2a-plane#204
+ * Parent: a2a-docker-runner#285
+ * Parent: a2a-docker-runner#284
  */
 export function buildCommentLedger(evidence: GitHubEvidence, task: NormalizedRunnerTask): GitHubCommentLedger {
   const entries: GitHubCommentLedger["entries"] = [];
@@ -434,7 +438,7 @@ export function buildCommentLedger(evidence: GitHubEvidence, task: NormalizedRun
   return {
     schemaVersion: "a2a.runner.github-comment-ledger.v1",
     entries,
-    disclaimer: "GitHub comments are evidence ledger entries, not ACK/read/visibility proof and not approval.",
+    disclaimer: "GitHub comments are evidence ledger entries, not ACK, read receipt, visibility proof, or operator approval.",
   };
 }
 
@@ -586,14 +590,16 @@ function buildGitHubProjectionSafetyLines(lang: string): string[] {
   if (lang === "ko") {
     return [
       "- GitHub comment evidence projection: `ledger-only` (Terminal Brief 확장)",
-      "- commentIsTerminalAck: `false` (ACK/read/visibility 증거 아님)",
+      "- commentIsTerminalAck: `false` (ACK, read receipt, visibility 증거 아님)",
+      "- commentIsVisibilityReceipt: `false` (visibility receipt 증거 아님)",
       "- commentIsOperatorApproval: `false` (operator approval 아님)",
       "- manifest binding: `artifacts/manifest.json` / `resultSummary.evidenceHints`",
     ];
   }
   return [
     "- GitHub comment evidence projection: `ledger-only` (Terminal Brief extension)",
-    "- commentIsTerminalAck: `false` (not ACK/read/visibility evidence)",
+    "- commentIsTerminalAck: `false` (not ACK, read receipt, or visibility evidence)",
+    "- commentIsVisibilityReceipt: `false` (not visibility receipt evidence)",
     "- commentIsOperatorApproval: `false` (not operator approval)",
     "- manifest binding: `artifacts/manifest.json` / `resultSummary.evidenceHints`",
   ];
@@ -612,9 +618,12 @@ function parseIssueCommentApiUrl(issueUrl: string | undefined): string | undefin
  * Build a Start comment body.
  *
  * The Start comment marks the beginning of an evidence round.
- * It is an evidence ledger entry, not ACK/read/visibility proof and not approval.
+ * It is an evidence ledger entry, not ACK, read receipt, visibility proof,
+ * or operator approval.
  *
  * Parent: a2a-plane#204
+ * Parent: a2a-docker-runner#285
+ * Parent: a2a-docker-runner#284
  */
 export function buildStartCommentBody(task: NormalizedRunnerTask): string {
   const lang = task.reportLanguage ?? "ko";
@@ -622,8 +631,8 @@ export function buildStartCommentBody(task: NormalizedRunnerTask): string {
   const issueUrl = normalizeIssueUrl(task) ?? "N/A";
 
   const disclaimerLine = lang === "ko"
-    ? "> 이 코멘트는 증거 원장(evidence ledger) 항목입니다. ACK/읽음 확인/운영자 승인 증거가 아닙니다."
-    : "> This comment is an evidence ledger entry. It is not ACK, read-receipt, or operator-approval proof.";
+    ? "> 이 코멘트는 증거 원장(evidence ledger) 항목입니다. ACK, 읽음 확인, 표시 증거 또는 운영자 승인 증거가 아닙니다."
+    : "> This comment is an evidence ledger entry. It is not ACK, read receipt, visibility proof, or operator approval.";
 
   if (lang === "ko") {
     return [

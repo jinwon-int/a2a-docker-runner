@@ -505,7 +505,7 @@ function buildPlannedActions(
     kind: "comment_post",
     repo: packet.repo,
     status: "blocked",
-    rollbackAction: "Delete or edit the comment. Comments are evidence ledger entries, not ACKs.",
+    rollbackAction: "Delete or edit the comment. Comments are evidence ledger entries, not ACK, read receipt, visibility proof, or operator approval.",
     preflightChecks: [
       {
         checkId: "issue_url_present",
@@ -517,7 +517,7 @@ function buildPlannedActions(
       },
       {
         checkId: "comment_is_not_ack",
-        label: "Comment is evidence ledger entry, not terminal ACK or approval.",
+        label: "Comment is evidence ledger entry, not terminal ACK, read receipt, visibility proof, or operator approval.",
         passed: true,
       },
     ],
