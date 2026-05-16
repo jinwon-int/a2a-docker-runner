@@ -312,6 +312,60 @@ export interface GitHubCommentProjection {
   commentIsOperatorApproval: false;
 }
 
+// ── Worker Capacity Evidence ────────────────────────────────────────────
+// Parent: a2a-plane#369
+// Parent: a2a-docker-runner#284
+// Parent: a2a-docker-runner#285
+
+/**
+ * Provenance of worker capacity values for scheduling/assignment metadata.
+ *
+ * Capacity is scheduling and assignment metadata only. It must never be
+ * treated as Terminal ACK decision input, operator approval evidence,
+ * read/visibility receipt, or provider delivery confirmation.
+ *
+ * Values from a configured profile or a read-only probe are authoritative.
+ * When neither source is available, capacity MUST be represented as
+ * "unknown" and the numeric fields omitted.
+ *
+ * Parent: a2a-plane#369
+ */
+export type WorkerCapacitySource = "configured_profile" | "readonly_probe" | "unknown";
+
+/**
+ * Worker capacity evidence — scheduling/assignment metadata only.
+ *
+ * This structure conveys worker scheduling and assignment capacity. It is
+ * NOT Terminal ACK decision input, operator approval evidence, read/visibility
+ * receipt, or provider delivery confirmation.
+ *
+ * When neither a configured profile nor a read-only probe provides capacity
+ * values, `source` MUST be "unknown" and `available`/`total` MUST be omitted.
+ *
+ * Parent: a2a-plane#369
+ * Parent: a2a-docker-runner#284
+ * Parent: a2a-docker-runner#285
+ */
+export interface WorkerCapacityEvidence {
+  schemaVersion: "a2a.runner.worker-capacity.v1";
+  /** Worker/node identifier. */
+  worker: string;
+  /** Provenance of the capacity values. */
+  source: WorkerCapacitySource;
+  /**
+   * Number of available (idle/ready) capacity units.
+   * Present only when source is "configured_profile" or "readonly_probe".
+   */
+  available?: number;
+  /**
+   * Total capacity units.
+   * Present only when source is "configured_profile" or "readonly_probe".
+   */
+  total?: number;
+  /** Explicit: scheduling/assignment metadata only, never Terminal ACK decision input. */
+  isTerminalAckInput: false;
+}
+
 export type SourcePublicApprovalDecision = "GO_CANDIDATE" | "NO_GO" | "NEEDS_OPERATOR_APPROVAL";
 
 /**
