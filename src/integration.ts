@@ -257,7 +257,11 @@ export interface TerminalEvidenceEvent {
   };
   /** First-class GitHub comment ledger projection. Not ACK/read/visibility proof or approval. */
   githubCommentProjection?: GitHubCommentProjection;
-  /** Explicit no-live/no-ACK state; provider send success is not receipt evidence. */
+  /**
+   * Explicit no-live/no-ACK state; provider send success is not receipt evidence.
+   *
+   * Parent: a2a-docker-runner#284
+   */
   safetyState: {
     noLiveProviderSend: true;
     terminalAck: "requires_operator_receipt";
@@ -270,6 +274,23 @@ export interface TerminalEvidenceEvent {
   };
 }
 
+/**
+ * Terminal Brief progress context for operator-facing "n/N" notifications.
+ *
+ * n (sequence) = completed canonical tasks in the parent round.
+ * N (total)    = total canonical tasks in the parent round.
+ *
+ * Canonical n/N semantics:
+ * - n MUST be completed canonical tasks only. It MUST NOT represent:
+ *   worker lane/order index, event sequence number, origin-local projection
+ *   count, or a standalone fallback count.
+ * - Retries or superseded originals, duplicate/replay events, failed or
+ *   cancelled events, and broker restart MUST NOT inflate the completed count.
+ * - Provider accepted/message-id evidence is send-acceptance only and MUST
+ *   NOT advance n. Only operator-visible Terminal Brief ACK is authoritative.
+ *
+ * Parent: a2a-docker-runner#285
+ */
 export interface TerminalBriefContext {
   schemaVersion: "a2a.runner.terminal-brief-context.v1";
   /** Operator-facing concise title, e.g. "A2A Terminal Brief 완료: dungae(1/7)". */
@@ -296,7 +317,15 @@ export interface TerminalBriefContext {
   parentRoundTotal?: number;
   /** Cross-broker handoff routing context for delegated children. */
   crossBrokerHandoff?: RunnerCrossBrokerHandoff;
-  /** Present only when both numerator and denominator are known and valid. */
+  /**
+   * Terminal Brief progress: n/N = completed canonical tasks / total canonical tasks.
+   *
+   * Present only when both numerator and denominator are known and valid.
+   * sequence = number of completed canonical tasks (numerator, n).
+   * total    = number of total canonical tasks (denominator, N).
+   *
+   * Parent: a2a-docker-runner#285
+   */
   progress?: {
     sequence: number;
     total: number;
