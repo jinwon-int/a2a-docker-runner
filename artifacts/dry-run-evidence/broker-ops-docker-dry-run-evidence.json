@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "a2a.runner.broker-ops-docker-dry-run-lane.v1",
+  "run": "a2a-r27-team1-nosuk-dry-run-lane-20260517T080000Z",
+  "worker": "nosuk",
+  "parentIssue": "https://github.com/jinwon-int/a2a-plane/issues/364",
+  "laneIssue": "https://github.com/jinwon-int/a2a-docker-runner/issues/280",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "compactSummary": {
+    "schemaVersion": "a2a.runner.dry-run-compact-summary.v1",
+    "run": "a2a-r27-team1-nosuk-dry-run-lane-20260517T080000Z",
+    "worker": "nosuk",
+    "parentIssue": "https://github.com/jinwon-int/a2a-plane/issues/364",
+    "laneIssue": "https://github.com/jinwon-int/a2a-docker-runner/issues/280",
+    "ok": true,
+    "summary": "worker=nosuk · run=a2a-r27-team1-nosuk-dry-run-lane-20260517T080000Z · cursorValid=true · restoreTrapTriggered=false · planValid=true · receiptKind=Done · receiptAcked=true · evidenceFiles=2",
+    "cursorRead": {
+      "schemaVersion": "a2a.runner.dry-run-cursor-read.v1",
+      "cursorLabel": "terminal-brief-activation-20260517T080000Z",
+      "cursorAt": "2026-05-17T08:00:00.000Z",
+      "cursorValid": true,
+      "runIdAtCursor": "a2a-r27-team1-nosuk-dry-run-lane-20260517T080000Z",
+      "completedCount": 0,
+      "totalCount": 1,
+      "mutationPerformed": false,
+      "dbMutationPerformed": false
+    },
+    "operatorEventsTrap": {
+      "schemaVersion": "a2a.runner.operator-events-restore-trap.v1",
+      "trapLabel": "dry-run-operator-events-restore-guard",
+      "triggered": false,
+      "detail": "No restore attempt detected during dry-run lane execution.",
+      "restorePerformed": false,
+      "dbMutationPerformed": false
+    },
+    "analysisPlan": {
+      "schemaVersion": "a2a.runner.dry-run-analysis-task-plan.v1",
+      "planId": "dry-run-analysis-f36e61cb5ba80878",
+      "taskLabel": "terminal-brief-canary-analysis",
+      "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/280",
+      "analysisDescription": "Inspect terminal brief canary evidence dir, validate cursor consistency, verify operatorEvents restore trap, and produce receipt/ACK evidence summary without performing any live operations.",
+      "stepCount": 1,
+      "planValid": true,
+      "executionPerformed": false,
+      "providerSendPerformed": false
+    },
+    "receiptEvidence": {
+      "schemaVersion": "a2a.runner.dry-run-receipt-evidence.v1",
+      "evidenceKind": "Done",
+      "terminalOutboxId": "terminal-outbox-r27-nosuk-dry-run-001",
+      "receiptId": "dry-run-receipt-r27-nosuk-001",
+      "channel": "broker-sse",
+      "url": "https://github.com/jinwon-int/a2a-docker-runner/issues/280#dry-run-receipt",
+      "deliveredAt": "2026-05-17T08:00:01.000Z",
+      "acknowledged": true,
+      "cursorComplete": true,
+      "noLiveProviderSend": true,
+      "terminalAckPerformed": false,
+      "providerSendSuccessIsReceiptEvidence": false
+    },
+    "safetyGates": {
+      "noLiveProviderSend": true,
+      "terminalAckPerformed": false,
+      "gatewayRestartPerformed": false,
+      "dbMutationPerformed": false,
+      "providerSendSuccessIsReceiptEvidence": false,
+      "manualAckReplayPerformed": false,
+      "historicalReplayPerformed": false,
+      "restorePerformed": false
+    },
+    "evidenceDirCount": 2,
+    "evidenceDir": "artifacts/dry-run-evidence"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "$schema": "a2a-runner-broker-ops-docker-dry-run-canonical-v1",
+  "description": "R27 Team1/nosuk canonical dry-run lane fixture. Validates evidence dir, safe cursor read, operatorEvents restore trap, analysis-only task plan, receipt/ACK evidence fields, and compact summary. No live provider send, Gateway restart, DB mutation, manual ACK/replay, or historical replay.",
+  "run": "a2a-r27-team1-nosuk-dry-run-lane-20260517T080000Z",
+  "worker": "nosuk",
+  "parentIssue": "https://github.com/jinwon-int/a2a-plane/issues/364",
+  "laneIssue": "https://github.com/jinwon-int/a2a-docker-runner/issues/280",
+  "evidenceDir": "artifacts/dry-run-evidence",
+  "cursorFixture": {
+    "cursorLabel": "terminal-brief-activation-20260517T080000Z",
+    "cursorAt": "2026-05-17T08:00:00.000Z",
+    "cursorValid": true,
+    "runIdAtCursor": "a2a-r27-team1-nosuk-dry-run-lane-20260517T080000Z",
+    "completedCount": 0,
+    "totalCount": 1,
+    "mutationPerformed": false,
+    "dbMutationPerformed": false
+  },
+  "operatorEventsTrapFixture": {
+    "trapLabel": "dry-run-operator-events-restore-guard",
+    "triggered": false,
+    "detail": "No restore attempt detected during dry-run lane execution.",
+    "operatorAction": null,
+    "restorePerformed": false,
+    "dbMutationPerformed": false
+  },
+  "analysisTaskPlanFixture": {
+    "taskLabel": "terminal-brief-canary-analysis",
+    "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/280",
+    "analysisDescription": "Inspect terminal brief canary evidence dir, validate cursor consistency, verify operatorEvents restore trap, and produce receipt/ACK evidence summary without performing any live operations.",
+    "stepCount": 1,
+    "planValid": true,
+    "executionPerformed": false,
+    "providerSendPerformed": false
+  },
+  "receiptEvidenceFixture": {
+    "evidenceKind": "Done",
+    "terminalOutboxId": "terminal-outbox-r27-nosuk-dry-run-001",
+    "receiptId": "dry-run-receipt-r27-nosuk-001",
+    "channel": "broker-sse",
+    "url": "https://github.com/jinwon-int/a2a-docker-runner/issues/280#dry-run-receipt",
+    "deliveredAt": "2026-05-17T08:00:01.000Z",
+    "noLiveProviderSend": true,
+    "terminalAckPerformed": false,
+    "providerSendSuccessIsReceiptEvidence": false
+  },
+  "mustNotContain": [
+    "x-access-token",
+    "AGENTS.md",
+    "SOUL.md",
+    "USER.md",
+    "TOOLS.md",
+    "HEARTBEAT.md",
+    "IDENTITY.md",
+    ".openclaw",
+    "MEMORY.md",
+    "memory/",
+    "stdout",
+    "stderr",
+    "/home/",
+    "/root/",
+    "/private/"
+  ]
+}

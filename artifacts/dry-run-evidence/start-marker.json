@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "a2a.runner.dry-run-start-marker.v1",
+  "run": "a2a-r27-team1-nosuk-dry-run-lane-20260517T080000Z",
+  "worker": "nosuk",
+  "parentIssue": "https://github.com/jinwon-int/a2a-plane/issues/364",
+  "laneIssue": "https://github.com/jinwon-int/a2a-docker-runner/issues/280",
+  "startedAt": "1970-01-01T00:00:00.000Z",
+  "fixture": "examples/broker-ops-docker-dry-run-canonical.json",
+  "ok": true
+}

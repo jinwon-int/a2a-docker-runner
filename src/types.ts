@@ -1085,3 +1085,192 @@ export interface ApprovalRehearsalPacket {
   /** Structured evidence hints for broker/operator recovery. */
   evidenceHints?: RunnerEvidenceHints;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Broker-Ops / Docker Dry-Run Lane (Team1 nosuk, A2A R27)
+// Parent: a2a-plane#364
+// Lane: a2a-docker-runner#280
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Safe cursor state read for Terminal Brief canary dry-run execution.
+ *
+ * Represents a deterministic, read-only snapshot of a canary cursor position.
+ * No mutation of cursor state, broker database, or provider state occurs
+ * during the read.
+ */
+export interface DryRunCursorRead {
+  /** Canonical schema version. */
+  schemaVersion: "a2a.runner.dry-run-cursor-read.v1";
+  /** Cursor label from the canary fixture, e.g. "terminal-brief-activation-20260511T080211Z". */
+  cursorLabel: string;
+  /** ISO-8601 timestamp of the cursor snapshot (deterministic). */
+  cursorAt: string;
+  /** True when cursor is healthy/consistent for canary execution. */
+  cursorValid: boolean;
+  /** Bounded reason when cursor is invalid. */
+  cursorReason?: string;
+  /** The run identifier found at the cursor position. */
+  runIdAtCursor?: string;
+  /** Number of completed terminal brief children at this cursor. */
+  completedCount: number;
+  /** Total expected children at this cursor. */
+  totalCount: number;
+  /** Mutation guard: this cursor read never mutates state. */
+  mutationPerformed: false;
+  /** DB mutation guard: no DB was touched during this read. */
+  dbMutationPerformed: false;
+}
+
+/**
+ * operatorEvents restore trap: a fail-closed capsule that catches and
+ * reports any accidental operator-events restore attempt during dry-run.
+ *
+ * Real operatorEvents restore is only safe during approved live recovery;
+ * every dry-run lane must trap it and produce a deterministic Block signature.
+ */
+export interface OperatorEventsRestoreTrap {
+  /** Canonical schema version. */
+  schemaVersion: "a2a.runner.operator-events-restore-trap.v1";
+  /** Deterministic trap trigger label. */
+  trapLabel: string;
+  /** True when the trap has been triggered (caught a restore attempt). */
+  triggered: boolean;
+  /** Bounded description of what the trap caught, or "not triggered" when clean. */
+  detail: string;
+  /** Recommended operator action when triggered. */
+  operatorAction?: string;
+  /** Safety: the trap itself never performs a real restore. */
+  restorePerformed: false;
+  /** Safety: no DB mutation occurred during trap evaluation. */
+  dbMutationPerformed: false;
+}
+
+/**
+ * Receipt/ACK evidence fields for the dry-run lane.
+ *
+ * These fields model what a real operator-visible receipt would look like
+ * without performing any provider send, Terminal Brief ACK, or DB mutation.
+ * Provider send success without an operator-visible receipt is explicitly
+ * rejected.
+ */
+export interface DryRunReceiptEvidence {
+  /** Canonical schema version. */
+  schemaVersion: "a2a.runner.dry-run-receipt-evidence.v1";
+  /** Evidence kind: PR, Done, or Block. */
+  evidenceKind: "PR" | "Done" | "Block";
+  /** Synthetic terminal-outbox identifier from the fixture. */
+  terminalOutboxId: string;
+  /** Synthetic operator receipt identifier. */
+  receiptId: string;
+  /** Delivery channel, e.g. "broker-sse" or "telegram". */
+  channel: string;
+  /** URL for the receipt, when applicable. */
+  url?: string;
+  /** ISO-8601 timestamp of the receipt. */
+  deliveredAt: string;
+  /** ACK is acknowledged only when operator-visible receipt is present. */
+  acknowledged: boolean;
+  /** Cursor is complete when ACK is acknowledged. */
+  cursorComplete: boolean;
+  /** Safety: no live provider send was performed. */
+  noLiveProviderSend: true;
+  /** Safety: no Terminal Brief ACK was performed. */
+  terminalAckPerformed: false;
+  /** Safety: provider send success is not receipt evidence. */
+  providerSendSuccessIsReceiptEvidence: false;
+}
+
+/**
+ * A single analysis-only task plan step for the dry-run lane.
+ *
+ * This is a fresh, bounded plan that describes what a real canary task would
+ * do, without performing any execution, provider send, or mutation.
+ */
+export interface DryRunAnalysisTaskPlan {
+  /** Canonical schema version. */
+  schemaVersion: "a2a.runner.dry-run-analysis-task-plan.v1";
+  /** Deterministic plan identifier. */
+  planId: string;
+  /** Analysis task label from the fixture. */
+  taskLabel: string;
+  /** The target GitHub issue URL for context. */
+  issueUrl: string;
+  /** Bounded description of the analysis the task would perform. */
+  analysisDescription: string;
+  /** Number of steps in this analysis plan (always 1 for minimal lane). */
+  stepCount: number;
+  /** When true, the analysis plan is consistent and safe to propose. */
+  planValid: boolean;
+  /** Bounded reason when planValid is false. */
+  planInvalidReason?: string;
+  /** Execution guard: this plan was never executed. */
+  executionPerformed: false;
+  /** Provider send guard: no provider send was performed. */
+  providerSendPerformed: false;
+}
+
+/**
+ * Bounded, deterministic compact summary for the dry-run lane.
+ * Aggregates all lane fields into a single safe envelope.
+ */
+export interface DryRunCompactSummary {
+  /** Canonical schema version. */
+  schemaVersion: "a2a.runner.dry-run-compact-summary.v1";
+  /** Run identifier from the dry-run fixture. */
+  run: string;
+  /** Worker/node label (e.g. "nosuk"). */
+  worker: string;
+  /** Parent GitHub issue URL. */
+  parentIssue: string;
+  /** Lane GitHub issue URL. */
+  laneIssue: string;
+  /** Status: ok when all lane checks pass. */
+  ok: boolean;
+  /** Bounded summary text. */
+  summary: string;
+  /** Cursor read result. */
+  cursorRead: DryRunCursorRead;
+  /** Operator-events restore trap result. */
+  operatorEventsTrap: OperatorEventsRestoreTrap;
+  /** Analysis-only task plan. */
+  analysisPlan: DryRunAnalysisTaskPlan;
+  /** Receipt evidence capsule. */
+  receiptEvidence: DryRunReceiptEvidence;
+  /** Safety gate: all no-live constraints are enforced. */
+  safetyGates: {
+    noLiveProviderSend: true;
+    terminalAckPerformed: false;
+    gatewayRestartPerformed: false;
+    dbMutationPerformed: false;
+    providerSendSuccessIsReceiptEvidence: false;
+    manualAckReplayPerformed: false;
+    historicalReplayPerformed: false;
+    restorePerformed: false;
+  };
+  /** Number of distinct evidence files written (evidence dir size). */
+  evidenceDirCount: number;
+  /** Evidence directory path (container-relative, always "artifacts/dry-run-evidence"). */
+  evidenceDir: "artifacts/dry-run-evidence";
+}
+
+/**
+ * Complete broker-ops Docker dry-run lane evidence envelope.
+ * This is the top-level output of the lane harness.
+ */
+export interface BrokerOpsDryRunLaneEvidence {
+  /** Canonical schema version. */
+  schemaVersion: "a2a.runner.broker-ops-docker-dry-run-lane.v1";
+  /** Lane run identifier from fixture. */
+  run: string;
+  /** Worker/node identifier. */
+  worker: string;
+  /** Parent issue URL. */
+  parentIssue: string;
+  /** Lane issue URL. */
+  laneIssue: string;
+  /** ISO-8601 deterministic timestamp. */
+  generatedAt: "1970-01-01T00:00:00.000Z";
+  /** Summary capsule. */
+  compactSummary: DryRunCompactSummary;
+}
