@@ -82,6 +82,12 @@ export interface HandlerTaskPayload {
   /** Optional human-authored Terminal Brief summary; preserved separately from runner closeout summaries. */
   terminalBriefSummary?: string;
   terminalBriefWorker?: string;
+  /**
+   * Optional maximum concurrent tasks the requesting worker can handle.
+   * The runner uses this to validate capacity constraints and produce
+   * WorkerCapacityEvidence.
+   */
+  maxConcurrentTasks?: number;
   terminalBriefSequence?: string | number;
   terminalBriefTotal?: string | number;
 }
@@ -457,6 +463,7 @@ export function buildRunnerTaskFromHandlerPayload(
       !isNaN(envTimeoutMs)
         ? envTimeoutMs
         : task?.payload?.timeoutMs ?? 45 * 60 * 1000,
+    maxConcurrentTasks: positiveInteger(task?.payload?.maxConcurrentTasks),
   };
 
   // ── issueUrl fallback: construct from repo + issue/issueNumber ──

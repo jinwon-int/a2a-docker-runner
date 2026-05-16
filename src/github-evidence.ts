@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import type { GitHubCommentLedger, GitHubEvidence, NormalizedRunnerTask, RunnerConfig, RunnerResult } from "./types.js";
+import { buildWorkerCapacityLimit, validateWorkerCapacity } from "./worker-capacity.js";
+
 
 /**
  * Post a Start comment on the linked GitHub issue to begin an evidence round.
@@ -200,6 +202,8 @@ export async function collectGitHubEvidence(
   evidence.commentLedger = buildCommentLedger(evidence, task);
 
   evidence.outcome = classifyGitHubEvidenceOutcome(result, evidence);
+
+  // ── Release-gate validation ──
   const validationErrors = validateReleaseGateEvidence(evidence);
   if (validationErrors.length > 0) {
     evidence.validationErrors = validationErrors;
@@ -207,6 +211,16 @@ export async function collectGitHubEvidence(
       evidence.outcome = "missing_evidence";
     }
   }
+
+  // ── Worker-capacity validation ──
+  // Parent: a2a-plane#370
+  const capacityEv = validateWorkerCapacity(
+    evidence.worker ?? task.requestedBy ?? "unknown",
+    task.parentRoundOrder,
+    task.parentRoundTotal,
+    buildWorkerCapacityLimit(task.maxConcurrentTasks),
+  );
+  evidence.workerCapacity = capacityEv;
 
   return evidence;
 }

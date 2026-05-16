@@ -228,6 +228,48 @@ export interface GitHubCommentLedger {
   disclaimer: "GitHub comments are evidence ledger entries, not ACK/read/visibility proof and not approval.";
 }
 
+// ---- Worker-Capacity Validation ----
+// Parent: a2a-docker-runner#370
+// Parent: a2a-plane#370
+
+/**
+ * Worker capacity limits for task scheduling.
+ *
+ * Describes the maximum concurrent task capacity and slot usage for a
+ * worker node. The runner uses optional capacity limits to validate that
+ * a worker's stated load is within bounds before producing terminal evidence.
+ *
+ * When not configured, the runner skips capacity validation entirely.
+ */
+export interface WorkerCapacityLimit {
+  /** Maximum concurrent tasks this worker can handle. */
+  maxConcurrentTasks: number;
+  /** Current slot usage (concurrent tasks in flight on this runner). */
+  currentLoad: number;
+  /** Available slots for new tasks (maxConcurrentTasks - currentLoad). */
+  availableSlots: number;
+}
+
+/**
+ * Worker capacity validation evidence produced by the runner.
+ *
+ * Captures the worker's capacity limits, current usage, and any validation
+ * errors when capacity constraints are exceeded. Attached to GitHubEvidence
+ * so the broker/operator can see why a task was considered over-capacity.
+ */
+export interface WorkerCapacityEvidence {
+  /** Canonical schema version. */
+  schemaVersion: "a2a.runner.worker-capacity.v1";
+  /** Whether capacity validation passed. */
+  ok: boolean;
+  /** Worker identity string (from requestedBy). */
+  worker: string;
+  /** Capacity limits reported by or assigned to this worker. */
+  capacity?: WorkerCapacityLimit;
+  /** Validation errors when capacity constraints are exceeded. */
+  errors?: string[];
+}
+
 export interface GitHubEvidence {
   /** Canonical structured evidence envelope version for GitHub patch task closeout. */
   schemaVersion?: "a2a.runner.github-evidence.v1";
@@ -273,6 +315,8 @@ export interface GitHubEvidence {
   validationErrors?: string[];
   commit?: string;
   branch?: string;
+  /** Worker capacity validation evidence attached to this evidence round. */
+  workerCapacity?: WorkerCapacityEvidence;
 }
 
 /** Compact, broker-safe pointers that can be recovered from artifacts/result summaries. */
@@ -535,6 +579,13 @@ export interface RunnerTask {
   reportLanguage?: string;
   /** A2A broker node that requested the task. */
   requestedBy?: string;
+  /**
+   * Optional maximum concurrent tasks this worker can handle.
+   * The runner uses this to validate capacity constraints and produce
+   * WorkerCapacityEvidence. When omitted, a conservative default (10)
+   * is used by the capacity validator.
+   */
+  maxConcurrentTasks?: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
