@@ -9,7 +9,6 @@
  * Safety: read-only, no secrets, bounded output, fail-graceful.
  *
  * Parent: a2a-docker-runner#291
- * Parent: a2a-plane#369
  * Parent: a2a-plane#380
  */
 
@@ -317,7 +316,7 @@ function computeSchedulingHint(
  * The probe is:
  * - Read-only: no Gateway restart, broker restart, DB mutation, live provider
  *   send, secret movement, terminal ACK, or replay.
- * - Deterministic: all timestamps are fixed at "1970-01-01T00:00:00.000Z".
+ * - Deterministic in tests when nowMs is supplied.
  * - Fail-soft: subsystem errors are collected in the `errors` array and
  *   degraded gracefully (unknown / empty defaults).
  * - Bounded: output is in the hundreds of bytes, never secrets.
@@ -325,7 +324,7 @@ function computeSchedulingHint(
 export async function probeWorkerCapacity(options: ProbeOptions = {}): Promise<WorkerCapacityProbeResult> {
   const errors: string[] = [];
   const workerId = options.workerId ?? os.hostname();
-  const probedAt = "1970-01-01T00:00:00.000Z";
+  const probedAt = new Date(options.nowMs ?? Date.now()).toISOString();
 
   // ── CPU ────────────────────────────────────────────────────────────
   const cpu = probeCpu();
@@ -367,7 +366,7 @@ export async function probeWorkerCapacity(options: ProbeOptions = {}): Promise<W
     memoryTotalBytes: memory.totalBytes,
     memoryAvailableBytes: memory.availableBytes,
     diskFreeBytes: disk.freeBytes,
-    activeContainers: docker.available ? undefined : 0,
+    activeContainers: undefined,
     recentTaskRuntimesMs: taskHistory.recentTaskRuntimesMs.length > 0 ? taskHistory.recentTaskRuntimesMs : undefined,
     recentTimeoutCount: taskHistory.recentTimeoutCount > 0 ? taskHistory.recentTimeoutCount : undefined,
     preferredLaneSize: preferredLaneSize === "unknown" ? undefined : (preferredLaneSize as WorkerCapacity["preferredLaneSize"]),

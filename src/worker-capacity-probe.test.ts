@@ -5,11 +5,10 @@
  * - Probe produces valid WorkerCapacityEvidence matching the plane schema.
  * - Per-subsystem detail is populated with bounded, non-secret data.
  * - Degradation when subsystems are unavailable (no docker, no rootDir).
- * - Deterministic output (fixed timestamps).
+ * - Deterministic output when nowMs is supplied.
  * - Probe is read-only (no side effects in test).
  *
  * Parent: a2a-docker-runner#291
- * Parent: a2a-plane#369
  * Parent: a2a-plane#380
  */
 
@@ -42,10 +41,21 @@ test("evidence has correct schema version", async () => {
   assert.equal(result.evidence.schemaVersion, "a2a.runner.worker-capacity-evidence.v1");
 });
 
-test("evidence has fixed deterministic timestamp", async () => {
-  const result = await probeWorkerCapacity();
+test("evidence uses supplied deterministic timestamp", async () => {
+  const result = await probeWorkerCapacity({ nowMs: 0 });
   assert.equal(result.evidence.probedAt, "1970-01-01T00:00:00.000Z");
   assert.match(result.evidence.capacity.probedAt ?? "", /^1970-01-01/);
+});
+
+test("evidence uses current time by default", async () => {
+  const before = Date.now();
+  const result = await probeWorkerCapacity();
+  const after = Date.now();
+  const observed = Date.parse(result.evidence.probedAt);
+
+  assert.ok(observed >= before, "probedAt should be current, got " + result.evidence.probedAt);
+  assert.ok(observed <= after, "probedAt should be current, got " + result.evidence.probedAt);
+  assert.equal(result.evidence.capacity.probedAt, result.evidence.probedAt);
 });
 
 test("evidence declares scheduling metadata safety gates", async () => {
@@ -245,8 +255,8 @@ test("probe result does not contain absolute host paths", async () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("probe is deterministic: same options produce same output shape", async () => {
-  const result1 = await probeWorkerCapacity({ workerId: "det-test" });
-  const result2 = await probeWorkerCapacity({ workerId: "det-test" });
+  const result1 = await probeWorkerCapacity({ workerId: "det-test", nowMs: 0 });
+  const result2 = await probeWorkerCapacity({ workerId: "det-test", nowMs: 0 });
 
   assert.equal(result1.evidence.workerId, result2.evidence.workerId);
   assert.equal(result1.evidence.probedAt, result2.evidence.probedAt);
