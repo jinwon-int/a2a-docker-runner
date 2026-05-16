@@ -346,7 +346,7 @@ export type WorkerCapacitySource = "configured_profile" | "readonly_probe" | "un
  * Parent: a2a-docker-runner#284
  * Parent: a2a-docker-runner#285
  */
-export interface WorkerCapacityEvidence {
+export interface WorkerCapacityProbeEvidence {
   schemaVersion: "a2a.runner.worker-capacity.v1";
   /** Worker/node identifier. */
   worker: string;
