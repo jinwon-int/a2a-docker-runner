@@ -224,11 +224,13 @@ export interface TerminalEvidenceEvent {
   startCommentUrl?: string;
   /**
    * GitHub comment evidence ledger.
-   * Comments are evidence ledger entries only — not ACK, read-receipt, or
-   * operator-approval proof.  Explicitly separate from Terminal Brief
-   * ACK/read/visibility decisions.
+   * Comments are evidence ledger entries only — not ACK, read receipt,
+   * visibility proof, or operator approval.  Explicitly separate from
+   * Terminal Brief ACK/read-receipt decisions.
    *
    * Parent: a2a-plane#204
+   * Parent: a2a-docker-runner#285
+   * Parent: a2a-docker-runner#284
    */
   commentLedger?: import("./types.js").GitHubCommentLedger;
   /** Preformatted compact alert text for terminal notifications; never contains raw runner logs. */
@@ -255,7 +257,7 @@ export interface TerminalEvidenceEvent {
     stdoutTruncated?: boolean;
     stderrTruncated?: boolean;
   };
-  /** First-class GitHub comment ledger projection. Not ACK/read/visibility proof or approval. */
+  /** First-class GitHub comment ledger projection. Not ACK, read receipt, visibility proof, or operator approval. */
   githubCommentProjection?: GitHubCommentProjection;
   /** Explicit no-live/no-ACK state; provider send success is not receipt evidence. */
   safetyState: {

@@ -213,11 +213,13 @@ export interface GitHubCommentLedgerEntry {
 /**
  * GitHub comment evidence ledger.
  *
- * Comments are evidence ledger entries only — they are NOT ACK, read-receipt,
- * or operator-approval proof.  The ledger is explicitly separate from Terminal
- * Brief ACK/read/visibility decisions and from operator approval.
+ * Comments are evidence ledger entries only — they are NOT ACK, read receipt,
+ * visibility proof, or operator approval.  The ledger is explicitly separate
+ * from Terminal Brief ACK/read-receipt decisions and from operator approval.
  *
  * Parent: a2a-plane#204
+ * Parent: a2a-docker-runner#285
+ * Parent: a2a-docker-runner#284
  */
 export interface GitHubCommentLedger {
   /** Canonical ledger schema version. */
@@ -225,7 +227,7 @@ export interface GitHubCommentLedger {
   /** Ordered list of comment evidence entries. Start comment is first when present. */
   entries: GitHubCommentLedgerEntry[];
   /** Explicit separation: comments are evidence ledger entries, not approval. */
-  disclaimer: "GitHub comments are evidence ledger entries, not ACK/read/visibility proof and not approval.";
+  disclaimer: "GitHub comments are evidence ledger entries, not ACK, read receipt, visibility proof, or operator approval.";
 }
 
 export interface GitHubEvidence {
@@ -255,11 +257,13 @@ export interface GitHubEvidence {
   startCommentUrl?: string;
   /**
    * GitHub comment evidence ledger.
-   * Comments are evidence ledger entries only — not ACK, read-receipt, or
-   * operator-approval proof.  Explicitly separate from Terminal Brief
-   * ACK/read/visibility decisions.
+   * Comments are evidence ledger entries only — not ACK, read receipt,
+   * visibility proof, or operator approval.  Explicitly separate from
+   * Terminal Brief ACK/read-receipt decisions.
    *
    * Parent: a2a-plane#204
+   * Parent: a2a-docker-runner#285
+   * Parent: a2a-docker-runner#284
    */
   commentLedger?: GitHubCommentLedger;
   validation?: GitHubValidationSummary;
@@ -293,8 +297,8 @@ export type GitHubCommentProjectionKind = "pr" | "done" | "block";
 
 /**
  * Terminal Brief extension that projects GitHub issue/PR comments as a
- * replay-safe evidence ledger entry. This is intentionally not ACK/read/
- * visibility evidence and never represents operator approval.
+ * replay-safe evidence ledger entry. This is intentionally not ACK, read
+ * receipt, visibility proof, or operator approval.
  */
 export interface GitHubCommentProjection {
   schemaVersion: "a2a.runner.github-comment-projection.v1";
@@ -1084,4 +1088,71 @@ export interface ApprovalRehearsalPacket {
   evidenceBundlePath: string;
   /** Structured evidence hints for broker/operator recovery. */
   evidenceHints?: RunnerEvidenceHints;
+}
+
+/**
+ * Worker capacity profile for scheduling/assignment metadata only.
+ *
+ * This is scheduling/assignment evidence — it MUST NOT be used as Terminal ACK
+ * decision input. Terminal ACK is a separate broker protocol requiring
+ * operator-visible receipt (see GitHubEvidenceSafetyState.terminalAck).
+ *
+ * When no configured profile or read-only probe provides values, capacity
+ * MUST be represented as unknown (known: false), not as a default real
+ * capacity that could create false confidence or false failures.
+ *
+ * Parent: a2a-docker-runner#284
+ * Parent: a2a-docker-runner#285
+ * Parent: a2a-plane#369
+ */
+export interface WorkerCapacity {
+  /** Whether capacity is known (probe or configured profile) or unknown. */
+  known: boolean;
+  /** CPU count — undefined when known is false. */
+  cpuCores?: number;
+  /** Total memory in bytes — undefined when known is false. */
+  memoryTotalBytes?: number;
+  /** Available memory in bytes — undefined when known is false. */
+  memoryAvailableBytes?: number;
+  /** Disk free space in bytes — undefined when known is false. */
+  diskFreeBytes?: number;
+  /** Current load / active containers — undefined when known is false. */
+  activeContainers?: number;
+  /** Recent task runtime stats in ms — undefined when known is false. */
+  recentTaskRuntimesMs?: number[];
+  /** Recent timeout count — undefined when known is false. */
+  recentTimeoutCount?: number;
+  /** Preferred lane size classification — undefined when known is false. */
+  preferredLaneSize?: "small" | "medium" | "large";
+  /** Scheduling hint — for assignment ranking only, not Terminal ACK input. */
+  schedulingHint?: string;
+  /** Timestamp of last probe (ISO-8601). */
+  probedAt?: string;
+}
+
+/**
+ * Worker capacity evidence packet for assignment/scheduling metadata.
+ *
+ * This is scheduling/assignment evidence only. It is explicitly separated
+ * from Terminal ACK decisioning, operator approval, and release-gate evidence.
+ * The worker probe MUST be read-only: no Gateway restart, broker restart, DB
+ * mutation, live provider send, secret movement, terminal ACK, or replay.
+ *
+ * Parent: a2a-docker-runner#284
+ * Parent: a2a-docker-runner#285
+ * Parent: a2a-plane#369
+ */
+export interface WorkerCapacityEvidence {
+  /** Canonical schema version. */
+  schemaVersion: "a2a.runner.worker-capacity-evidence.v1";
+  /** Worker identifier. */
+  workerId: string;
+  /** Capacity data (known or unknown via the known flag). */
+  capacity: WorkerCapacity;
+  /** Explicit: this evidence is scheduling metadata only, not Terminal ACK input. */
+  isSchedulingMetadataOnly: true;
+  /** Explicit: no Terminal ACK decision was made from this capacity evidence. */
+  terminalAckDecisionFromCapacity: false;
+  /** Read-only probe timestamp (ISO-8601). */
+  probedAt: string;
 }

@@ -646,7 +646,7 @@ test("buildStartCommentBody includes disclaimer that comment is NOT ACK/approval
   assert.match(body, /\*\*작업 요약\*\*: Produce compact terminal notice evidence without leaking raw logs/);
 
   // MUST include the disclaimer that this is NOT ACK/approval proof
-  assert.match(body, /증거 원장.*evidence ledger.*ACK.*읽음 확인.*운영자 승인/);
+  assert.match(body, /증거 원장.*evidence ledger.*ACK.*읽음 확인.*표시 증거.*운영자 승인/);
   assert.match(body, /자동 생성된 Start 코멘트.*A2A Docker Runner/);
 });
 
@@ -658,8 +658,8 @@ test("buildStartCommentBody produces English body when reportLanguage is en", ()
   assert.match(body, /\*\*Task ID\*\*: `test-task`/);
   assert.match(body, /Beginning work\. Inspecting repository and making warranted code\/docs\/tests changes\./);
 
-  // English disclaimer must explicitly separate from ACK/approval
-  assert.match(body, /not ACK, read-receipt, or operator-approval proof/);
+  // English disclaimer must explicitly separate from ACK/read receipt/visibility/approval
+  assert.match(body, /not ACK, read receipt, visibility proof, or operator approval/);
   assert.match(body, /Auto-generated Start comment/);
 });
 
@@ -677,7 +677,7 @@ test("buildCommentLedger with start comment only", () => {
   const ledger = buildCommentLedger(evidence, baseTask);
 
   assert.equal(ledger.schemaVersion, "a2a.runner.github-comment-ledger.v1");
-  assert.equal(ledger.disclaimer, "GitHub comments are evidence ledger entries, not ACK/read/visibility proof and not approval.");
+  assert.equal(ledger.disclaimer, "GitHub comments are evidence ledger entries, not ACK, read receipt, visibility proof, or operator approval.");
   assert.equal(ledger.entries.length, 1);
   assert.equal(ledger.entries[0].kind, "start");
   assert.equal(ledger.entries[0].url, "https://github.com/jinwon-int/test-repo/issues/1#issuecomment-111");
@@ -755,7 +755,7 @@ test("collectGitHubEvidence includes commentLedger in evidence", async () => {
   assert.ok(evidence);
   assert.ok(evidence?.commentLedger, "GitHubEvidence must include a commentLedger");
   assert.equal(evidence?.commentLedger?.schemaVersion, "a2a.runner.github-comment-ledger.v1");
-  assert.equal(evidence?.commentLedger?.disclaimer, "GitHub comments are evidence ledger entries, not ACK/read/visibility proof and not approval.");
+  assert.equal(evidence?.commentLedger?.disclaimer, "GitHub comments are evidence ledger entries, not ACK, read receipt, visibility proof, or operator approval.");
   assert.equal(evidence?.startCommentUrl, startUrl);
   assert.equal(evidence?.commentLedger?.entries[0]?.kind, "start");
   assert.equal(evidence?.commentLedger?.entries[0]?.url, startUrl);
@@ -809,7 +809,7 @@ test("comment ledger disclaimer is identical across all invocations", () => {
   const ledger2 = buildCommentLedger({}, baseTask);
   const ledger3 = buildCommentLedger({ doneCommentUrl: "http://example.com" }, baseTask);
 
-  const expected = "GitHub comments are evidence ledger entries, not ACK/read/visibility proof and not approval.";
+  const expected = "GitHub comments are evidence ledger entries, not ACK, read receipt, visibility proof, or operator approval.";
   assert.equal(ledger1.disclaimer, expected);
   assert.equal(ledger2.disclaimer, expected);
   assert.equal(ledger3.disclaimer, expected);
