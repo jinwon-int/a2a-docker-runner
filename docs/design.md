@@ -65,6 +65,95 @@ This means:
 | `.deploy-source-sha` + real dirty file | `true` | `true` | `warn` |
 | Real dirty files only (no marker) | `true` | `false` | `warn` |
 
+## Completion envelope (execution evidence → terminal evidence → handler result)
+
+The runner produces a layered evidence model that wraps each task's result:
+
+### Layer 1: `RunnerResult` (raw execution output)
+
+Written as JSON to stdout by `a2a-docker-runner run` and consumed by the worker
+handler. Contains the full execution context:
+
+- `ok`, `taskId`, `status`, `exitCode`, `stdout`, `stderr`
+- `artifacts`, `artifactManifest` — structured file inventory
+- `resultSummary` — bounded, redacted summary fields safe for payloads
+- `github` — structured GitHub evidence (prUrl / doneCommentUrl / blockCommentUrl)
+- **`executionProof`** — cryptographic digest chain linking task input → expanded
+  commands → output. Tamper-evident, independently verifiable.
+- `templateExpansion` — evidence of template variable expansion when a built-in
+  or inline template was used.
+
+### Layer 2: `TerminalEvidenceEvent` (compact broker payload)
+
+Built by `buildTerminalEvidenceEvent()` in `src/integration.ts`. This is the
+compact, payload-safe event sent to the broker for SSE/webhook delivery:
+
+- `eventId`, `dedupeKey` — stable identity for broker replay/deduplication
+- `evidenceKind` — one of PR / Done / Block / BudgetLimited / TimedOut /
+  MissingEvidence; derived from structured GitHub evidence fields
+- `status` — succeeded / failed / blocked / cancelled
+- `alert` — preformatted compact notification text; never contains raw runner
+  logs, private paths, or secrets
+- `testSummary` — bounded exit code, timeout, and artifact count
+- `terminalBrief` — optional parent-round context for multi-worker Terminal
+  Brief notifications. Only present when the broker supplied Terminal Brief
+  payload fields (n/N sequence/total). Not default-on: the runner produces
+  the event unconditionally, but the Terminal Brief context requires explicit
+  broker input.
+- `safetyState` — hard-coded flags: `noLiveProviderSend: true`,
+  `terminalAck: "requires_operator_receipt"`,
+  `providerSendIsReceiptEvidence: false`
+
+### Layer 3: `HandlerResult` (worker-facing closeout)
+
+Built by `buildHandlerResult()` in `src/integration.ts`. This is what the
+worker handler returns after runner execution:
+
+- `status` — pr_opened / done / blocked
+- `prUrl`, `startCommentUrl`, `blockCommentUrl`, `doneCommentUrl` — canonical
+  evidence URLs
+- `summary`, `tests`, `filesChanged`, `risks` — structured closeout fields
+- `terminalEvidence` — the full Layer 2 event, embedded for the handler to
+  relay to the broker
+- `runnerRaw` — original runner JSON (for debugging)
+
+### Data flow
+
+```text
+Runner execution
+      │
+      ▼
+RunnerResult (incl. execution proof + template expansion)
+      │ serialized to stdout JSON
+      ▼
+Handler: parseRunnerOutput → RawRunnerOutput
+      │
+      ├─ buildHandlerResult → HandlerResult (embedding terminalEvidence)
+      └─ buildTerminalEvidenceEvent → TerminalEvidenceEvent
+      │
+      ▼
+Broker report: HandlerResult.status + terminalEvidence.alert + evidence URLs
+```
+
+### Execution proof
+
+The `ExecutionProof` (`a2a.runner.execution-proof.v1`, `src/execution-proof.ts`)
+provides tamper-evident linkage for audit and stability gates:
+
+- `inputDigest` — SHA-256 of the normalized task before expansion
+- `expandedDigest` — SHA-256 after template expansion (identical to inputDigest
+  when no expansion occurred)
+- `outputDigest` — SHA-256 of container stdout + stderr
+- `chainDigest` — SHA-256 linking input → expanded → output
+
+It is stored in both `RunnerResult.executionProof` and the artifact manifest
+(`artifacts/manifest.json`) so consumers at any layer can verify integrity.
+
+The `ExecutionProof` is not propagated into the `TerminalEvidenceEvent` by
+default to keep the broker payload compact. The artifact manifest is the
+canonical source. Handlers that need proof-level verification should read the
+manifest path from `RunnerResult.resultSummary.manifestPath`.
+
 ## Non-goals for MVP
 
 - replacing the broker

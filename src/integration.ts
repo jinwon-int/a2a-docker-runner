@@ -541,6 +541,7 @@ export interface RawRunnerOutput {
   prUrl?: string;
   error?: string;
   github?: GitHubEvidence;
+  executionProof?: import("./types.js").ExecutionProof;
 }
 
 /**
