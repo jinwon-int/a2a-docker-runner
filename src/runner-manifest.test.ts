@@ -336,6 +336,58 @@ test("buildRunnerEvidenceHints classifies OpenClaw CLI provisioning failures", (
   assert.equal(hints?.failureCategory, "openclaw_cli_unavailable");
 });
 
+test("buildRunnerEvidenceHints classifies OpenClaw profile mount failures", () => {
+  const task = {
+    id: "task-openclaw-profile",
+    intent: "propose_patch",
+    mode: "github-propose-patch" as const,
+    repo: "jinwon-int/repo",
+    repos: [],
+    commands: ["/work/patch-command.sh"],
+    issueUrl: "https://github.com/jinwon-int/repo/issues/6",
+  };
+
+  const hints = buildRunnerEvidenceHints(task, {
+    ok: false,
+    taskId: "task-openclaw-profile",
+    status: "failed",
+    workDir: "/tmp/private-task",
+    exitCode: 2,
+    signal: null,
+    stdout: "error=openclaw_config_mount_missing\nfailure_category=openclaw_profile_unavailable\n",
+    stderr: "",
+    artifacts: [],
+  });
+
+  assert.equal(hints?.failureCategory, "openclaw_profile_unavailable");
+});
+
+test("buildRunnerEvidenceHints classifies OpenClaw version probe failures", () => {
+  const task = {
+    id: "task-openclaw-version",
+    intent: "propose_patch",
+    mode: "github-propose-patch" as const,
+    repo: "jinwon-int/repo",
+    repos: [],
+    commands: ["/work/patch-command.sh"],
+    issueUrl: "https://github.com/jinwon-int/repo/issues/7",
+  };
+
+  const hints = buildRunnerEvidenceHints(task, {
+    ok: false,
+    taskId: "task-openclaw-version",
+    status: "failed",
+    workDir: "/tmp/private-task",
+    exitCode: 2,
+    signal: null,
+    stdout: "failure_category=openclaw_version_failed\n",
+    stderr: "",
+    artifacts: [],
+  });
+
+  assert.equal(hints?.failureCategory, "openclaw_version_failed");
+});
+
 
 test("artifact manifest schema and dummy sample stay aligned", async () => {
   const schema = JSON.parse(await readFile(join(repoRoot, "docs", "artifact-manifest.schema.json"), "utf8"));

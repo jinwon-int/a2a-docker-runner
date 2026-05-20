@@ -274,6 +274,8 @@ function inferEvidenceFailureCategory(result: RunnerResult): RunnerEvidenceHints
   if (result.resultSummary?.status === "budget_limited" || result.artifactManifest?.status === "budget_limited") return "budget_limited";
   if (isResourceLimitedFailure(result)) return "resource_limited";
   if (isOpenClawCliUnavailableFailure(result)) return "openclaw_cli_unavailable";
+  if (isOpenClawProfileUnavailableFailure(result)) return "openclaw_profile_unavailable";
+  if (isOpenClawVersionFailedFailure(result)) return "openclaw_version_failed";
   if (!result.ok && typeof result.exitCode === "number" && result.exitCode !== 0) return "exit_nonzero";
   if (!result.ok) return "failed";
   return undefined;
@@ -287,6 +289,26 @@ function isOpenClawCliUnavailableFailure(result: RunnerResult): boolean {
     result.artifactManifest?.summary,
   ].filter(Boolean).join("\n");
   return /(^|\n)(error=openclaw_install_failed|failure_category=openclaw_cli_unavailable)\b/.test(text);
+}
+
+function isOpenClawProfileUnavailableFailure(result: RunnerResult): boolean {
+  const text = [
+    result.stdout,
+    result.stderr,
+    result.error,
+    result.artifactManifest?.summary,
+  ].filter(Boolean).join("\n");
+  return /(^|\n)(error=openclaw_config_mount_missing|failure_category=openclaw_profile_unavailable)\b/.test(text);
+}
+
+function isOpenClawVersionFailedFailure(result: RunnerResult): boolean {
+  const text = [
+    result.stdout,
+    result.stderr,
+    result.error,
+    result.artifactManifest?.summary,
+  ].filter(Boolean).join("\n");
+  return /(^|\n)failure_category=openclaw_version_failed\b/.test(text);
 }
 
 function isResourceLimitedFailure(result: RunnerResult): boolean {

@@ -1,0 +1,53 @@
+{
+  "$schema": "a2a.runner.openclaw-profile-readiness.v1",
+  "run": "a2a-team1-post-bangtong-readiness-20260520T110014Z",
+  "parent": "a2a-broker#829",
+  "issue": "a2a-docker-runner#297",
+  "worker": "bangtong",
+  "parentRound": {
+    "parentRoundId": "a2a-team1-post-bangtong-readiness-20260520T110014Z",
+    "parentRoundTotal": 4,
+    "parentRoundOrder": 1,
+    "parentRoundProgress": 0,
+    "originBrokerId": "seoseo",
+    "brokerOfRecordId": "seoseo"
+  },
+  "overallReady": true,
+  "checks": [
+    {
+      "kind": "openclaw_cli_resolved",
+      "passed": true,
+      "detail": "CLI binary resolved at /usr/local/bin/openclaw"
+    },
+    {
+      "kind": "openclaw_cli_version_ok",
+      "passed": true,
+      "detail": "CLI reported version: openclaw 1.0.0"
+    },
+    {
+      "kind": "openclaw_profile_mount_present",
+      "passed": true,
+      "detail": "Profile config mount present at /run/secrets/openclaw-dir"
+    }
+  ],
+  "failureCategory": "ok",
+  "noLiveProviderSend": true,
+  "profileMountDir": "/run/secrets/openclaw-dir",
+  "profileMountContentsNotRead": true,
+  "credentialValuesNotExposed": true,
+  "terminalOutboxAckPerformed": false,
+  "gatewayRestartPerformed": false,
+  "brokerRestartPerformed": false,
+  "dbMutationPerformed": false,
+  "releasePerformed": false,
+  "safetyState": {
+    "noLiveProviderSend": true,
+    "providerSendIsReceiptEvidence": false,
+    "terminalAck": "not_performed",
+    "gatewayRestartPerformed": false,
+    "brokerRestartPerformed": false,
+    "dbMutationPerformed": false,
+    "deploymentPerformed": false,
+    "releasePerformed": false
+  }
+}

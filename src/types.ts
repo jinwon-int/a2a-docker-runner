@@ -290,7 +290,7 @@ export interface RunnerEvidenceHints {
   blockUrl?: string;
   branch?: string;
   branchUrl?: string;
-  failureCategory?: GitHubEvidenceOutcome | "failed" | "exit_nonzero" | "resource_limited" | "no_changes_allowed" | "openclaw_cli_unavailable";
+  failureCategory?: GitHubEvidenceOutcome | "failed" | "exit_nonzero" | "resource_limited" | "no_changes_allowed" | "openclaw_cli_unavailable" | "openclaw_profile_unavailable" | "openclaw_version_failed";
 }
 
 export type GitHubCommentProjectionKind = "pr" | "done" | "block";
