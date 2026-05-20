@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, writeFile, readdir, readFile, stat } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
 import { spawn } from "node:child_process";
@@ -272,9 +273,20 @@ function inferEvidenceFailureCategory(result: RunnerResult): RunnerEvidenceHints
   if (result.status === "timeout") return "timed_out";
   if (result.resultSummary?.status === "budget_limited" || result.artifactManifest?.status === "budget_limited") return "budget_limited";
   if (isResourceLimitedFailure(result)) return "resource_limited";
+  if (isOpenClawCliUnavailableFailure(result)) return "openclaw_cli_unavailable";
   if (!result.ok && typeof result.exitCode === "number" && result.exitCode !== 0) return "exit_nonzero";
   if (!result.ok) return "failed";
   return undefined;
+}
+
+function isOpenClawCliUnavailableFailure(result: RunnerResult): boolean {
+  const text = [
+    result.stdout,
+    result.stderr,
+    result.error,
+    result.artifactManifest?.summary,
+  ].filter(Boolean).join("\n");
+  return /(^|\n)(error=openclaw_install_failed|failure_category=openclaw_cli_unavailable)\b/.test(text);
 }
 
 function isResourceLimitedFailure(result: RunnerResult): boolean {
@@ -722,7 +734,10 @@ function runCommandsScript(task: NormalizedRunnerTask): string {
   }
 
   const commands = task.commands.map((command, index) => {
-    return `printf 'command[%s]=%s\n' ${shellQuote(String(index))} ${shellQuote(command)} | tee -a /work/artifacts/summary.txt
+    const digest = createHash("sha256").update(command, "utf8").digest("hex");
+    const bytes = Buffer.byteLength(command, "utf8");
+    return `printf 'command[%s].sha256=%s\n' ${shellQuote(String(index))} ${shellQuote(digest)} | tee -a /work/artifacts/summary.txt
+printf 'command[%s].bytes=%s\n' ${shellQuote(String(index))} ${shellQuote(String(bytes))} | tee -a /work/artifacts/summary.txt
 (${command}) 2>&1 | tee /work/artifacts/command-${index}.log
 `;
   }).join("\n");

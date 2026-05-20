@@ -310,6 +310,32 @@ test("buildRunnerEvidenceHints classifies resource-limited failures for stabilit
   assert.equal(enospcHints?.failureCategory, "resource_limited");
 });
 
+test("buildRunnerEvidenceHints classifies OpenClaw CLI provisioning failures", () => {
+  const task = {
+    id: "task-openclaw-install",
+    intent: "propose_patch",
+    mode: "github-propose-patch" as const,
+    repo: "jinwon-int/repo",
+    repos: [],
+    commands: ["/work/patch-command.sh"],
+    issueUrl: "https://github.com/jinwon-int/repo/issues/5",
+  };
+
+  const hints = buildRunnerEvidenceHints(task, {
+    ok: false,
+    taskId: "task-openclaw-install",
+    status: "failed",
+    workDir: "/tmp/private-task",
+    exitCode: 2,
+    signal: null,
+    stdout: "error=openclaw_install_failed\nfailure_category=openclaw_cli_unavailable\n",
+    stderr: "",
+    artifacts: [],
+  });
+
+  assert.equal(hints?.failureCategory, "openclaw_cli_unavailable");
+});
+
 
 test("artifact manifest schema and dummy sample stay aligned", async () => {
   const schema = JSON.parse(await readFile(join(repoRoot, "docs", "artifact-manifest.schema.json"), "utf8"));
