@@ -229,8 +229,23 @@ if [ ! -d /run/secrets/openclaw-dir ]; then
 fi
 
 if ! command -v openclaw >/dev/null 2>&1; then
-  npm install -g openclaw >/work/artifacts/openclaw-install.log 2>&1
+  printf 'notice=openclaw_cli_missing_install_attempted\\n' | tee -a /work/artifacts/summary.txt
+  if npm install -g openclaw >/work/artifacts/openclaw-install.log 2>&1; then
+    printf 'openclaw_cli=installed_via_npm\\n' | tee -a /work/artifacts/summary.txt
+  else
+    install_exit=$?
+    printf 'error=openclaw_install_failed\\n' | tee -a /work/artifacts/summary.txt
+    printf 'failure_category=openclaw_cli_unavailable\\n' | tee -a /work/artifacts/summary.txt
+    printf 'openclaw_install_exit=%s\\n' "$install_exit" | tee -a /work/artifacts/summary.txt
+    {
+      printf 'Embedded OpenClaw CLI is missing from the runner image and npm install -g openclaw failed.\\n'
+      printf 'See artifacts/openclaw-install.log for npm output.\\n'
+      printf 'Use a runner image with OpenClaw preinstalled or an approved trusted read-only OpenClaw CLI/package mount; do not depend on per-task network install.\\n'
+    } | tee /work/artifacts/patch-command.log
+    exit 2
+  fi
 fi
+printf 'openclaw_cli=%s\\n' "$(openclaw --version | head -n 1)" | tee -a /work/artifacts/summary.txt
 
 rm -rf /root/.openclaw
 mkdir -p /root/.openclaw/agents/${agent}/agent

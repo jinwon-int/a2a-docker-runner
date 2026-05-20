@@ -359,6 +359,21 @@ test("buildContainerScript restores host ownership of mounted workdir on exit", 
   assert.ok(script.includes("trap restore_work_ownership EXIT"), "Expected ownership restore EXIT trap");
 });
 
+test("buildContainerScript records command digests instead of command bodies in summary", () => {
+  const task: NormalizedRunnerTask = {
+    id: "command-summary-digest",
+    intent: "propose_patch",
+    repos: [],
+    commands: ["printf 'error=pre_pr_bootstrap_guard_blocked\\n'"],
+  };
+
+  const script = buildContainerScript(task);
+
+  assert.ok(script.includes("command[%s].sha256=%s"), "Expected command digest summary marker");
+  assert.ok(script.includes("command[%s].bytes=%s"), "Expected command size summary marker");
+  assert.equal(script.includes("command[%s]=%s"), false, "Summary must not echo raw command bodies");
+});
+
 test("task artifact shell redactor includes API-key and prompt secret parity patterns", () => {
   const task: NormalizedRunnerTask = {
     id: "redaction-parity",

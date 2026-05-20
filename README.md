@@ -532,6 +532,15 @@ Precedence is `commandScript > commandJson > commandProfile > commandTemplate`:
 | `A2A_DOCKER_RUNNER_PATCH_COMMAND_PROFILE=openclaw` | generated `commandScript` | `/work/patch-command.sh` | Operator-only trusted-worker profile. Mounts `A2A_DOCKER_RUNNER_OPENCLAW_CONFIG_DIR` (or the profile default when unset) read-only at `/run/secrets/openclaw-dir`, then runs `openclaw agent` in the checked-out repo. Defaults to `A2A_OPENCLAW_MODEL=openai-codex/gpt-5.5` so OAuth-backed Codex auth is used instead of same-name OpenAI API-key models. Do not present this profile or host-network mode as a public sandbox default. |
 | `A2A_DOCKER_RUNNER_PATCH_COMMAND_TEMPLATE` | `commandTemplate` | blocked | Legacy eval path; rejected for GitHub patch execution. |
 
+For the OpenClaw profile, prefer a runner image that already contains the
+`openclaw` CLI, or an explicitly approved trusted read-only CLI/package mount.
+The generated profile still attempts `npm install -g openclaw` when the CLI is
+missing so existing workers fail with evidence instead of hanging silently, but
+that path is a fallback only. If it fails, the task records
+`error=openclaw_install_failed` and
+`failure_category=openclaw_cli_unavailable`; operators should fix the runner
+image or mount rather than relying on per-task network install.
+
 Examples:
 
 ```bash
