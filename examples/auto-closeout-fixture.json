@@ -1,0 +1,286 @@
+{
+  "$schema": "a2a-runner-auto-closeout-fixture-v1",
+  "description": "CI-safe no-live auto-closeout fixture harness. Validates source-only round-completion detection for multi-worker Terminal Brief rounds without live broker, Gateway, or provider calls. Production auto-closeout is never enabled: this fixture proves that no live auto-closeout execution, approval, or side effect occurs.",
+  "run": "a2a-team1-auto-closeout-design-20260520T113050Z",
+  "parentRoundId": "a2a-team1-auto-closeout-design-20260520T113050Z",
+  "issue": "https://github.com/jinwon-int/a2a-docker-runner/issues/299",
+  "parent": "https://github.com/jinwon-int/a2a-broker/issues/832",
+  "parentRoundTotal": 4,
+  "parentRoundOrder": 1,
+  "parentRoundProgress": 0,
+  "originBrokerId": "seoseo",
+  "brokerOfRecordId": "seoseo",
+  "parentBrokerId": "seoseo",
+  "noLiveProof": {
+    "fixtureOnly": true,
+    "autoCloseoutEnabled": false,
+    "liveAutoCloseoutExecution": false,
+    "liveBrokerRoundCloseout": false,
+    "brokerRestart": false,
+    "gatewayRestart": false,
+    "workerRestart": false,
+    "liveProviderSend": false,
+    "terminalAck": "not_attempted",
+    "productionDbMutation": false,
+    "secretOrVisibilityChange": false,
+    "providerSendIsReceiptEvidence": false,
+    "prMergeAutomation": false,
+    "releasePublish": false,
+    "credentialMovement": false,
+    "allowedEvidence": [
+      "synthetic-fixture-json",
+      "node-test-output",
+      "git-diff"
+    ]
+  },
+  "canonicalCloseout": {
+    "allowedEvidenceKinds": [
+      "PR",
+      "Done",
+      "Block"
+    ],
+    "terminalAckRequiresOperatorVisibleReceipt": true,
+    "providerSendSuccessIsReceiptEvidence": false,
+    "noLiveProviderSend": true,
+    "terminalOutboxAckPerformed": false,
+    "autoCloseoutMode": "source_only"
+  },
+  "activeNodes": [
+    "bangtong",
+    "dungae",
+    "sogyo",
+    "nosuk"
+  ],
+  "source": {
+    "schemaVersion": "a2a.runner.auto-closeout-fixture.v1",
+    "parentRoundTotal": 4,
+    "parentRoundOrder": 1,
+    "parentRoundProgress": 0,
+    "originBrokerId": "seoseo",
+    "brokerOfRecordId": "seoseo",
+    "parentBrokerId": "seoseo"
+  },
+  "cases": [
+    {
+      "name": "source-only auto-closeout fixture enforces no-live safety gate; production auto-closeout is not enabled",
+      "handlerTask": {
+        "id": "auto-closeout-r1-safety-1",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "299",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/299",
+          "title": "No-live auto-closeout fixture harness",
+          "focus": "Validate safe auto-closeout fixture without enabling production auto-closeout.",
+          "parentRoundId": "a2a-team1-auto-closeout-design-20260520T113050Z",
+          "parentRoundTotal": 4,
+          "parentRoundOrder": 1,
+          "parentRoundProgress": 0,
+          "originBrokerId": "seoseo",
+          "brokerOfRecordId": "seoseo",
+          "parentBrokerId": "seoseo"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "auto-closeout-r1-safety-1",
+        "status": "completed",
+        "workDir": "${SYNTHETIC_DIR}/safety-1",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "${SYNTHETIC_FIXTURE_STDOUT}",
+        "stderr": "",
+        "artifacts": [
+          "artifacts/summary.txt",
+          "artifacts/manifest.json"
+        ],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "auto-closeout source-only fixture passed",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 2,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/299"
+        }
+      },
+      "expected": {
+        "evidenceKind": "PR",
+        "status": "succeeded",
+        "noLiveAutoCloseout": true,
+        "autoCloseoutEnabled": false
+      }
+    },
+    {
+      "name": "source-only auto-closeout fixture detects all-nodes-complete without live round closeout",
+      "handlerTask": {
+        "id": "auto-closeout-r1-all-complete-2",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "299",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/299",
+          "title": "All-nodes-complete auto-closeout detection",
+          "parentRoundId": "a2a-team1-auto-closeout-design-20260520T113050Z",
+          "parentRoundTotal": 4,
+          "parentRoundOrder": 2,
+          "parentRoundProgress": 1,
+          "originBrokerId": "seoseo",
+          "brokerOfRecordId": "seoseo",
+          "parentBrokerId": "seoseo"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "auto-closeout-r1-all-complete-2",
+        "status": "completed",
+        "workDir": "${SYNTHETIC_DIR}/all-complete",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "all 4 nodes completed — auto-closeout condition met, but production closeout is not enabled",
+        "stderr": "",
+        "artifacts": [
+          "artifacts/summary.txt"
+        ],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "all nodes completed; production auto-closeout disabled",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 1,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "prUrl": "https://github.com/jinwon-int/a2a-docker-runner/pull/299"
+        }
+      },
+      "expected": {
+        "evidenceKind": "PR",
+        "status": "succeeded",
+        "noLiveAutoCloseout": true,
+        "autoCloseoutEnabled": false,
+        "allNodesComplete": true,
+        "parentRoundTotal": 4,
+        "parentRoundProgress": 1
+      }
+    },
+    {
+      "name": "block evidence without auto-closeout on partial round completion",
+      "handlerTask": {
+        "id": "auto-closeout-r1-partial-3",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "299",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/299",
+          "title": "Partial round completion is not auto-closeout",
+          "parentRoundId": "a2a-team1-auto-closeout-design-20260520T113050Z",
+          "parentRoundTotal": 4,
+          "parentRoundOrder": 3,
+          "parentRoundProgress": 1,
+          "originBrokerId": "seoseo",
+          "brokerOfRecordId": "seoseo",
+          "parentBrokerId": "seoseo"
+        }
+      },
+      "runnerOutput": {
+        "ok": false,
+        "taskId": "auto-closeout-r1-partial-3",
+        "status": "failed",
+        "workDir": "${SYNTHETIC_DIR}/partial",
+        "exitCode": 1,
+        "signal": null,
+        "stdout": "",
+        "stderr": "partial completion; only 2 of 4 nodes done — round remains open",
+        "artifacts": [
+          "artifacts/block.txt"
+        ],
+        "resultSummary": {
+          "exitCode": 1,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "",
+          "stderr": "partial block: 2/4 nodes, not auto-closeout eligible",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 1,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "blockCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/299#issuecomment-auto-closeout-block"
+        }
+      },
+      "expected": {
+        "evidenceKind": "Block",
+        "status": "blocked",
+        "noLiveAutoCloseout": true,
+        "autoCloseoutEnabled": false,
+        "allNodesComplete": false
+      }
+    },
+    {
+      "name": "done evidence for comment-only auto-closeout fixture task",
+      "handlerTask": {
+        "id": "auto-closeout-r1-done-4",
+        "intent": "propose_patch",
+        "payload": {
+          "mode": "github-propose-patch",
+          "repo": "jinwon-int/a2a-docker-runner",
+          "issue": "299",
+          "issueUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/299",
+          "commentOnly": true,
+          "title": "Comment-only auto-closeout fixture done evidence",
+          "parentRoundId": "a2a-team1-auto-closeout-design-20260520T113050Z",
+          "parentRoundTotal": 4,
+          "parentRoundOrder": 4,
+          "parentRoundProgress": 2,
+          "originBrokerId": "seoseo",
+          "brokerOfRecordId": "seoseo",
+          "parentBrokerId": "seoseo"
+        }
+      },
+      "runnerOutput": {
+        "ok": true,
+        "taskId": "auto-closeout-r1-done-4",
+        "status": "completed",
+        "workDir": "${SYNTHETIC_DIR}/done",
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "comment-only fixture done — production auto-closeout was not triggered",
+        "stderr": "",
+        "artifacts": [],
+        "resultSummary": {
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "stdout": "auto-closeout fixture done evidence",
+          "stderr": "",
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "artifactCount": 0,
+          "manifestPath": "artifacts/manifest.json"
+        },
+        "github": {
+          "doneCommentUrl": "https://github.com/jinwon-int/a2a-docker-runner/issues/299#issuecomment-auto-closeout-done"
+        }
+      },
+      "expected": {
+        "evidenceKind": "Done",
+        "status": "succeeded",
+        "noLiveAutoCloseout": true,
+        "autoCloseoutEnabled": false
+      }
+    }
+  ]
+}
